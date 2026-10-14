@@ -5,11 +5,15 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "db:create": "node --env-file=.env.setup.local scripts/create-database.mjs",
+    "db:user:create": "node --env-file=.env.setup.local scripts/create-app-user.mjs",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
     "lucide-react": "^1.57.0",
+    "mammoth": "^1.13.0",
+    "mysql2": "^3.24.6",
     "next": "16.4.0",
     "react": "19.3.1",
     "react-dom": "19.3.1"
@@ -23,5 +27,8 @@
     "eslint-config-next": "16.4.0",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "overrides": {
+    "argparse": "2.0.1"
   }
 }
