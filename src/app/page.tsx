@@ -1,8 +1,9 @@
 "use client";
 
-import { FormEvent, ReactNode, useMemo, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import {
   Activity,
+  ArrowLeft,
   ArrowRight,
   ArrowUpRight,
   Bell,
@@ -17,17 +18,20 @@ import {
   CircleHelp,
   Clock3,
   FileText,
-  Filter,
   Flame,
+  ExternalLink,
   LayoutDashboard,
   ListTodo,
   Mail,
   Map,
   MapPin,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   MessageSquare,
   MoreHorizontal,
   Phone,
+  Paperclip,
   Plus,
   Search,
   Settings2,
@@ -40,42 +44,83 @@ import {
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import mammoth from "mammoth";
+import LeadTable from "@/features/leads/LeadTable";
+import { createLeadRecord, deleteLeadRecord, fetchLeads, leadPayload, saveLeadRecord } from "@/features/leads/client";
+import { leadStatuses, type LeadStatus, type StoredLead } from "@/features/leads/model";
+import UserDirectoryDialog from "@/features/users/UserDirectoryDialog";
+import type { UserAccount } from "@/features/users/model";
 
-type Status = "Cold" | "Warm" | "Hot" | "Client";
-
-type Lead = {
-  id: number;
-  name: string;
-  contact: string;
-  initials: string;
-  color: string;
-  status: Status;
-  action: string;
-  followUp: string;
-  owner: string;
-  city: string;
-  industry: string;
-  lastActivity: string;
-  type: string;
-  firstContact: string;
+type Status = LeadStatus;
+const leadActionOptions = [
+  "Follow-up call",
+  "Sent proposal",
+  "On-site meeting",
+  "Shared Profiles",
+  "First contact",
+  "Contract signed",
+  "No response",
+  "Email sent",
+  "Meeting scheduled",
+  "Call completed",
+  "Others ( Please specify )",
+];
+const statusByView: Partial<Record<string, Status>> = {
+  Cold: "Cold Lead",
+  Warm: "Warm Lead",
+  Hot: "Hot Lead",
+  Client: "Client",
 };
 
-const initialLeads: Lead[] = [
-  { id: 1, name: "Northstar Logistics", contact: "Elena Vasquez", initials: "NL", color: "violet", status: "Hot", action: "Follow-up call", followUp: "Today", owner: "You", city: "Toronto", industry: "Transportation", lastActivity: "12 min ago", type: "Cold Call", firstContact: "2026-10-13" },
-  { id: 2, name: "Meridian Health Group", contact: "James Park", initials: "MH", color: "blue", status: "Warm", action: "Sent proposal", followUp: "Today", owner: "You", city: "Mississauga", industry: "Healthcare", lastActivity: "48 min ago", type: "Cold Email", firstContact: "2026-10-09" },
-  { id: 3, name: "Fable & Stone", contact: "Olivia Bennett", initials: "FS", color: "orange", status: "Hot", action: "On-site meeting", followUp: "Tomorrow", owner: "You", city: "Toronto", industry: "Retail", lastActivity: "2 hours ago", type: "Road Trip", firstContact: "2026-10-08" },
-  { id: 4, name: "Vertex Manufacturing", contact: "David Kim", initials: "VM", color: "green", status: "Warm", action: "Shared 3 profiles", followUp: "Oct 16", owner: "You", city: "Brampton", industry: "Manufacturing", lastActivity: "Yesterday", type: "Cold Call", firstContact: "2026-10-06" },
-  { id: 5, name: "Juniper Hospitality", contact: "Priya Shah", initials: "JH", color: "pink", status: "Cold", action: "First contact", followUp: "Oct 17", owner: "You", city: "Oakville", industry: "Hospitality", lastActivity: "Yesterday", type: "Cold Email", firstContact: "2026-10-05" },
-  { id: 6, name: "Brightpath Education", contact: "Marcus Lee", initials: "BE", color: "teal", status: "Client", action: "Contract signed", followUp: "Oct 21", owner: "You", city: "Toronto", industry: "Education", lastActivity: "Oct 12", type: "Road Trip", firstContact: "2026-09-18" },
-];
+const statusClassName = (status: Status) => status.toLowerCase().replaceAll(" ", "-");
+const isCompanyWebsiteUrl = (value: string) => /^https?:\/\/\S+$/i.test(value);
 
-const initialQueuedLeads: Lead[] = [
-  { id: 101, name: "Westlake Distribution", contact: "Nina Brooks", initials: "WD", color: "orange", status: "Warm", action: "Historical lead submitted", followUp: "Oct 16", owner: "You", city: "Brampton", industry: "Logistics", lastActivity: "Needs review", type: "Cold Call", firstContact: "2026-08-12" },
-  { id: 102, name: "Pinecrest Medical", contact: "Omar Hassan", initials: "PM", color: "teal", status: "Cold", action: "Historical lead submitted", followUp: "Oct 18", owner: "You", city: "Toronto", industry: "Healthcare", lastActivity: "Needs review", type: "Cold Email", firstContact: "2026-07-28" },
-];
+type Lead = StoredLead;
 
-const initialArchivedLeads: Lead[] = [
-  { id: 201, name: "Summit Office Supply", contact: "Grace Wilson", initials: "SO", color: "blue", status: "Cold", action: "No response", followUp: "—", owner: "You", city: "Toronto", industry: "Retail", lastActivity: "Archived Oct 2", type: "Cold Email", firstContact: "2026-09-12" },
+type LeadFollowUp = {
+  id: number;
+  leadId: number;
+  leadName: string;
+  dueDate: string;
+  dueTime: string;
+  notes: string;
+};
+
+type LeadNote = {
+  id: number;
+  leadId: number;
+  content: string;
+  author: string;
+  createdAt: string;
+};
+
+type AttachmentCategory = "JD" | "Resume" | "Agreement" | "Other";
+
+type LeadAttachment = {
+  id: number;
+  leadId: number;
+  category: AttachmentCategory;
+  specifiedName: string;
+  file: File;
+  version: number;
+};
+
+type AttachmentPreview = {
+  attachmentId: number;
+  url: string;
+};
+
+type DocxPreview = {
+  attachmentId: number;
+  text?: string;
+  error?: string;
+};
+
+const initialLeadNotes: LeadNote[] = [
+  { id: 1, leadId: 1, content: "Initial conversation with Elena. They are reviewing warehouse staffing needs for the upcoming season.", author: "Sarah Lee", createdAt: "2026-10-10T09:15:00" },
+  { id: 2, leadId: 1, content: "Sent a follow-up email with an overview of our logistics recruitment services.", author: "Sarah Lee", createdAt: "2026-10-12T14:30:00" },
+  { id: 3, leadId: 1, content: "Elena asked for a call to discuss timelines and the first group of candidates.", author: "Jordan Taylor", createdAt: "2026-10-13T11:00:00" },
+  { id: 4, leadId: 2, content: "James is coordinating with the clinic managers and will confirm role requirements.", author: "Sarah Lee", createdAt: "2026-10-11T10:00:00" },
 ];
 
 const navigation: { title: string; items: { id: string; label: string; icon: LucideIcon; count?: string; tone?: string; highlight?: boolean }[] }[] = [
@@ -85,9 +130,9 @@ const navigation: { title: string; items: { id: string; label: string; icon: Luc
       { id: "home", label: "Action center", icon: LayoutDashboard },
       { id: "leads", label: "My leads", icon: UsersRound, count: "24" },
       { id: "all-leads", label: "All leads", icon: BriefcaseBusiness },
-      { id: "Cold", label: "Cold", icon: CircleHelp, tone: "cold" },
-      { id: "Warm", label: "Warm", icon: Activity, tone: "warm" },
-      { id: "Hot", label: "Hot", icon: Flame, tone: "hot" },
+      { id: "Cold", label: "Cold leads", icon: CircleHelp, tone: "cold" },
+      { id: "Warm", label: "Warm leads", icon: Activity, tone: "warm" },
+      { id: "Hot", label: "Hot leads", icon: Flame, tone: "hot" },
       { id: "Client", label: "Clients", icon: CheckCheck, tone: "client" },
       { id: "queued", label: "Queued leads", icon: Clock3, count: "3" },
       { id: "archive", label: "Archive", icon: FileText },
@@ -123,20 +168,143 @@ const localDateISO = (offset = 0) => {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 };
 
+const formatFollowUpDateTime = (date: string, time: string) => {
+  if (!date || !time) return "Date and time not set";
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(`${date}T${time}`));
+};
+
+const formatLeadFollowUp = (followUp: string) => {
+  const date = followUp === "Today"
+    ? new Date(`${localDateISO()}T12:00:00`)
+    : followUp === "Tomorrow"
+      ? new Date(`${localDateISO(1)}T12:00:00`)
+      : (() => {
+          const monthAndDay = followUp.match(/^([A-Za-z]{3})\s+(\d{1,2})$/);
+          return monthAndDay
+            ? new Date(`${monthAndDay[1]} ${monthAndDay[2]}, ${new Date().getFullYear()}`)
+            : null;
+        })();
+  if (!date || Number.isNaN(date.getTime())) return followUp;
+  const formattedDate = new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
+  return `${followUp} · ${formattedDate}`;
+};
+
+const formatNoteDateTime = (dateTime: string) =>
+  new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(dateTime));
+
 export default function Home() {
   const [activeView, setActiveView] = useState("home");
-  const [leads, setLeads] = useState(initialLeads);
-  const [queuedLeads, setQueuedLeads] = useState(initialQueuedLeads);
-  const [archivedLeads, setArchivedLeads] = useState(initialArchivedLeads);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [queuedLeads, setQueuedLeads] = useState<Lead[]>([]);
+  const [archivedLeads, setArchivedLeads] = useState<Lead[]>([]);
+  const [followUps, setFollowUps] = useState<LeadFollowUp[]>([]);
+  const [leadNotes, setLeadNotes] = useState<LeadNote[]>(initialLeadNotes);
+  const [attachments, setAttachments] = useState<LeadAttachment[]>([]);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All statuses");
+  const [statusFilter, setStatusFilter] = useState<Status | "All statuses">("All statuses");
   const [selected, setSelected] = useState<number[]>([]);
   const [dialog, setDialog] = useState<"new-lead" | "lead-detail" | null>(null);
+  const [usersDialogMode, setUsersDialogMode] = useState<"manage" | "transfer" | null>(null);
   const [activeLead, setActiveLead] = useState<Lead | null>(null);
+  const [isFollowUpComposerOpen, setIsFollowUpComposerOpen] = useState(false);
+  const [leadActionSelection, setLeadActionSelection] = useState("");
+  const [customLeadAction, setCustomLeadAction] = useState("");
+  const [isCompanyUrlEditing, setIsCompanyUrlEditing] = useState(false);
+  const [isAttachmentsOpen, setIsAttachmentsOpen] = useState(false);
+  const [isNotesOpen, setIsNotesOpen] = useState(false);
+  const [attachmentPreview, setAttachmentPreview] = useState<AttachmentPreview | null>(null);
+  const [docxPreview, setDocxPreview] = useState<DocxPreview | null>(null);
+  const [attachmentCategory, setAttachmentCategory] = useState<AttachmentCategory>("JD");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [toast, setToast] = useState("");
   const [newOpportunities, setNewOpportunities] = useState(opportunities);
   const [generated, setGenerated] = useState(false);
+  const [sessionStatus, setSessionStatus] = useState<"checking" | "signed-out" | "signed-in">("checking");
+  const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
+  const [loginError, setLoginError] = useState("");
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  const previewAttachment = attachmentPreview
+    ? attachments.find((attachment) => attachment.id === attachmentPreview.attachmentId) ?? null
+    : null;
+
+  useEffect(() => {
+    if (!attachmentPreview) return;
+    return () => URL.revokeObjectURL(attachmentPreview.url);
+  }, [attachmentPreview]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/auth/session", { cache: "no-store", credentials: "same-origin" })
+      .then(async (response) => {
+        const result = await response.json() as { user?: UserAccount | null; error?: string };
+        if (!response.ok) throw new Error(result.error || "Could not verify your session.");
+        if (!cancelled) {
+          setCurrentUser(result.user ?? null);
+          setSessionStatus(result.user ? "signed-in" : "signed-out");
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setLoginError(error instanceof Error ? error.message : "Could not verify your session.");
+          setSessionStatus("signed-out");
+        }
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (sessionStatus !== "signed-in" || !currentUser) return;
+    let cancelled = false;
+    fetchLeads()
+      .then((loadedLeads) => {
+        if (cancelled) return;
+        setLeads(loadedLeads.filter((lead) => lead.recordState === "active"));
+        setQueuedLeads(loadedLeads.filter((lead) => lead.recordState === "queued"));
+        setArchivedLeads(loadedLeads.filter((lead) => lead.recordState === "archived"));
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setToast(error instanceof Error ? error.message : "Could not load leads from MySQL.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser, sessionStatus]);
+
+  useEffect(() => {
+    if (!previewAttachment || !previewAttachment.file.name.toLowerCase().endsWith(".docx")) return;
+    let cancelled = false;
+    previewAttachment.file.arrayBuffer()
+      .then((arrayBuffer) => mammoth.extractRawText({ arrayBuffer }))
+      .then((result) => {
+        if (!cancelled) setDocxPreview({ attachmentId: previewAttachment.id, text: result.value });
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setDocxPreview({
+            attachmentId: previewAttachment.id,
+            error: error instanceof Error ? error.message : "The document could not be read.",
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [previewAttachment]);
 
   const filteredLeads = useMemo(() => {
     const normalized = search.trim().toLowerCase();
@@ -146,16 +314,62 @@ export default function Home() {
         !normalized ||
         [lead.name, lead.contact, lead.status, lead.action, lead.city, lead.industry, lead.owner]
           .some((value) => value.toLowerCase().includes(normalized));
-      const status = ["Cold", "Warm", "Hot", "Client"].includes(activeView) ? activeView : statusFilter;
+      const status = statusByView[activeView] ?? statusFilter;
       const matchesStatus = status === "All statuses" || lead.status === status;
-      const matchesView = activeView !== "leads" || lead.owner === "You";
+      const currentOwner = currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : "";
+      const matchesView = activeView !== "leads" || lead.owner === "You" || lead.owner === currentOwner;
       return matchesSearch && matchesStatus && matchesView;
     });
-  }, [activeView, archivedLeads, leads, queuedLeads, search, statusFilter]);
+  }, [activeView, archivedLeads, currentUser, leads, queuedLeads, search, statusFilter]);
 
   const notify = (message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(""), 2800);
+  };
+
+  const notifyPersistenceError = (error: unknown) => {
+    notify(error instanceof Error ? error.message : "The lead could not be saved to MySQL.");
+  };
+
+  const signIn = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsSigningIn(true);
+    setLoginError("");
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ email: data.get("email"), password: data.get("password") }),
+      });
+      const result = await response.json() as { user?: UserAccount; error?: string };
+      if (!response.ok || !result.user) throw new Error(result.error || "Could not sign in.");
+      setCurrentUser(result.user);
+      setSessionStatus("signed-in");
+      setLoginError("");
+      form.reset();
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : "Could not sign in.");
+    } finally {
+      setIsSigningIn(false);
+    }
+  };
+
+  const signOut = async () => {
+    try {
+      const response = await fetch("/api/auth/session", { method: "DELETE", credentials: "same-origin" });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "Could not sign out.");
+      setCurrentUser(null);
+      setLeads([]);
+      setQueuedLeads([]);
+      setArchivedLeads([]);
+      setSessionStatus("signed-out");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Could not sign out.");
+    }
   };
 
   const navigate = (id: string) => {
@@ -166,25 +380,246 @@ export default function Home() {
     setMobileNavOpen(false);
   };
 
+  const syncLeadActionEditor = (action: string) => {
+    const isStandardAction = leadActionOptions.includes(action);
+    setLeadActionSelection(isStandardAction ? action : "Others ( Please specify )");
+    setCustomLeadAction(isStandardAction ? "" : action);
+  };
+
   const openLead = (lead: Lead) => {
+    setAttachmentPreview(null);
+    setDocxPreview(null);
     setActiveLead(lead);
+    setIsFollowUpComposerOpen(false);
+    syncLeadActionEditor(lead.action);
+    setIsAttachmentsOpen(false);
+    setIsNotesOpen(false);
+    setIsCompanyUrlEditing(false);
+    setAttachmentCategory("JD");
     setDialog("lead-detail");
   };
 
-  const createLead = (event: FormEvent<HTMLFormElement>) => {
+  const openAttachmentPreview = (attachment: LeadAttachment) => {
+    setDocxPreview(null);
+    setAttachmentPreview({
+      attachmentId: attachment.id,
+      url: URL.createObjectURL(attachment.file),
+    });
+  };
+
+  const navigateAttachmentPreview = (direction: -1 | 1) => {
+    if (!previewAttachment || !attachmentPreview) return;
+    const leadAttachments = attachments.filter((attachment) => attachment.leadId === previewAttachment.leadId);
+    const currentIndex = leadAttachments.findIndex((attachment) => attachment.id === previewAttachment.id);
+    const nextAttachment = leadAttachments[currentIndex + direction];
+    if (nextAttachment) openAttachmentPreview(nextAttachment);
+  };
+
+  const closeAttachmentPreview = () => {
+    setAttachmentPreview(null);
+    setDocxPreview(null);
+  };
+
+  const closeDialog = () => {
+    closeAttachmentPreview();
+    setDialog(null);
+    setIsFollowUpComposerOpen(false);
+    setIsAttachmentsOpen(false);
+    setIsNotesOpen(false);
+    setIsCompanyUrlEditing(false);
+  };
+
+  const addAttachment = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!activeLead) return;
+    const data = new FormData(event.currentTarget);
+    const file = data.get("attachmentFile");
+    const specifiedName = String(data.get("specifiedName") || "").trim();
+    if (!(file instanceof File) || file.size === 0) {
+      notify("Choose a file to attach.");
+      return;
+    }
+    if (attachmentCategory === "Other" && !specifiedName) {
+      notify("Enter a name for this attachment.");
+      return;
+    }
+    const previousVersions = attachments.filter((attachment) =>
+      attachment.leadId === activeLead.id &&
+      attachment.category === attachmentCategory &&
+      attachment.file.name.toLowerCase() === file.name.toLowerCase()
+    );
+    const attachment: LeadAttachment = {
+      id: Date.now(),
+      leadId: activeLead.id,
+      category: attachmentCategory,
+      specifiedName: attachmentCategory === "Other" ? specifiedName : "",
+      file,
+      version: previousVersions.length + 1,
+    };
+    setAttachments((current) => [attachment, ...current]);
+    event.currentTarget.reset();
+    setAttachmentCategory("JD");
+    notify(`${attachment.category === "Other" ? specifiedName : attachment.category} attached to ${activeLead.name}`);
+  };
+
+  const updateLeadStatus = async (status: Status) => {
+    if (!activeLead || activeLead.status === status) return;
+    const updatedLead = {
+      ...activeLead,
+      status,
+      action: `Status changed to ${status}`,
+      lastActivity: "Just now",
+    };
+    try {
+      await saveLeadRecord(updatedLead.id, leadPayload(updatedLead, activeLead.recordState));
+    } catch (error) {
+      notifyPersistenceError(error);
+      return;
+    }
+    setLeads((current) => current.map((lead) => lead.id === activeLead.id ? updatedLead : lead));
+    setQueuedLeads((current) => current.map((lead) => lead.id === activeLead.id ? updatedLead : lead));
+    setArchivedLeads((current) => current.map((lead) => lead.id === activeLead.id ? updatedLead : lead));
+    setActiveLead(updatedLead);
+    syncLeadActionEditor(updatedLead.action);
+    notify(`${activeLead.name} moved to ${status}`);
+  };
+
+  const updateLeadAction = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!activeLead) return;
+    const action = leadActionSelection === "Others ( Please specify )" ? customLeadAction.trim() : leadActionSelection;
+    if (!action) {
+      notify("Please specify the last action.");
+      return;
+    }
+    const updatedLead = { ...activeLead, action, lastActivity: "Just now" };
+    try {
+      await saveLeadRecord(updatedLead.id, leadPayload(updatedLead, activeLead.recordState));
+    } catch (error) {
+      notifyPersistenceError(error);
+      return;
+    }
+    setLeads((current) => current.map((lead) => lead.id === activeLead.id ? updatedLead : lead));
+    setQueuedLeads((current) => current.map((lead) => lead.id === activeLead.id ? updatedLead : lead));
+    setArchivedLeads((current) => current.map((lead) => lead.id === activeLead.id ? updatedLead : lead));
+    setActiveLead(updatedLead);
+    syncLeadActionEditor(action);
+    notify(`Last action updated for ${activeLead.name}`);
+  };
+
+  const updateCompanyUrl = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!activeLead) return;
+    const data = new FormData(event.currentTarget);
+    const companyUrl = String(data.get("companyUrl") || "").trim();
+    if (!isCompanyWebsiteUrl(companyUrl)) {
+      notify("Enter a company website beginning with http:// or https://");
+      return;
+    }
+    const updatedLead = { ...activeLead, companyUrl };
+    try {
+      await saveLeadRecord(updatedLead.id, leadPayload(updatedLead, activeLead.recordState));
+    } catch (error) {
+      notifyPersistenceError(error);
+      return;
+    }
+    setLeads((current) => current.map((lead) => lead.id === activeLead.id ? updatedLead : lead));
+    setQueuedLeads((current) => current.map((lead) => lead.id === activeLead.id ? updatedLead : lead));
+    setArchivedLeads((current) => current.map((lead) => lead.id === activeLead.id ? updatedLead : lead));
+    setActiveLead(updatedLead);
+    setIsCompanyUrlEditing(false);
+    notify(`Company link updated for ${activeLead.name}`);
+  };
+
+  const createFollowUp = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!activeLead) return;
+    const data = new FormData(event.currentTarget);
+    const dueDate = String(data.get("dueDate") || "");
+    const dueTime = String(data.get("dueTime") || "");
+    const notes = String(data.get("notes") || "").trim();
+    const followUp: LeadFollowUp = {
+      id: Date.now(),
+      leadId: activeLead.id,
+      leadName: activeLead.name,
+      dueDate,
+      dueTime,
+      notes,
+    };
+    const updatedLead = {
+      ...activeLead,
+      followUp: formatFollowUpDateTime(dueDate, dueTime),
+      action: "Follow-up scheduled",
+      lastActivity: "Just now",
+    };
+    try {
+      await saveLeadRecord(updatedLead.id, leadPayload(updatedLead, activeLead.recordState));
+    } catch (error) {
+      notifyPersistenceError(error);
+      return;
+    }
+    setFollowUps((current) => [followUp, ...current]);
+    setLeads((current) => current.map((lead) => lead.id === activeLead.id ? updatedLead : lead));
+    setActiveLead(updatedLead);
+    syncLeadActionEditor(updatedLead.action);
+    setIsFollowUpComposerOpen(false);
+    notify(`Follow-up scheduled for ${activeLead.name}`);
+  };
+
+  const createLeadNote = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!activeLead) return;
+    const data = new FormData(event.currentTarget);
+    const content = String(data.get("note") || "").trim();
+    if (!content) return;
+    const createdAt = new Date().toISOString();
+    const note: LeadNote = {
+      id: Date.now(),
+      leadId: activeLead.id,
+      content,
+      author: "Sarah Lee",
+      createdAt,
+    };
+    const updatedLead = {
+      ...activeLead,
+      action: "Note added",
+      lastActivity: "Just now",
+    };
+    try {
+      await saveLeadRecord(updatedLead.id, leadPayload(updatedLead, activeLead.recordState));
+    } catch (error) {
+      notifyPersistenceError(error);
+      return;
+    }
+    setLeadNotes((current) => [...current, note]);
+    setLeads((current) => current.map((lead) => lead.id === activeLead.id ? updatedLead : lead));
+    setActiveLead(updatedLead);
+    syncLeadActionEditor(updatedLead.action);
+    event.currentTarget.reset();
+    notify(`Note added to ${activeLead.name}`);
+  };
+
+  const createLead = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const name = String(data.get("name") || "").trim();
     if (!name) return;
-    const statusOptions: Status[] = ["Cold", "Warm", "Hot", "Client"];
+    const companyUrl = String(data.get("companyUrl") || "").trim();
+    if (companyUrl && !isCompanyWebsiteUrl(companyUrl)) {
+      notify("Enter a company website beginning with http:// or https://");
+      return;
+    }
     const firstContact = String(data.get("firstContact") || localDateISO());
     const newLead: Lead = {
       id: Date.now(),
       name,
+      companyUrl: companyUrl || undefined,
       contact: String(data.get("contact") || "New contact"),
+      contactEmail: String(data.get("contactEmail") || ""),
+      contactPhone: String(data.get("contactPhone") || ""),
       initials: name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase(),
       color: "blue",
-      status: statusOptions.find((status) => status === data.get("status")) ?? "Cold",
+      status: leadStatuses.find((status) => status === data.get("status")) ?? "Cold Lead",
       action: "New lead created",
       followUp: String(data.get("followUp") || "Not set"),
       owner: "You",
@@ -193,42 +628,103 @@ export default function Home() {
       lastActivity: "Just now",
       type: String(data.get("type") || "Cold Call"),
       firstContact,
+      recordState: firstContact < localDateISO(-1) ? "queued" : "active",
     };
+    let storedLead: Lead;
+    try {
+      storedLead = await createLeadRecord(leadPayload(newLead, newLead.recordState));
+    } catch (error) {
+      notifyPersistenceError(error);
+      return;
+    }
     if (firstContact < localDateISO(-1)) {
-      setQueuedLeads((current) => [newLead, ...current]);
+      setQueuedLeads((current) => [storedLead, ...current]);
       setDialog(null);
       navigate("queued");
       notify(`${name} saved as a queued lead for Admin approval`);
       return;
     }
-    setLeads((current) => [newLead, ...current]);
+    setLeads((current) => [storedLead, ...current]);
     setDialog(null);
     navigate("leads");
     notify(`${name} added to your leads`);
   };
 
-  const archiveSelected = () => {
+  const archiveSelected = async () => {
     if (!selected.length) return;
     const count = selected.length;
     if (activeView === "archive") {
       const restored = archivedLeads.filter((lead) => selected.includes(lead.id));
+      try {
+        await Promise.all(restored.map((lead) => saveLeadRecord(lead.id, leadPayload(lead, "active"))));
+      } catch (error) {
+        notifyPersistenceError(error);
+        return;
+      }
+      const restoredLeads: Lead[] = restored.map((lead) => ({ ...lead, recordState: "active" }));
       setArchivedLeads((current) => current.filter((lead) => !selected.includes(lead.id)));
-      setLeads((current) => [...restored, ...current]);
+      setLeads((current) => [...restoredLeads, ...current]);
       setSelected([]);
       notify(`${count} ${count === 1 ? "lead" : "leads"} restored to your pipeline`);
       return;
     }
     const toArchive = leads.filter((lead) => selected.includes(lead.id));
-    setArchivedLeads((current) => [...toArchive, ...current]);
+    const archived = toArchive.map((lead) => ({ ...lead, recordState: "archived" as const }));
+    try {
+      await Promise.all(archived.map((lead) => saveLeadRecord(lead.id, leadPayload(lead, "archived"))));
+    } catch (error) {
+      notifyPersistenceError(error);
+      return;
+    }
+    setArchivedLeads((current) => [...archived, ...current]);
     setLeads((current) => current.filter((lead) => !selected.includes(lead.id)));
     setSelected([]);
     notify(`${count} ${count === 1 ? "lead" : "leads"} moved to archive`);
   };
 
-  const reviewQueuedLead = (lead: Lead, approve: boolean) => {
+  const reviewQueuedLead = async (lead: Lead, approve: boolean) => {
+    const reviewedLead = { ...lead, action: "Queued lead approved", lastActivity: "Just now", recordState: "active" as const };
+    try {
+      if (approve) await saveLeadRecord(reviewedLead.id, leadPayload(reviewedLead, "active"));
+      else await deleteLeadRecord(lead.id);
+    } catch (error) {
+      notifyPersistenceError(error);
+      return;
+    }
     setQueuedLeads((current) => current.filter((item) => item.id !== lead.id));
-    if (approve) setLeads((current) => [{ ...lead, action: "Queued lead approved", lastActivity: "Just now" }, ...current]);
+    if (approve) setLeads((current) => [reviewedLead, ...current]);
     notify(approve ? `${lead.name} approved and added to the pipeline` : `${lead.name} rejected`);
+  };
+
+  const restoreArchivedLead = async (lead: Lead) => {
+    const restoredLead: Lead = { ...lead, recordState: "active" };
+    try {
+      await saveLeadRecord(restoredLead.id, leadPayload(restoredLead, "active"));
+    } catch (error) {
+      notifyPersistenceError(error);
+      return;
+    }
+    setArchivedLeads((current) => current.filter((item) => item.id !== lead.id));
+    setLeads((current) => [restoredLead, ...current]);
+    notify(`${lead.name} restored to your pipeline`);
+  };
+
+  const transferLeadToUser = async (user: UserAccount) => {
+    if (!activeLead) return;
+    const owner = `${user.firstName} ${user.lastName}`;
+    const transferredLead: Lead = { ...activeLead, owner };
+    try {
+      await saveLeadRecord(transferredLead.id, leadPayload(transferredLead, transferredLead.recordState));
+    } catch (error) {
+      notifyPersistenceError(error);
+      return;
+    }
+    setLeads((current) => current.map((lead) => lead.id === activeLead.id ? transferredLead : lead));
+    setQueuedLeads((current) => current.map((lead) => lead.id === activeLead.id ? transferredLead : lead));
+    setArchivedLeads((current) => current.map((lead) => lead.id === activeLead.id ? transferredLead : lead));
+    setActiveLead(transferredLead);
+    setUsersDialogMode(null);
+    notify(`${activeLead.name} transferred to ${owner}`);
   };
 
   const toggleSelected = (id: number) => {
@@ -254,84 +750,24 @@ export default function Home() {
   };
 
   const renderLeads = (mode: "table" | "follow-up" = "table") => (
-    <div className="lead-list-wrap">
-      <div className="lead-toolbar">
-        <div className="search-field lead-search">
-          <Search size={16} />
-          <input
-            aria-label="Search leads"
-            placeholder="Search clients, contacts, notes..."
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-          <kbd>⌘ K</kbd>
-        </div>
-        <label className="select-filter">
-          <Filter size={15} />
-          <select aria-label="Filter by status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-            <option>All statuses</option>
-            <option>Cold</option>
-            <option>Warm</option>
-            <option>Hot</option>
-            <option>Client</option>
-          </select>
-          <ChevronDown size={14} />
-        </label>
-        <button className="icon-button filter-button" aria-label="More filters" onClick={() => notify("Advanced filters are ready to configure.")}>
-          <SlidersHorizontalIcon />
-        </button>
-      </div>
-      {selected.length > 0 && activeView !== "queued" && (
-        <div className="bulk-bar">
-          <span>{selected.length} selected</span>
-          <button onClick={archiveSelected}><FileText size={14} /> {activeView === "archive" ? "Restore selected" : "Archive selected"}</button>
-          <button className="bulk-clear" onClick={() => setSelected([])}>Clear selection</button>
-        </div>
-      )}
-      <div className="table-scroll">
-        <table className="lead-table">
-          <thead>
-            <tr>
-              <th><input aria-label="Select all leads" type="checkbox" checked={filteredLeads.length > 0 && filteredLeads.every((lead) => selected.includes(lead.id))} onChange={(event) => setSelected(event.target.checked ? filteredLeads.map((lead) => lead.id) : [])} /></th>
-              <th>CLIENT</th>
-              <th>STATUS</th>
-              <th>LAST BD ACTION</th>
-              <th>FOLLOW-UP</th>
-              <th>OWNER</th>
-              <th><span className="sr-only">Actions</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredLeads.map((lead) => (
-              <tr key={lead.id} className={mode === "follow-up" && lead.followUp === "Today" ? "row-due" : ""}>
-                <td><input aria-label={`Select ${lead.name}`} type="checkbox" checked={selected.includes(lead.id)} onChange={() => toggleSelected(lead.id)} /></td>
-                <td>
-                  <button className="client-cell" onClick={() => openLead(lead)}>
-                    <span className={`avatar avatar-${lead.color}`}>{lead.initials}</span>
-                    <span><strong>{lead.name}</strong><small>{lead.contact} · {lead.city}</small></span>
-                  </button>
-                </td>
-                <td><span className={`status-pill status-${lead.status.toLowerCase()}`}><i />{lead.status}</span></td>
-                <td><span className="action-cell">{lead.action}</span><small className="activity-time">{lead.lastActivity}</small></td>
-                <td><span className={lead.followUp === "Today" ? "due-today" : "muted-cell"}>{lead.followUp === "Today" && <Clock3 size={13} />}{lead.followUp}</span></td>
-                <td><span className="owner-cell"><span className="mini-avatar">SL</span>{lead.owner}</span></td>
-                <td>
-                  {activeView === "queued" ? (
-                    <span className="review-actions"><button onClick={() => reviewQueuedLead(lead, true)}>Approve</button><button onClick={() => reviewQueuedLead(lead, false)}>Reject</button></span>
-                  ) : activeView === "archive" ? (
-                    <button className="restore-button" onClick={() => { setArchivedLeads((current) => current.filter((item) => item.id !== lead.id)); setLeads((current) => [lead, ...current]); notify(`${lead.name} restored to your pipeline`); }}>Restore</button>
-                  ) : (
-                    <button className="row-more" aria-label={`Open ${lead.name}`} onClick={() => openLead(lead)}><MoreHorizontal size={18} /></button>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {!filteredLeads.length && <tr><td colSpan={7} className="empty-state">No leads match your search. Try another name or status.</td></tr>}
-          </tbody>
-        </table>
-      </div>
-      <div className="table-footer"><span>Showing <strong>{filteredLeads.length}</strong> of <strong>{activeView === "archive" ? archivedLeads.length : activeView === "queued" ? queuedLeads.length : leads.length}</strong> leads</span><button onClick={() => notify("You’re viewing the latest activity first.")}>Recently active <ChevronDown size={14} /></button></div>
-    </div>
+    <LeadTable
+      leads={filteredLeads}
+      totalCount={activeView === "archive" ? archivedLeads.length : activeView === "queued" ? queuedLeads.length : leads.length}
+      activeView={activeView}
+      selected={selected}
+      search={search}
+      statusFilter={statusFilter}
+      mode={mode}
+      onSearchChange={setSearch}
+      onStatusFilterChange={setStatusFilter}
+      onSelectionChange={setSelected}
+      onToggleSelected={toggleSelected}
+      onArchiveSelected={archiveSelected}
+      onOpenLead={openLead}
+      onReviewQueued={reviewQueuedLead}
+      onRestoreLead={restoreArchivedLead}
+      onNotify={notify}
+    />
   );
 
   const renderDashboard = () => (
@@ -368,7 +804,7 @@ export default function Home() {
               <button className="followup-row" key={lead.id} onClick={() => openLead(lead)}>
                 <span className={`avatar avatar-${lead.color}`}>{lead.initials}</span>
                 <span className="followup-info"><strong>{lead.name}</strong><small>{lead.action} · {lead.contact}</small></span>
-                <span className={`status-pill status-${lead.status.toLowerCase()}`}><i />{lead.status}</span>
+                <span className={`status-pill status-${statusClassName(lead.status)}`}><i />{lead.status}</span>
                 <span className="followup-time"><Clock3 size={13} /> 10:30 AM</span>
                 <ChevronRight className="followup-chevron" size={16} />
               </button>
@@ -461,6 +897,7 @@ export default function Home() {
   const renderTasks = () => (
     <>
       <div className="page-heading"><div><div className="eyebrow">YOUR WORKDAY <span className="eyebrow-dot">·</span> 5 OPEN</div><h1>Tasks & reminders</h1><p>Every next step, organized so nothing slips through the cracks.</p></div><button className="button button-primary" onClick={() => notify("New task form opened.")}><Plus size={17} /> Create task</button></div>
+      {followUps.length > 0 && <section className="panel scheduled-followups"><div className="panel-heading"><div><h2>Scheduled follow-ups</h2><p>Reminders you’ve created from lead overviews</p></div><span className="followup-scheduled-count">{followUps.length}</span></div><div className="scheduled-followup-list">{followUps.map((followUp) => <div className="scheduled-followup-row" key={followUp.id}><span className="timeline-dot"><CalendarCheck2 size={13} /></span><div><strong>{followUp.leadName}</strong><small>{formatFollowUpDateTime(followUp.dueDate, followUp.dueTime)}</small><p>{followUp.notes}</p></div><button className="text-button" onClick={() => { const lead = leads.find((item) => item.id === followUp.leadId); if (lead) openLead(lead); }}>View lead <ArrowRight size={13} /></button></div>)}</div></section>}
       <div className="task-columns">
         <TaskColumn title="Overdue" count="2" tone="red" tasks={[["Call back about the revised contract", "Northstar Logistics · Yesterday, 3:00 PM", "High"], ["Send shortlist of 3 candidates", "Meridian Health Group · Yesterday, 5:00 PM", "Medium"]]} onComplete={() => notify("Task marked complete.")} />
         <TaskColumn title="Today" count="3" tone="blue" tasks={[["Follow up on staffing proposal", "Northstar Logistics · 10:30 AM", "High"], ["Confirm Thursday site visit", "Fable & Stone · 1:00 PM", "Medium"], ["Share candidate profiles", "Vertex Manufacturing · 3:30 PM", "Normal"]]} onComplete={() => notify("Task marked complete.")} />
@@ -496,10 +933,10 @@ export default function Home() {
 
   const renderAdmin = () => (
     <>
-      <div className="page-heading"><div><div className="eyebrow">ADMINISTRATION <span className="eyebrow-dot">·</span> TEAM OVERVIEW</div><h1>Manage your team</h1><p>People, permissions, and the health of your sales pipeline.</p></div><button className="button button-primary" onClick={() => notify("Invite form opened.")}><Plus size={17} /> Invite a teammate</button></div>
+      <div className="page-heading"><div><div className="eyebrow">ADMINISTRATION <span className="eyebrow-dot">·</span> TEAM OVERVIEW</div><h1>Manage your team</h1><p>People, permissions, and the health of your sales pipeline.</p></div><button className="button button-primary" onClick={() => setUsersDialogMode("manage")}><Plus size={17} /> Add a user</button></div>
       <div className="opportunity-stats"><SmallStat label="Team members" value="12" note="10 active today" icon={<UsersRound size={17} />} /><SmallStat label="Active leads" value="186" note="Across your team" icon={<BriefcaseBusiness size={17} />} /><SmallStat label="Conversions" value="24" note="This month" icon={<TrendingUp size={17} />} /><SmallStat label="Pending approval" value="03" note="Queued leads" icon={<Clock3 size={17} />} /></div>
       <section className="panel team-panel"><div className="panel-heading"><div><h2>Sales manager performance</h2><p>This month · sorted by leads created</p></div><button className="text-button" onClick={() => notify("Team performance report opened.")}>Full report <ArrowRight size={14} /></button></div><div className="table-scroll"><table className="lead-table team-table"><thead><tr><th>TEAM MEMBER</th><th>LEADS</th><th>CALLS</th><th>VISITS</th><th>CONVERSION</th><th>TARGET</th><th /></tr></thead><tbody>{[["SL", "Sarah Lee", "18", "24", "12", "4", "78%"], ["MP", "Michael Patel", "16", "29", "9", "3", "71%"], ["JT", "Jordan Taylor", "14", "21", "11", "5", "84%"], ["AC", "Alex Chen", "11", "18", "8", "2", "63%"]].map((row) => <tr key={row[1]}><td><span className="owner-cell"><span className="mini-avatar">{row[0]}</span><strong>{row[1]}</strong></span></td><td>{row[2]}</td><td>{row[3]}</td><td>{row[4]}</td><td>{row[5]}</td><td><span className="target-progress"><i style={{ width: row[6] }} />{row[6]}</span></td><td><button className="row-more" aria-label={`View ${row[1]}`} onClick={() => notify(`${row[1]}'s performance details opened.`)}><ChevronRight size={16} /></button></td></tr>)}</tbody></table></div></section>
-      <div className="admin-shortcuts"><button className="panel shortcut-card" onClick={() => notify("User management settings opened.")}><UsersRound size={18} /><span><strong>User management</strong><small>Roles, access and account settings</small></span><ChevronRight size={16} /></button><button className="panel shortcut-card" onClick={() => notify("List-of-values settings opened.")}><Settings2 size={18} /><span><strong>List of values</strong><small>Manage statuses and dropdowns</small></span><ChevronRight size={16} /></button><button className="panel shortcut-card" onClick={() => notify("Device authorization settings opened.")}><ShieldCheck size={18} /><span><strong>Device authorization</strong><small>Manage trusted company devices</small></span><ChevronRight size={16} /></button></div>
+      <div className="admin-shortcuts"><button className="panel shortcut-card" onClick={() => setUsersDialogMode("manage")}><UsersRound size={18} /><span><strong>User management</strong><small>Roles, access and account settings</small></span><ChevronRight size={16} /></button><button className="panel shortcut-card" onClick={() => notify("List-of-values settings opened.")}><Settings2 size={18} /><span><strong>List of values</strong><small>Manage statuses and dropdowns</small></span><ChevronRight size={16} /></button><button className="panel shortcut-card" onClick={() => notify("Device authorization settings opened.")}><ShieldCheck size={18} /><span><strong>Device authorization</strong><small>Manage trusted company devices</small></span><ChevronRight size={16} /></button></div>
     </>
   );
 
@@ -510,15 +947,47 @@ export default function Home() {
     </>
   );
 
+  if (sessionStatus !== "signed-in") {
+    return (
+      <main className="login-shell">
+        <section className="login-card">
+          <div className="login-brand"><span className="brand-mark"><span /><span /><span /></span><span className="brand-name">salestrack<span>pro</span></span></div>
+          <span className="eyebrow">SALES WORKSPACE</span>
+          <h1>{sessionStatus === "checking" ? "Checking your session" : "Welcome back"}</h1>
+          <p>{sessionStatus === "checking" ? "Connecting securely to your SalesTrackPro workspace." : "Sign in to access your leads and team workspace."}</p>
+          {sessionStatus === "checking" ? <div className="login-loading">Verifying session...</div> : (
+            <>
+              <form className="login-form" onSubmit={signIn}>
+                <label>Email address<input name="email" type="email" autoComplete="username" required maxLength={254} /></label>
+                <label>Password<input name="password" type="password" autoComplete="current-password" required maxLength={200} /></label>
+                {loginError && <p className="user-form-error" role="alert">{loginError}</p>}
+                <button className="button button-primary" type="submit" disabled={isSigningIn}>{isSigningIn ? "Signing in..." : "Sign in"}</button>
+              </form>
+              <button className="login-bootstrap-link" onClick={() => { setLoginError(""); setUsersDialogMode("manage"); }}>First time setup? Create the initial administrator account</button>
+            </>
+          )}
+        </section>
+        {usersDialogMode && (
+          <UserDirectoryDialog
+            mode="manage"
+            initialAccount
+            onClose={() => setUsersDialogMode(null)}
+            onNotify={(message) => setLoginError(message)}
+          />
+        )}
+      </main>
+    );
+  }
+
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${isSidebarCollapsed ? "sidebar-collapsed" : ""}`}>
       {mobileNavOpen && <button className="mobile-scrim" aria-label="Close navigation" onClick={() => setMobileNavOpen(false)} />}
       <aside className={`sidebar ${mobileNavOpen ? "sidebar-open" : ""}`}>
         <button className="brand-lockup" onClick={() => navigate("home")} aria-label="SalesTrackPro home">
           <span className="brand-mark"><span /><span /><span /></span>
           <span className="brand-name">salestrack<span>pro</span></span>
         </button>
-        <div className="workspace-switcher"><span className="workspace-icon">N</span><span><strong>Northstar Talent</strong><small>Sales workspace</small></span><ChevronDown size={14} /></div>
+        <div className="workspace-switcher" title={isSidebarCollapsed ? "Northstar Talent · Sales workspace" : undefined}><span className="workspace-icon">N</span><span><strong>Northstar Talent</strong><small>Sales workspace</small></span><ChevronDown size={14} /></div>
         <nav className="side-nav" aria-label="Main navigation">
           {navigation.map((group) => (
             <div className="nav-group" key={group.title}>
@@ -527,7 +996,7 @@ export default function Home() {
                 const Icon = item.icon;
                 const isActive = activeView === item.id || (item.id === "leads" && activeView === "all-leads");
                 return (
-                  <button key={item.id} onClick={() => navigate(item.id)} className={`nav-item ${isActive ? "nav-active" : ""} ${item.highlight ? "nav-highlight" : ""} ${item.tone ? `nav-${item.tone}` : ""}`}>
+                  <button key={item.id} title={isSidebarCollapsed ? item.label : undefined} aria-label={isSidebarCollapsed ? item.label : undefined} onClick={() => navigate(item.id)} className={`nav-item ${isActive ? "nav-active" : ""} ${item.highlight ? "nav-highlight" : ""} ${item.tone ? `nav-${item.tone}` : ""}`}>
                     <Icon size={17} strokeWidth={isActive ? 2.2 : 1.8} /><span>{item.label}</span>{item.count && <span className={`nav-count ${item.highlight ? "count-highlight" : ""}`}>{item.count}</span>}
                   </button>
                 );
@@ -537,19 +1006,19 @@ export default function Home() {
         </nav>
         <div className="sidebar-bottom">
           <div className="sidebar-tip"><div><Sparkles size={15} /><span>QUICK TIP</span></div><p>Keep your leads warm with a timely follow-up.</p><button onClick={() => navigate("tasks")}>See your tasks <ArrowRight size={13} /></button></div>
-          <button className="profile-button" onClick={() => notify("Account settings opened.")}><span className="profile-avatar">SL</span><span><strong>Sarah Lee</strong><small>Sales manager</small></span><MoreHorizontal size={18} /></button>
+          <button className="profile-button" onClick={signOut} title="Sign out"><span className="profile-avatar">{currentUser?.firstName[0]}{currentUser?.lastName[0]}</span><span><strong>{currentUser?.firstName} {currentUser?.lastName}</strong><small>{currentUser?.role} · Sign out</small></span><MoreHorizontal size={18} /></button>
         </div>
       </aside>
 
       <main className="main-area">
         <header className="topbar">
-          <div className="topbar-left"><button className="mobile-menu" aria-label="Open navigation" onClick={() => setMobileNavOpen(true)}><Menu size={20} /></button><span className="breadcrumb-root">Workspace</span><ChevronRight size={14} /><span className="breadcrumb-current">{pageTitles[activeView]}</span></div>
+          <div className="topbar-left"><button className="mobile-menu" aria-label="Open navigation" onClick={() => setMobileNavOpen(true)}><Menu size={20} /></button><button className="sidebar-toggle" aria-label={isSidebarCollapsed ? "Expand navigation" : "Collapse navigation"} title={isSidebarCollapsed ? "Expand navigation" : "Collapse navigation"} onClick={() => setIsSidebarCollapsed((collapsed) => !collapsed)}><span className="sidebar-toggle-expanded"><PanelLeftClose size={18} /></span><span className="sidebar-toggle-collapsed"><PanelLeftOpen size={18} /></span></button><span className="breadcrumb-root">Workspace</span><ChevronRight size={14} /><span className="breadcrumb-current">{pageTitles[activeView]}</span></div>
           <div className="topbar-right">
             <button className="global-search" onClick={() => document.querySelector<HTMLInputElement>(".global-search-input")?.focus()}><Search size={16} /><input className="global-search-input" placeholder="Search anything..." value={search} onChange={(event) => setSearch(event.target.value)} /><kbd>⌘ K</kbd></button>
             <button className="topbar-icon" aria-label="Help center" onClick={() => notify("Help center opened.")}><CircleHelp size={18} /></button>
             <button className="topbar-icon notification-button" aria-label="Notifications" onClick={() => notify("You’re all caught up on notifications.")}><Bell size={18} /><i /></button>
             <span className="topbar-divider" />
-            <button className="topbar-user" onClick={() => notify("Account menu opened.")}><span className="profile-avatar">SL</span><ChevronDown size={14} /></button>
+            <button className="topbar-user" onClick={signOut} title="Sign out"><span className="profile-avatar">{currentUser?.firstName[0]}{currentUser?.lastName[0]}</span><ChevronDown size={14} /></button>
           </div>
         </header>
         <div className="main-content">
@@ -567,14 +1036,17 @@ export default function Home() {
       </main>
 
       {dialog && (
-        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDialog(null); }}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDialog(); }}>
           <section className={`modal ${dialog === "lead-detail" ? "detail-modal" : ""}`} role="dialog" aria-modal="true" aria-labelledby="modal-title">
-            <div className="modal-header"><div><span className="eyebrow">{dialog === "new-lead" ? "YOUR PIPELINE" : "LEAD OVERVIEW"}</span><h2 id="modal-title">{dialog === "new-lead" ? "Add a new lead" : activeLead?.name}</h2></div><button className="icon-button" aria-label="Close dialog" onClick={() => setDialog(null)}><X size={18} /></button></div>
+            <div className="modal-header"><div className="modal-title-content"><span className="eyebrow">{dialog === "new-lead" ? "YOUR PIPELINE" : isFollowUpComposerOpen ? "LEAD FOLLOW-UP" : isNotesOpen ? "LEAD NOTES" : attachmentPreview ? "ATTACHMENT PREVIEW" : isAttachmentsOpen ? "LEAD ATTACHMENTS" : "LEAD OVERVIEW"}</span>{dialog === "lead-detail" && activeLead && !isFollowUpComposerOpen && !isNotesOpen && !isAttachmentsOpen && !attachmentPreview ? <><div className="company-name-heading"><h2 id="modal-title">{activeLead.companyUrl ? <a className="company-link-icon" href={activeLead.companyUrl} target="_blank" rel="noopener noreferrer" aria-label={`Open ${activeLead.name} website`} title="Open company website"><ExternalLink size={14} /></a> : <button type="button" className="company-link-icon" onClick={() => setIsCompanyUrlEditing(true)} aria-label="Add company website" title="Add company website"><ExternalLink size={14} /></button>}{activeLead.name}</h2>{activeLead.companyUrl && <button type="button" className="company-link-edit" onClick={() => setIsCompanyUrlEditing(true)}>Edit link</button>}</div>{isCompanyUrlEditing && <form className="company-url-editor" onSubmit={updateCompanyUrl}><input name="companyUrl" type="url" pattern="https?://.+" title="Enter a URL beginning with http:// or https://" required defaultValue={activeLead.companyUrl ?? ""} placeholder="https://company.com" aria-label="Company website URL" autoFocus /><button className="button button-primary button-small" type="submit">Save link</button><button className="button button-outline button-small" type="button" onClick={() => setIsCompanyUrlEditing(false)}>Cancel</button></form>}</> : <h2 id="modal-title">{dialog === "new-lead" ? "Add a new lead" : isFollowUpComposerOpen ? "Schedule a follow-up" : isNotesOpen ? `Notes · ${activeLead?.name}` : attachmentPreview && previewAttachment ? previewAttachment.file.name : isAttachmentsOpen ? `Attachments · ${activeLead?.name}` : activeLead?.name}</h2>}</div><button className="icon-button" aria-label="Close dialog" onClick={closeDialog}><X size={18} /></button></div>
             {dialog === "new-lead" ? (
               <form className="lead-form" onSubmit={createLead}>
                 <label className="field-wide">Client name <input name="name" required placeholder="Company or client name" autoFocus /></label>
+                <label className="field-wide">Company website <input name="companyUrl" type="url" pattern="https?://.+" title="Enter a URL beginning with http:// or https://" placeholder="https://company.com" /></label>
                 <label>Client executive <input name="contact" placeholder="Contact person" /></label>
-                <label>Lead status <select name="status" defaultValue="Cold"><option>Cold</option><option>Warm</option><option>Hot</option><option>Client</option></select></label>
+                <label>Executive email <input name="contactEmail" type="email" placeholder="name@company.com" /></label>
+                <label>Executive phone <input name="contactPhone" type="tel" placeholder="+1 (555) 123-4567" /></label>
+                <label>Lead status <select name="status" defaultValue="Cold Lead">{leadStatuses.map((status) => <option key={status}>{status}</option>)}</select></label>
                 <label>Lead type <select name="type" defaultValue="Cold Call"><option>Cold Call</option><option>Cold Email</option><option>Road Trip</option></select></label>
                 <label>City <input name="city" placeholder="Toronto" /></label>
                 <label>Industry <input name="industry" placeholder="e.g. Healthcare" /></label>
@@ -583,17 +1055,116 @@ export default function Home() {
                 <div className="form-note"><ShieldCheck size={14} /> You’ll be set as the lead owner. Historical first-contact dates may need Admin approval.</div>
                 <div className="modal-actions"><button type="button" className="button button-outline" onClick={() => setDialog(null)}>Cancel</button><button type="submit" className="button button-primary"><Plus size={15} /> Save lead</button></div>
               </form>
+            ) : activeLead && isAttachmentsOpen ? (
+              <div className="attachment-dialog-content">
+                {attachmentPreview && previewAttachment ? (
+                  <section className="attachment-preview">
+                    <div className="attachment-preview-toolbar">
+                      <button className="button button-outline button-small" onClick={closeAttachmentPreview}><ArrowLeft size={14} /> All attachments</button>
+                      <span>{previewAttachment.category === "Other" ? previewAttachment.specifiedName : previewAttachment.category}{previewAttachment.category === "Agreement" ? ` · v${previewAttachment.version}` : ""}</span>
+                      <div className="attachment-preview-navigation">
+                        <button className="icon-button" aria-label="Previous attachment" disabled={attachments.filter((attachment) => attachment.leadId === activeLead.id).findIndex((attachment) => attachment.id === previewAttachment.id) === 0} onClick={() => navigateAttachmentPreview(-1)}><ArrowLeft size={15} /></button>
+                        <span>{attachments.filter((attachment) => attachment.leadId === activeLead.id).findIndex((attachment) => attachment.id === previewAttachment.id) + 1} of {attachments.filter((attachment) => attachment.leadId === activeLead.id).length}</span>
+                        <button className="icon-button" aria-label="Next attachment" disabled={attachments.filter((attachment) => attachment.leadId === activeLead.id).findIndex((attachment) => attachment.id === previewAttachment.id) === attachments.filter((attachment) => attachment.leadId === activeLead.id).length - 1} onClick={() => navigateAttachmentPreview(1)}><ArrowRight size={15} /></button>
+                      </div>
+                    </div>
+                    <div className="attachment-preview-canvas">
+                      {previewAttachment.file.type.startsWith("image/") || previewAttachment.file.type === "application/pdf" || previewAttachment.file.type === "text/plain" ? (
+                        <iframe className="attachment-preview-frame" src={attachmentPreview.url} title={`Preview of ${previewAttachment.file.name}`} />
+                      ) : previewAttachment.file.name.toLowerCase().endsWith(".docx") ? (
+                        docxPreview?.attachmentId === previewAttachment.id ? (
+                          docxPreview.error ? <p className="attachment-preview-message">Preview failed: {docxPreview.error}</p> :
+                            <pre className="docx-preview-text">{docxPreview.text || "This document contains no readable text."}</pre>
+                        ) : <p className="attachment-preview-message">Loading document preview…</p>
+                      ) : (
+                        <div className="attachment-preview-message"><FileText size={30} /><strong>Preview isn’t available for this file type.</strong><span>Download the attachment to view it.</span><a className="button button-primary button-small" href={attachmentPreview.url} download={previewAttachment.file.name}>Download {previewAttachment.file.name}</a></div>
+                      )}
+                    </div>
+                  </section>
+                ) : (
+                  <section className="lead-attachments">
+                  <div className="attachments-heading"><div><h3>Attachments</h3><p>Add a JD, resume, agreement, or another document.</p></div><span>{attachments.filter((attachment) => attachment.leadId === activeLead.id).length}</span></div>
+                  <form className="attachment-form" onSubmit={addAttachment}>
+                    <label>Attachment name
+                      <select name="attachmentCategory" value={attachmentCategory} onChange={(event) => {
+                        const category = event.target.value;
+                        if (category === "JD" || category === "Resume" || category === "Agreement" || category === "Other") setAttachmentCategory(category);
+                      }}>
+                        <option value="JD">JD</option>
+                        <option value="Resume">Resume</option>
+                        <option value="Agreement">Agreement (with revisions / versions)</option>
+                        <option value="Other">Other — please specify</option>
+                      </select>
+                    </label>
+                    {attachmentCategory === "Other" && <label>Specify attachment name<input name="specifiedName" required placeholder="Enter attachment name" /></label>}
+                    <label className="attachment-file-field">Choose file<input name="attachmentFile" type="file" required accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.txt" /></label>
+                    <button className="button button-outline" type="submit"><Paperclip size={14} /> Add attachment</button>
+                  </form>
+                  <div className="attachment-list">
+                    {attachments.filter((attachment) => attachment.leadId === activeLead.id).map((attachment) => (
+                      <div className="attachment-row" key={attachment.id}>
+                        <span className="attachment-file-icon"><FileText size={15} /></span>
+                        <button type="button" className="attachment-file-info attachment-preview-trigger" onClick={() => openAttachmentPreview(attachment)} aria-label={`Preview ${attachment.file.name}`}><strong>{attachment.file.name}</strong><small>{attachment.category === "Other" ? attachment.specifiedName : attachment.category}</small></button>
+                        {attachment.category === "Agreement" && <span className="attachment-version">v{attachment.version}</span>}
+                      </div>
+                    ))}
+                    {attachments.every((attachment) => attachment.leadId !== activeLead.id) && <p className="no-attachments">No attachments yet.</p>}
+                  </div>
+                  </section>
+                )}
+                {!attachmentPreview && <div className="modal-actions attachment-dialog-actions"><button className="button button-outline" onClick={() => setIsAttachmentsOpen(false)}><ArrowLeft size={14} /> Back to lead overview</button></div>}
+              </div>
+            ) : activeLead && isNotesOpen ? (
+              <div className="lead-notes-dialog">
+                <section className="lead-notes-history" aria-label="Previous notes">
+                  <div className="notes-section-heading"><h3>Previous notes</h3><span>{leadNotes.filter((note) => note.leadId === activeLead.id).length}</span></div>
+                  {[...leadNotes.filter((note) => note.leadId === activeLead.id)]
+                    .sort((first, second) => first.createdAt.localeCompare(second.createdAt))
+                    .map((note) => (
+                      <article className="lead-note-entry" key={note.id}>
+                        <span className="note-author-avatar">{note.author.split(/\s+/).map((part) => part[0]).join("").slice(0, 2)}</span>
+                        <div className="lead-note-body">
+                          <div className="lead-note-meta"><strong>{note.author}</strong><time dateTime={note.createdAt}>{formatNoteDateTime(note.createdAt)}</time></div>
+                          <p>{note.content}</p>
+                        </div>
+                      </article>
+                    ))}
+                  {leadNotes.every((note) => note.leadId !== activeLead.id) && <p className="empty-notes">No notes yet. Add the first note below.</p>}
+                </section>
+                <form className="add-note-form" onSubmit={createLeadNote}>
+                  <label htmlFor="new-lead-note">Add a new note</label>
+                  <textarea id="new-lead-note" name="note" rows={4} required placeholder="Write an interaction note..." />
+                  <div className="modal-actions"><button type="button" className="button button-outline" onClick={() => setIsNotesOpen(false)}>Back to lead overview</button><button type="submit" className="button button-primary"><Plus size={15} /> Add note</button></div>
+                </form>
+              </div>
+            ) : activeLead && isFollowUpComposerOpen ? (
+              <form className="lead-form follow-up-form" onSubmit={createFollowUp}>
+                <p className="follow-up-intro">Set the next step for <strong>{activeLead.name}</strong>. You’ll find this reminder in Tasks &amp; reminders.</p>
+                <label>Follow-up date <input name="dueDate" type="date" min={localDateISO()} defaultValue={localDateISO(1)} required autoFocus /></label>
+                <label>Follow-up time <input name="dueTime" type="time" defaultValue="09:00" required /></label>
+                <label className="field-wide">Follow-up notes <textarea name="notes" rows={4} required placeholder="What needs to happen during this follow-up?" /></label>
+                <div className="form-note"><CalendarCheck2 size={14} /> The date and time will be added to the lead and your task reminders.</div>
+                <div className="modal-actions"><button type="button" className="button button-outline" onClick={() => setIsFollowUpComposerOpen(false)}>Cancel</button><button type="submit" className="button button-primary"><CalendarCheck2 size={15} /> Schedule follow-up</button></div>
+              </form>
             ) : activeLead && (
               <div className="lead-detail-content">
-                <div className="detail-summary"><span className={`avatar avatar-${activeLead.color}`}>{activeLead.initials}</span><div><span className={`status-pill status-${activeLead.status.toLowerCase()}`}><i />{activeLead.status}</span><p>{activeLead.industry} <span>·</span> {activeLead.city}</p></div><button className="button button-outline button-small" onClick={() => notify("Lead ownership transfer opened.")}><UserRound size={14} /> Transfer</button></div>
-                <div className="detail-grid"><div><small>CLIENT EXECUTIVE</small><strong>{activeLead.contact}</strong></div><div><small>LEAD OWNER</small><strong>{activeLead.owner === "You" ? "Sarah Lee" : activeLead.owner}</strong></div><div><small>LAST BD ACTION</small><strong>{activeLead.action}</strong></div><div><small>NEXT FOLLOW-UP</small><strong>{activeLead.followUp}</strong></div></div>
+                <div className="detail-summary"><span className={`avatar avatar-${activeLead.color}`}>{activeLead.initials}</span><div><label className={`status-pill status-${statusClassName(activeLead.status)} status-select-pill`}><i /><select aria-label="Update lead status" value={activeLead.status} onChange={(event) => { const status = leadStatuses.find((option) => option === event.target.value); if (status) updateLeadStatus(status); }}>{leadStatuses.map((status) => <option key={status}>{status}</option>)}</select><ChevronDown size={12} /></label><p>{activeLead.industry} <span>·</span> {activeLead.city}</p></div><button className="button button-outline button-small" onClick={() => setUsersDialogMode("transfer")}><UserRound size={14} /> Transfer</button></div>
+                <div className="detail-grid"><div><small>CLIENT EXECUTIVE</small><strong className="client-executive-name">{activeLead.contact}</strong></div><div><small>EXECUTIVE EMAIL</small>{activeLead.contactEmail ? <a href={`mailto:${activeLead.contactEmail}`}>{activeLead.contactEmail}</a> : <strong className="detail-missing">Not provided</strong>}</div><div><small>EXECUTIVE PHONE</small>{activeLead.contactPhone ? <a href={`tel:${activeLead.contactPhone}`}>{activeLead.contactPhone}</a> : <strong className="detail-missing">Not provided</strong>}</div><div><small>LEAD OWNER</small><strong>{activeLead.owner === "You" ? `${currentUser?.firstName} ${currentUser?.lastName}` : activeLead.owner}</strong></div><form className="detail-action-editor" onSubmit={updateLeadAction}><label htmlFor="lead-last-action">LAST ACTION</label><select id="lead-last-action" name="action" value={leadActionSelection} onChange={(event) => setLeadActionSelection(event.target.value)}>{leadActionOptions.map((action) => <option key={action} value={action}>{action}</option>)}</select>{leadActionSelection === "Others ( Please specify )" && <input name="customAction" value={customLeadAction} onChange={(event) => setCustomLeadAction(event.target.value)} required aria-label="Specify last action" placeholder="Please specify" /> }<button className="button button-outline button-small" type="submit">Save action</button></form><div><small>NEXT FOLLOW-UP</small><strong>{formatLeadFollowUp(activeLead.followUp)}</strong></div></div>
                 <div className="detail-ai"><Sparkles size={16} /><div><strong>Interaction summary</strong><p>Recent {activeLead.action.toLowerCase()} with {activeLead.contact}. Keep the conversation moving with a timely follow-up.</p></div></div>
-                <div className="detail-timeline"><h3>Recent activity</h3><div className="timeline-item"><span className="timeline-dot"><Phone size={13} /></span><div><strong>{activeLead.action}</strong><small>Sarah Lee · {activeLead.lastActivity}</small></div></div><div className="timeline-item"><span className="timeline-dot timeline-purple"><MessageSquare size={13} /></span><div><strong>Lead added to pipeline</strong><small>Sarah Lee · Oct 10, 2026</small></div></div></div>
-                <div className="modal-actions"><button className="button button-outline" onClick={() => notify("Lead notes opened.")}><MessageSquare size={15} /> Add note</button><button className="button button-primary" onClick={() => notify("Follow-up task created.")}><CalendarCheck2 size={15} /> Create follow-up</button></div>
+                <div className="detail-timeline"><h3>Recent activity</h3>{followUps.filter((followUp) => followUp.leadId === activeLead.id).map((followUp) => <div className="timeline-item" key={followUp.id}><span className="timeline-dot"><CalendarCheck2 size={13} /></span><div><strong>Follow-up scheduled · {formatFollowUpDateTime(followUp.dueDate, followUp.dueTime)}</strong><small>Sarah Lee · {followUp.notes}</small></div></div>)}<div className="timeline-item"><span className="timeline-dot"><Phone size={13} /></span><div><strong>{activeLead.action}</strong><small>Sarah Lee · {activeLead.lastActivity}</small></div></div><div className="timeline-item"><span className="timeline-dot timeline-purple"><MessageSquare size={13} /></span><div><strong>Lead added to pipeline</strong><small>Sarah Lee · Oct 10, 2026</small></div></div></div>
+                <div className="modal-actions lead-overview-actions"><button className="button button-outline attachments-open-button" onClick={() => setIsAttachmentsOpen(true)}><Paperclip size={14} /> Attachments <span>{attachments.filter((attachment) => attachment.leadId === activeLead.id).length}</span></button><div><button className="button button-outline" onClick={() => setIsNotesOpen(true)}><MessageSquare size={15} /> Add Notes</button><button className="button button-primary" onClick={() => setIsFollowUpComposerOpen(true)}><CalendarCheck2 size={15} /> Create follow-up</button></div></div>
               </div>
             )}
           </section>
         </div>
+      )}
+      {usersDialogMode && (
+        <UserDirectoryDialog
+          mode={usersDialogMode}
+          onClose={() => setUsersDialogMode(null)}
+          onTransfer={transferLeadToUser}
+          onNotify={notify}
+        />
       )}
       {toast && <div className="toast-message"><Check size={16} />{toast}</div>}
     </div>
@@ -621,8 +1192,4 @@ function TaskColumn({ title, count, tone, tasks, onComplete }: { title: string; 
 
 function RouteStop({ time, company, address, status, color, lunch }: { time: string; company: string; address: string; status: string; color: string; lunch?: boolean }) {
   return <div className={`route-stop ${lunch ? "lunch-stop" : ""}`}><div className="route-time">{time}</div><div className={`route-point point-${color}`}>{lunch ? <span>☕</span> : <MapPin size={14} />}</div><div className="route-stop-info"><strong>{company}</strong><small>{address}</small></div><span className="route-status">{status}</span><button className="row-more" aria-label={`Options for ${company}`}><MoreHorizontal size={17} /></button></div>;
-}
-
-function SlidersHorizontalIcon() {
-  return <Filter size={16} />;
 }
