@@ -38,3 +38,11 @@ The sign-in attempt limiter is process-local and resets when the server restarts
 npm run lint
 npm run build
 ```
+The app uses representative sample data. Persistent storage, authentication and role enforcement, Gmail, AI, OCR, live job sources, and route optimization are not connected; those limitations are documented in README.md.
+## Gmail integration
+
+The lead overview shows recent emails exchanged with the lead's executive and alternate email addresses. Each user connects their own Gmail (read-only scope); administrators see emails from every connected mailbox.
+
+1. In Google Cloud Console, enable the Gmail API and create an OAuth client (Web application) with the redirect URI `http://localhost:3000/api/gmail/callback`.
+2. Add to `.env.local`: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GMAIL_TOKEN_KEY` (any long random string; encrypts stored refresh tokens) and optionally `GOOGLE_REDIRECT_URI`.
+3. Run `npm run db:create` to add the `gmail_connections` table, then restart the dev server.

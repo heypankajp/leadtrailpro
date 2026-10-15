@@ -9,6 +9,7 @@ export type LeadRecordInput = {
   companyUrl: string;
   contact: string;
   contactEmail: string;
+  alternateEmail: string;
   contactPhone: string;
   initials: string;
   color: string;
@@ -24,10 +25,11 @@ export type LeadRecordInput = {
   recordState: LeadRecordState;
 };
 
-export type StoredLead = Omit<LeadRecordInput, "companyUrl" | "contactEmail" | "contactPhone"> & {
+export type StoredLead = Omit<LeadRecordInput, "companyUrl" | "contactEmail" | "alternateEmail" | "contactPhone"> & {
   id: number;
   companyUrl?: string;
   contactEmail?: string;
+  alternateEmail?: string;
   contactPhone?: string;
 };
 
@@ -35,7 +37,7 @@ export function parseLeadRecord(value: unknown): LeadRecordInput | null {
   if (!value || typeof value !== "object") return null;
   const body = value as Record<string, unknown>;
   const stringFields = [
-    "name", "companyUrl", "contact", "contactEmail", "contactPhone", "initials", "color",
+    "name", "companyUrl", "contact",     "contactEmail", "alternateEmail", "contactPhone", "initials", "color",
     "action", "followUp", "owner", "city", "industry", "lastActivity", "type", "firstContact",
   ] as const;
 
@@ -48,11 +50,15 @@ export function parseLeadRecord(value: unknown): LeadRecordInput | null {
   if (typeof body.city !== "string" || typeof body.industry !== "string" || typeof body.lastActivity !== "string") return null;
   if (typeof body.type !== "string" || typeof body.firstContact !== "string") return null;
 
+  const alternateEmail = typeof body.alternateEmail === "string" ? body.alternateEmail.trim() : "";
+  if (alternateEmail && (alternateEmail.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(alternateEmail))) return null;
+
   return {
     name: body.name.trim(),
     companyUrl: typeof body.companyUrl === "string" ? body.companyUrl.trim() : "",
     contact: body.contact,
     contactEmail: typeof body.contactEmail === "string" ? body.contactEmail : "",
+    alternateEmail,
     contactPhone: typeof body.contactPhone === "string" ? body.contactPhone : "",
     initials: body.initials,
     color: body.color,

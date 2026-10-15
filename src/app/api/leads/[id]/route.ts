@@ -38,7 +38,7 @@ export async function PUT(request: Request, context: RouteContext) {
       return NextResponse.json({ error: "You do not have permission to transfer leads." }, { status: 403 });
     }
     const leadFields = [
-      "name", "companyUrl", "contact", "contactEmail", "contactPhone", "initials", "color",
+      "name", "companyUrl", "contact", "contactEmail", "alternateEmail", "contactPhone", "initials", "color",
       "status", "action", "followUp", "city", "industry", "lastActivity", "type", "firstContact", "recordState",
     ] as const;
     if (!canEdit && leadFields.some((key) => lead[key] !== (existing[key] ?? ""))) {

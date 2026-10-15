@@ -23,6 +23,7 @@ if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port >
         company_url VARCHAR(2048) NOT NULL DEFAULT '',
         contact VARCHAR(160) NOT NULL,
         contact_email VARCHAR(254) NOT NULL DEFAULT '',
+        alternate_email VARCHAR(254) NOT NULL DEFAULT '',
         contact_phone VARCHAR(40) NOT NULL DEFAULT '',
         initials VARCHAR(8) NOT NULL,
         color VARCHAR(24) NOT NULL,
@@ -42,6 +43,10 @@ if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port >
         INDEX idx_leads_status (status)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
+    const [alternateEmailColumn] = await connection.query("SHOW COLUMNS FROM leads LIKE 'alternate_email'");
+    if (alternateEmailColumn.length === 0) {
+      await connection.query("ALTER TABLE leads ADD COLUMN alternate_email VARCHAR(254) NOT NULL DEFAULT '' AFTER contact_email");
+    }
     await connection.query(`
       CREATE TABLE IF NOT EXISTS users (
         id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -66,6 +71,15 @@ if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port >
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         CONSTRAINT fk_user_sessions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
         INDEX idx_user_sessions_expiry (expires_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS gmail_connections (
+        user_id INT UNSIGNED NOT NULL PRIMARY KEY,
+        google_email VARCHAR(254) NOT NULL,
+        refresh_token_encrypted TEXT NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT fk_gmail_connections_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 

@@ -791,3 +791,30 @@ h1 { margin: 9px 0 5px; color: #242941; font-size: 25px; font-weight: 690; lette
   .attachment-form .button { justify-self: start; }
   .toast-message { right: 12px; bottom: 12px; left: 12px; max-width: none; }
 }
+
+.lead-emails { margin-top: 16px; padding: 12px 0; border-top: 1px solid #e5e7eb; font-size: 0.85rem; }
+.lead-emails-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.lead-emails ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
+.lead-emails li { display: grid; gap: 2px; padding: 8px; border: 1px solid #e5e7eb; border-radius: 6px; }
+.lead-emails li p { margin: 0; color: #4b5563; }
+.email-direction { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; }
+.email-direction.sent { color: #2563eb; }
+.email-direction.received { color: #059669; }
+.link-button { background: none; border: 0; padding: 0; color: #2563eb; cursor: pointer; text-decoration: underline; font: inherit; }
+.lead-emails ul { max-height: 520px; overflow-y: auto; }
+.lead-emails li small { overflow-wrap: anywhere; }
+.lead-emails li .email-body { max-height: 160px; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 6px; background: #f9fafb; border-radius: 4px; }
+.lead-emails .link-button, .lead-emails a.button { display: inline-flex; align-items: center; gap: 4px; }
+.lead-emails li, .lead-emails li small, .lead-emails li .email-body { font-size: calc(0.85rem - 2px); }
+.lead-emails li .email-direction { font-size: calc(0.7rem - 2px); }
+.lead-emails .gmail-disconnect { display: inline-flex; align-items: center; gap: 4px; padding: 5px 12px; border: 0; border-radius: 999px; background: #2563eb; color: #fff; font: inherit; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
+.lead-emails .gmail-disconnect:hover { background: #1d4ed8; }
+.detail-ai { position: relative; }
+.detail-ai:has(.gmail-controls) { padding-right: 190px; }
+.gmail-controls { position: absolute; top: 6px; right: 8px; display: inline-flex; align-items: center; gap: 4px; font-size: 9px; color: #6d66a4; }
+.gmail-controls .gmail-disconnect, .gmail-controls .gmail-connect { padding: 2px 8px; font-size: 9px; font-weight: 600; border: 0; border-radius: 999px; background: #2563eb; color: #fff; display: inline-flex; align-items: center; gap: 3px; cursor: pointer; text-decoration: none; }
+.lead-emails li, .lead-emails li small, .lead-emails li .email-body { font-size: calc(0.85rem - 3px); }
+.lead-emails li .email-direction { font-size: calc(0.7rem - 3px); }
+.detail-tabs { display: flex; gap: 4px; margin: 10px 0; border-bottom: 1px solid #e5e7eb; }
+.detail-tabs button { padding: 6px 14px; border: 0; border-bottom: 2px solid transparent; background: none; color: #6b7280; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.detail-tabs button.active { color: #6d66a4; border-bottom-color: #6d66a4; }

@@ -49,6 +49,7 @@ import LeadTable from "@/features/leads/LeadTable";
 import { createLeadRecord, deleteLeadRecord, fetchLeads, leadPayload, saveLeadRecord } from "@/features/leads/client";
 import { leadStatuses, type LeadStatus, type StoredLead } from "@/features/leads/model";
 import UserDirectoryDialog from "@/features/users/UserDirectoryDialog";
+import { LeadEmails } from "@/features/gmail/LeadEmails";
 import type { UserAccount } from "@/features/users/model";
 
 type Status = LeadStatus;
@@ -220,6 +221,8 @@ export default function Home() {
   const [dialog, setDialog] = useState<"new-lead" | "lead-detail" | null>(null);
   const [usersDialogMode, setUsersDialogMode] = useState<"manage" | "transfer" | null>(null);
   const [activeLead, setActiveLead] = useState<Lead | null>(null);
+  const [leadDetailTabState, setLeadDetailTabState] = useState<{ leadId: number; tab: "overview" | "interactions" }>({ leadId: 0, tab: "overview" });
+  const leadDetailTab = activeLead && leadDetailTabState.leadId === activeLead.id ? leadDetailTabState.tab : "overview";
   const [isFollowUpComposerOpen, setIsFollowUpComposerOpen] = useState(false);
   const [leadActionSelection, setLeadActionSelection] = useState("");
   const [customLeadAction, setCustomLeadAction] = useState("");
@@ -484,6 +487,25 @@ export default function Home() {
     notify(`${activeLead.name} moved to ${status}`);
   };
 
+  const updateAlternateEmail = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!activeLead) return;
+    const alternateEmail = String(new FormData(event.currentTarget).get("alternateEmail") || "").trim();
+    if (alternateEmail === (activeLead.alternateEmail ?? "")) return;
+    const updatedLead: Lead = { ...activeLead, alternateEmail: alternateEmail || undefined };
+    try {
+      await saveLeadRecord(updatedLead.id, leadPayload(updatedLead, activeLead.recordState));
+    } catch (error) {
+      notifyPersistenceError(error);
+      return;
+    }
+    setLeads((current) => current.map((lead) => lead.id === activeLead.id ? updatedLead : lead));
+    setQueuedLeads((current) => current.map((lead) => lead.id === activeLead.id ? updatedLead : lead));
+    setArchivedLeads((current) => current.map((lead) => lead.id === activeLead.id ? updatedLead : lead));
+    setActiveLead(updatedLead);
+    notify(alternateEmail ? `Alternate email saved for ${activeLead.name}` : `Alternate email removed for ${activeLead.name}`);
+  };
+
   const updateLeadAction = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!activeLead) return;
@@ -616,6 +638,7 @@ export default function Home() {
       companyUrl: companyUrl || undefined,
       contact: String(data.get("contact") || "New contact"),
       contactEmail: String(data.get("contactEmail") || ""),
+      alternateEmail: String(data.get("alternateEmail") || "").trim() || undefined,
       contactPhone: String(data.get("contactPhone") || ""),
       initials: name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase(),
       color: "blue",
@@ -1045,6 +1068,7 @@ export default function Home() {
                 <label className="field-wide">Company website <input name="companyUrl" type="url" pattern="https?://.+" title="Enter a URL beginning with http:// or https://" placeholder="https://company.com" /></label>
                 <label>Client executive <input name="contact" placeholder="Contact person" /></label>
                 <label>Executive email <input name="contactEmail" type="email" placeholder="name@company.com" /></label>
+                <label>Alternate email <input name="alternateEmail" type="email" placeholder="alternate@company.com" /></label>
                 <label>Executive phone <input name="contactPhone" type="tel" placeholder="+1 (555) 123-4567" /></label>
                 <label>Lead status <select name="status" defaultValue="Cold Lead">{leadStatuses.map((status) => <option key={status}>{status}</option>)}</select></label>
                 <label>Lead type <select name="type" defaultValue="Cold Call"><option>Cold Call</option><option>Cold Email</option><option>Road Trip</option></select></label>
@@ -1149,9 +1173,13 @@ export default function Home() {
             ) : activeLead && (
               <div className="lead-detail-content">
                 <div className="detail-summary"><span className={`avatar avatar-${activeLead.color}`}>{activeLead.initials}</span><div><label className={`status-pill status-${statusClassName(activeLead.status)} status-select-pill`}><i /><select aria-label="Update lead status" value={activeLead.status} onChange={(event) => { const status = leadStatuses.find((option) => option === event.target.value); if (status) updateLeadStatus(status); }}>{leadStatuses.map((status) => <option key={status}>{status}</option>)}</select><ChevronDown size={12} /></label><p>{activeLead.industry} <span>·</span> {activeLead.city}</p></div><button className="button button-outline button-small" onClick={() => setUsersDialogMode("transfer")}><UserRound size={14} /> Transfer</button></div>
-                <div className="detail-grid"><div><small>CLIENT EXECUTIVE</small><strong className="client-executive-name">{activeLead.contact}</strong></div><div><small>EXECUTIVE EMAIL</small>{activeLead.contactEmail ? <a href={`mailto:${activeLead.contactEmail}`}>{activeLead.contactEmail}</a> : <strong className="detail-missing">Not provided</strong>}</div><div><small>EXECUTIVE PHONE</small>{activeLead.contactPhone ? <a href={`tel:${activeLead.contactPhone}`}>{activeLead.contactPhone}</a> : <strong className="detail-missing">Not provided</strong>}</div><div><small>LEAD OWNER</small><strong>{activeLead.owner === "You" ? `${currentUser?.firstName} ${currentUser?.lastName}` : activeLead.owner}</strong></div><form className="detail-action-editor" onSubmit={updateLeadAction}><label htmlFor="lead-last-action">LAST ACTION</label><select id="lead-last-action" name="action" value={leadActionSelection} onChange={(event) => setLeadActionSelection(event.target.value)}>{leadActionOptions.map((action) => <option key={action} value={action}>{action}</option>)}</select>{leadActionSelection === "Others ( Please specify )" && <input name="customAction" value={customLeadAction} onChange={(event) => setCustomLeadAction(event.target.value)} required aria-label="Specify last action" placeholder="Please specify" /> }<button className="button button-outline button-small" type="submit">Save action</button></form><div><small>NEXT FOLLOW-UP</small><strong>{formatLeadFollowUp(activeLead.followUp)}</strong></div></div>
-                <div className="detail-ai"><Sparkles size={16} /><div><strong>Interaction summary</strong><p>Recent {activeLead.action.toLowerCase()} with {activeLead.contact}. Keep the conversation moving with a timely follow-up.</p></div></div>
+                <div className="detail-tabs" role="tablist" aria-label="Lead sections"><button type="button" role="tab" aria-selected={leadDetailTab === "overview"} className={leadDetailTab === "overview" ? "active" : ""} onClick={() => setLeadDetailTabState({ leadId: activeLead.id, tab: "overview" })}>Overview</button><button type="button" role="tab" aria-selected={leadDetailTab === "interactions"} className={leadDetailTab === "interactions" ? "active" : ""} onClick={() => setLeadDetailTabState({ leadId: activeLead.id, tab: "interactions" })}>Interactions</button></div>
+                {leadDetailTab === "overview" ? <>
+                <div className="detail-grid"><div><small>CLIENT EXECUTIVE</small><strong className="client-executive-name">{activeLead.contact}</strong></div><div><small>EXECUTIVE EMAIL</small>{activeLead.contactEmail ? <a href={`mailto:${activeLead.contactEmail}`}>{activeLead.contactEmail}</a> : <strong className="detail-missing">Not provided</strong>}</div><form className="detail-action-editor" onSubmit={updateAlternateEmail} key={`${activeLead.id}-${activeLead.alternateEmail ?? ""}`}><label htmlFor="lead-alternate-email">ALTERNATE EMAIL</label><input id="lead-alternate-email" name="alternateEmail" type="email" maxLength={254} defaultValue={activeLead.alternateEmail ?? ""} placeholder="alternate@company.com" /><button className="button button-outline button-small" type="submit">Save email</button></form><div><small>EXECUTIVE PHONE</small>{activeLead.contactPhone ? <a href={`tel:${activeLead.contactPhone}`}>{activeLead.contactPhone}</a> : <strong className="detail-missing">Not provided</strong>}</div><div><small>LEAD OWNER</small><strong>{activeLead.owner === "You" ? `${currentUser?.firstName} ${currentUser?.lastName}` : activeLead.owner}</strong></div><form className="detail-action-editor" onSubmit={updateLeadAction}><label htmlFor="lead-last-action">LAST ACTION</label><select id="lead-last-action" name="action" value={leadActionSelection} onChange={(event) => setLeadActionSelection(event.target.value)}>{leadActionOptions.map((action) => <option key={action} value={action}>{action}</option>)}</select>{leadActionSelection === "Others ( Please specify )" && <input name="customAction" value={customLeadAction} onChange={(event) => setCustomLeadAction(event.target.value)} required aria-label="Specify last action" placeholder="Please specify" /> }<button className="button button-outline button-small" type="submit">Save action</button></form><div><small>NEXT FOLLOW-UP</small><strong>{formatLeadFollowUp(activeLead.followUp)}</strong></div></div>
                 <div className="detail-timeline"><h3>Recent activity</h3>{followUps.filter((followUp) => followUp.leadId === activeLead.id).map((followUp) => <div className="timeline-item" key={followUp.id}><span className="timeline-dot"><CalendarCheck2 size={13} /></span><div><strong>Follow-up scheduled · {formatFollowUpDateTime(followUp.dueDate, followUp.dueTime)}</strong><small>Sarah Lee · {followUp.notes}</small></div></div>)}<div className="timeline-item"><span className="timeline-dot"><Phone size={13} /></span><div><strong>{activeLead.action}</strong><small>Sarah Lee · {activeLead.lastActivity}</small></div></div><div className="timeline-item"><span className="timeline-dot timeline-purple"><MessageSquare size={13} /></span><div><strong>Lead added to pipeline</strong><small>Sarah Lee · Oct 10, 2026</small></div></div></div>
+                </> : <>
+                <LeadEmails leadId={activeLead.id} emailKey={`${activeLead.contactEmail ?? ""}|${activeLead.alternateEmail ?? ""}`} hasAddress={Boolean(activeLead.contactEmail || activeLead.alternateEmail)} summary={(controls) => <div className="detail-ai"><Sparkles size={16} /><div><strong>Interaction summary</strong><p>Recent {activeLead.action.toLowerCase()} with {activeLead.contact}. Keep the conversation moving with a timely follow-up.</p></div>{controls}</div>} />
+                </>}
                 <div className="modal-actions lead-overview-actions"><button className="button button-outline attachments-open-button" onClick={() => setIsAttachmentsOpen(true)}><Paperclip size={14} /> Attachments <span>{attachments.filter((attachment) => attachment.leadId === activeLead.id).length}</span></button><div><button className="button button-outline" onClick={() => setIsNotesOpen(true)}><MessageSquare size={15} /> Add Notes</button><button className="button button-primary" onClick={() => setIsFollowUpComposerOpen(true)}><CalendarCheck2 size={15} /> Create follow-up</button></div></div>
               </div>
             )}

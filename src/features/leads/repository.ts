@@ -3,7 +3,7 @@ import type { LeadRecordInput, StoredLead } from "./model";
 
 const leadColumns = `
   name, company_url AS companyUrl, contact, contact_email AS contactEmail,
-  contact_phone AS contactPhone, initials, color, status, action, follow_up AS followUp,
+    alternate_email AS alternateEmail,  contact_phone AS contactPhone, initials, color, status, action, follow_up AS followUp,
   owner, city, industry, last_activity AS lastActivity, lead_type AS type,
   DATE_FORMAT(first_contact, '%Y-%m-%d') AS firstContact, record_state AS recordState
 `;
@@ -25,9 +25,9 @@ export async function getLead(id: number): Promise<StoredLead | null> {
 export async function createLead(lead: LeadRecordInput): Promise<StoredLead> {
   const [result] = await getDatabasePool().execute(
     `INSERT INTO leads (
-      name, company_url, contact, contact_email, contact_phone, initials, color, status,
+      name, company_url, contact, contact_email, alternate_email, contact_phone, initials, color, status,
       action, follow_up, owner, city, industry, last_activity, lead_type, first_contact, record_state
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     leadValues(lead),
   );
   const id = Number((result as { insertId: number | bigint }).insertId);
@@ -37,7 +37,7 @@ export async function createLead(lead: LeadRecordInput): Promise<StoredLead> {
 export async function updateLead(id: number, lead: LeadRecordInput): Promise<boolean> {
   const [result] = await getDatabasePool().execute(
     `UPDATE leads SET
-      name = ?, company_url = ?, contact = ?, contact_email = ?, contact_phone = ?,
+      name = ?, company_url = ?, contact = ?, contact_email = ?, alternate_email = ?, contact_phone = ?,
       initials = ?, color = ?, status = ?, action = ?, follow_up = ?, owner = ?,
       city = ?, industry = ?, last_activity = ?, lead_type = ?, first_contact = ?,
       record_state = ?
@@ -60,6 +60,7 @@ export function leadValues(lead: LeadRecordInput) {
     lead.companyUrl,
     lead.contact,
     lead.contactEmail,
+    lead.alternateEmail,
     lead.contactPhone,
     lead.initials,
     lead.color,
@@ -81,6 +82,7 @@ export function toLeadResponse(lead: LeadRecordInput) {
     ...lead,
     companyUrl: lead.companyUrl || undefined,
     contactEmail: lead.contactEmail || undefined,
+    alternateEmail: lead.alternateEmail || undefined,
     contactPhone: lead.contactPhone || undefined,
   };
 }

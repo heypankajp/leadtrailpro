@@ -42,6 +42,7 @@ export function leadPayload(lead: StoredLead, recordState: LeadRecordState): Lea
     ...lead,
     companyUrl: lead.companyUrl ?? "",
     contactEmail: lead.contactEmail ?? "",
+    alternateEmail: lead.alternateEmail ?? "",
     contactPhone: lead.contactPhone ?? "",
     recordState,
   };
