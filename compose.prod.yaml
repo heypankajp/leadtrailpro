@@ -1,0 +1,28 @@
+# Production override: standalone Next.js image, no bind mounts, database not
+# published on the host. Requires MYSQL_ROOT_PASSWORD in `.env` and a `.env.local`
+# (created by `docker compose run --rm setup`, which works with this override too;
+# without .env.local the app starts but every request reports the missing settings).
+#
+#   docker compose -f compose.yaml -f compose.prod.yaml run --rm setup
+#   docker compose -f compose.yaml -f compose.prod.yaml up -d --build
+
+services:
+  db:
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env for production}
+    ports: !reset []
+
+  app:
+    build:
+      target: runner
+    image: salestrackpro
+    restart: unless-stopped
+    env_file:
+      - path: .env.local
+        required: false
+    volumes: !override
+      - attachments:/app/storage/attachments
+
+volumes:
+  attachments:

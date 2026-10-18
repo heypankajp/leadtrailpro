@@ -17,7 +17,10 @@ const twoFactorLifetimeSeconds = 10 * 60;
 const passwordResetLifetimeSeconds = 30 * 60;
 const maxTwoFactorAttempts = 5;
 
-const baseCookie = { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax" as const, path: "/" };
+// Cookies are Secure in production unless APP_URL declares a plain-http deployment (an internal host without TLS,
+// or the end-to-end stack); browsers drop Secure cookies over http on anything but localhost.
+const secureCookies = process.env.NODE_ENV === "production" && !/^http:\/\//i.test(process.env.APP_URL?.trim() ?? "");
+const baseCookie = { httpOnly: true, secure: secureCookies, sameSite: "lax" as const, path: "/" };
 export const sessionCookieOptions = { ...baseCookie, maxAge: sessionLifetimeSeconds };
 export const twoFactorCookieOptions = { ...baseCookie, maxAge: twoFactorLifetimeSeconds };
 export const clearedCookieOptions = { ...baseCookie, maxAge: 0 };

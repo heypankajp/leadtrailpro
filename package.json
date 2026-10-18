@@ -10,7 +10,8 @@
     "db:seed": "node --env-file=.env.setup.local scripts/seed-sample-data.mjs",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "node --test --test-concurrency=1 --test-timeout=120000 tests/e2e/*.test.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.57.0",
@@ -29,6 +30,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.0",
+    "selenium-webdriver": "^4.51.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   },

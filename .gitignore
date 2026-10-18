@@ -23,6 +23,9 @@
 # uploaded lead attachments (see ATTACHMENT_DIR)
 /storage
 
+# end-to-end test artifacts (screenshots of failures)
+/tests/e2e/output
+
 # misc
 .DS_Store
 *.pem
