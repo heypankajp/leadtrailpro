@@ -3,7 +3,8 @@
 | | |
 |---|---|
 | Source | `Sales_Tracker_App_BRD_SRS.docx` v1.0 (October 13, 2026) and the current codebase |
-| SPEC version | 1.0 — October 17, 2026 |
+| SPEC version | 1.1 — October 18, 2026 (1.0: October 17, 2026) |
+| Changes in 1.1 | Docker packaging (§2.3), Selenium end-to-end suite (§12), Secure-cookie rule for plain-http deployments (§4, §11), `mysql2` kept external in the standalone build (§1) |
 | Companion | `PRD.md` — requirement IDs referenced here (AUTH-01, LEAD-01, …) |
 | Scope | As-built design of Phase 1, the BRD screen designs (Appendix A), and the intended design of Phase 2/3 features |
 
@@ -18,7 +19,8 @@ Browser (React 19 client, single page, hash-routed views)
 Next.js 16 (App Router) — route handlers under src/app/api/**            Node.js runtime
    ├─ src/lib            db pool, dates/timezone, http helpers, mailer, async-data hook
    ├─ src/features/<area> model (types + validation) · repository (SQL + rules) · client (fetch) · UI
-   └─ scripts/           schema migrations, app DB user, sample data
+   ├─ scripts/           schema migrations, app DB user, sample data, Docker entrypoint, e2e runner
+   └─ tests/e2e/         Selenium browser suite (node:test)
    │
    ├─ MySQL 5.7+/8.x  (restricted app account: SELECT/INSERT/UPDATE/DELETE only)
    ├─ Local file storage for attachments (ATTACHMENT_DIR)
@@ -33,7 +35,9 @@ Next.js 16 (App Router) — route handlers under src/app/api/**            Node.
 - All instants are stored in UTC (`DATETIME`); calendar fields are `DATE`; the business timezone (default `America/Toronto`) is applied only when turning instants into business days.
 - JSON columns hold lists (client emails, privileges, checklist) and audit snapshots.
 
-**Stack:** Next.js 16.4 (Turbopack), React 19.3, TypeScript 5, Tailwind v4 (preflight only; styling is hand-written CSS in `src/app/globals.css`), mysql2, nodemailer, lucide-react icons, mammoth (Word preview).
+**Stack:** Next.js 16.4 (Turbopack), React 19.3, TypeScript 5, Tailwind v4 (preflight only; styling is hand-written CSS in `src/app/globals.css`), mysql2, nodemailer, lucide-react icons, mammoth (Word preview). Dev dependency for tests: selenium-webdriver 4.51.
+
+**Build output:** `next.config.ts` sets `output: "standalone"` (traced server + `node_modules` under `.next/standalone`) and lists `mysql2` in `serverExternalPackages` so the driver stays a plain Node package; the production image therefore also runs `scripts/*.mjs`. Cache Components and partial prefetching are enabled; the single page `/` prerenders as a static shell and every API route is dynamic.
 
 ---
 
@@ -45,23 +49,42 @@ Next.js 16 (App Router) — route handlers under src/app/api/**            Node.
 |---|---|---|
 | `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD` | yes | Runtime database account (written by `npm run db:user:create`) |
 | `USER_MANAGEMENT_KEY` | first run | Bootstrap key for the first administrator (AUTH-01) |
-| `APP_URL` | behind a proxy | Public origin; used for the same-origin check and reset links |
+| `APP_URL` | behind a proxy | Public origin; used for the same-origin check and reset links. An `http://` value turns off the Secure cookie flag (plain-http deployments, the e2e stack) |
 | `TRUSTED_ORIGINS` | optional | Extra allowed origins, comma separated |
 | `BUSINESS_TIMEZONE` | optional | IANA zone, default `America/Toronto` (BR-12) |
 | `ATTACHMENT_DIR` | optional | Attachment root, default `./storage/attachments` |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | for email | Mailer; absent → email features report "not configured" |
 
-`.env.setup.local` (administrator credentials) is used only by the setup scripts and never by the app.
+`.env.setup.local` (administrator credentials, optional `MYSQL_APP_USER` and `MYSQL_APP_USER_HOST`) is used only by the setup scripts and never by the app. In Docker the `setup` service passes the same variables as environment and does not need the file.
 
 ### 2.2 Scripts
 
 | Command | Script | Behaviour |
 |---|---|---|
 | `npm run db:create` | `scripts/create-database.mjs` | Creates the database, then applies numbered migrations recorded in `schema_migrations`. Migration 1 creates all tables, upgrades a prototype `users` table in place (adds columns, remaps roles), renames a prototype `leads` table to `legacy_leads`, and seeds list values, target templates, and settings. Idempotent. |
-| `npm run db:user:create` | `scripts/create-app-user.mjs` | Creates `salestrackpro_app` with DML-only grants, writes `.env.local` (mode 0600) including commented SMTP/APP_URL placeholders. Re-running rotates the password and bootstrap key. |
+| `npm run db:user:create` | `scripts/create-app-user.mjs` | Creates `salestrackpro_app` with DML-only grants, writes `.env.local` (mode 0600) including commented SMTP/APP_URL placeholders. The account host defaults to `MYSQL_HOST`; `MYSQL_APP_USER_HOST=%` allows connections from other hosts or containers. Re-running rotates the password and bootstrap key. |
 | `npm run db:seed` | `scripts/seed-sample-data.mjs` | Requires an administrator. Creates demo users (two Sales Managers, one Recruiter, password `SalesTrackPro-demo-2026`), ten leads across states, activities, tasks. No-op when leads exist. |
 | `npm run dev` / `build` / `start` | Next.js | Development server / production build / production server |
 | `npm run lint` / `typecheck` | ESLint (next/core-web-vitals + typescript + react-hooks) / `tsc --noEmit` | |
+| `npm run test:e2e` | `tests/e2e/*.test.mjs` | Selenium suite via `node --test` (sequential, 120 s per test). Targets `E2E_BASE_URL` (default `http://app-test:3000`) and `E2E_SELENIUM_URL` (default `http://selenium:4444`). |
+| `scripts/e2e.sh [files]` | compose profile `test` | Recreates the throwaway test database, builds the production image and the dev image, runs the suite, removes the test containers. Finds the Docker Desktop CLI on macOS when `docker` is not on PATH. |
+| `scripts/docker-entrypoint.sh` | dev container | Runs `npm ci` into the `node_modules` volume when `package-lock.json` differs from the installed stamp, then execs the command. |
+
+### 2.3 Containers
+
+`Dockerfile` (base `node:22-bookworm-slim`) has two targets: `dev` (dependencies in the image, project bind-mounted at `/app`, `next dev`) and `runner` (standalone output, `.next/static`, `public/`, `scripts/`, user `node`, `node server.js` on port 3000). `.dockerignore` keeps `node_modules`, `.next`, `storage`, `.env*`, `docs`, and `tests` out of the build context.
+
+| Service (`compose.yaml`) | Image | Role |
+|---|---|---|
+| `db` | `mysql:8.4` | Development database, volume `mysql_data`, published on `127.0.0.1:${DB_PORT:-3307}`, root password `${MYSQL_ROOT_PASSWORD:-salestrackpro}` |
+| `app` | `salestrackpro-dev` (target `dev`) | Dev server on `${APP_PORT:-3000}`; volumes `node_modules` and `next_cache` shadow the host directories |
+| `setup` (profile `setup`) | `salestrackpro-dev` | One shot: `create-database.mjs` + `create-app-user.mjs` as root with `MYSQL_APP_USER_HOST=%`; writes `.env.local` with `MYSQL_HOST=db` into the bind mount |
+| `db-test` (profile `test`) | `mysql:8.4` | Throwaway database on tmpfs, root password `test`, not published |
+| `app-test` (profile `test`) | `salestrackpro` (target `runner`) | Applies migrations then serves the production build; `APP_URL=http://app-test:3000`, `USER_MANAGEMENT_KEY=e2e-user-management-key`; healthcheck on `/api/auth/session` |
+| `selenium` (profile `test`) | `selenium/standalone-chromium:4` | Chromium grid, 2 GB shm, 1600×1200 screen, noVNC on `127.0.0.1:7900` |
+| `e2e` (profile `test`) | `salestrackpro-dev` | Runs `npm run test:e2e` once `app-test` is healthy |
+
+`compose.prod.yaml` overrides `app` with the `runner` target, `env_file: .env.local`, an `attachments` volume at `/app/storage/attachments`, `restart: unless-stopped`, and removes the database port; it requires `MYSQL_ROOT_PASSWORD` in `.env`.
 
 ---
 

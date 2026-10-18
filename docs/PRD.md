@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Source | `Sales_Tracker_App_BRD_SRS.docx`, version 1.0, dated October 13, 2026 |
-| PRD version | 1.0 — October 17, 2026 |
+| PRD version | 1.0 — October 17, 2026; reviewed October 18, 2026 (no requirement changes; packaging and verification notes added) |
 | Companion | `SPEC.md` (technical specification and screen designs) |
 | Status legend | **Implemented** — in the current codebase · **Partial** — some of the requirement is built · **Planned** — not started, depends on an external service or a later phase |
 
@@ -27,7 +27,7 @@ SalesTrackPro is a web (and later mobile) sales-management application for a sta
 
 ### 1.3 Technology direction (BRD §1)
 
-React frontend, Node.js backend, responsive web experience, Android and iPhone support, Google Workspace/Gmail integration. The current implementation is a Next.js 16 application (React 19 on the client, Node.js route handlers on the server) backed by MySQL. Native mobile apps are out of scope for the current phase; the web UI is responsive.
+React frontend, Node.js backend, responsive web experience, Android and iPhone support, Google Workspace/Gmail integration. The current implementation is a Next.js 16 application (React 19 on the client, Node.js route handlers on the server) backed by MySQL, packaged with Docker for development and production, and verified by lint, type checks, a production build, and a Selenium browser suite (SPEC §2.3 and §12). Native mobile apps are out of scope for the current phase; the web UI is responsive.
 
 ### 1.4 Phasing
 
@@ -359,7 +359,7 @@ All lists are Admin-maintainable. Seeded values:
 | NFR-01 | Responsive, polished interface optimized for lead work on desktop and mobile. | Implemented |
 | NFR-02 | Real-time collaboration for messages/comments/tasks where supported. | Planned |
 | NFR-03 | Secure API with role-based authorization enforced server-side. | Implemented |
-| NFR-04 | Encryption in transit; protection for sensitive stored data. | TLS is a deployment responsibility; passwords are scrypt-hashed; session and reset tokens are stored only as SHA-256 hashes |
+| NFR-04 | Encryption in transit; protection for sensitive stored data. | TLS is a deployment responsibility (session cookies are Secure in production unless `APP_URL` declares a plain-http internal deployment); passwords are scrypt-hashed; session and reset tokens are stored only as SHA-256 hashes |
 | NFR-05 | Scalable search/filter and activity timelines. | Server-side filtering with indexes and pagination |
 | NFR-06 | Reliable audit logging and background notification processing. | Audit is written in the same transaction as the change; background processing planned |
 | NFR-07 | Accessibility-minded forms, keyboard navigation, labels, validation messages, readable contrast. | Labels, roles, and keyboard dismissal are in place; a formal audit is pending |

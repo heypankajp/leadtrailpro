@@ -1,49 +1,51 @@
 # SalesTrackPro
 
-SalesTrackPro is a Next.js sales workspace built from the Sales Tracker BRD/SRS in `docs/`. Leads, interactions, tasks, documents, candidate profiles, targets, reports, users, and the full audit trail live in MySQL. Lead generation and the road visit planner are labelled previews until external data sources are connected.
+SalesTrackPro is a sales workspace for a staffing and recruitment business, built from the Sales Tracker BRD/SRS. Leads, interactions, tasks, documents, candidate profiles, targets, reports, users, and the full audit trail live in MySQL behind a Next.js application. Phase 1 (the core workspace) is implemented; collaboration, notifications, and the external integrations are planned. The requirements with their status are in [docs/PRD.md](docs/PRD.md) and the technical design in [docs/SPEC.md](docs/SPEC.md).
 
-## Requirements
+## At a glance
 
-Either Docker (Docker Desktop, or Docker Engine with Compose v2), which needs nothing else on the machine, or for a bare-metal run:
+| | |
+|---|---|
+| Stack | Next.js 16.4 (App Router, Turbopack), React 19, TypeScript 5, MySQL 8.4 (5.7 also works), hand-written CSS |
+| Packaging | Docker: hot-reloading development stack, standalone production image, one-shot setup service |
+| Tests | ESLint, `tsc`, production build, and a 30-test Selenium browser suite that runs in Docker |
+| Email | Password resets, set-password links, and two-factor codes stay dormant until `SMTP_*` is configured |
+| Preview pages | Lead generation and the road visit planner show sample content until data sources are connected |
 
-- Node.js 20.9 or newer (`node --version`)
-- MySQL 5.7 or 8.x with an administrator account for setup
+## Quick start with Docker
 
-## Run with Docker
-
-Node 22 and MySQL 8.4 run in containers; the project directory is mounted into the app container, so edits on the host hot-reload as usual.
+Requires Docker Desktop, or Docker Engine with the Compose plugin. Nothing else is installed on the machine: Node 22 and MySQL run in containers, and the project directory is mounted into the app container so edits hot-reload as usual.
 
 ```bash
 docker compose run --rm setup   # once: creates the schema, the restricted app user, and .env.local
-docker compose up               # dev server at http://localhost:3000
+docker compose up -d            # dev server at http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000), choose **First time setup**, and paste the `USER_MANAGEMENT_KEY` from `.env.local`.
+Open [http://localhost:3000](http://localhost:3000), choose **First time setup**, and paste the `USER_MANAGEMENT_KEY` from `.env.local` to create the first administrator. That option disappears once an account exists.
 
-- Checks run inside the app container: `docker compose exec app npm run lint` (likewise `typecheck` and `build`).
-- Sample data, once the first administrator exists: `docker compose run --rm setup node scripts/seed-sample-data.mjs`.
-- Schema upgrades after pulling new code: `docker compose run --rm setup node scripts/create-database.mjs`. Re-running the full `setup` would generate a new app password and overwrite `.env.local`.
-- Dependencies: add them from inside the container (`docker compose exec app npm install <package>`), then `docker compose build` so new containers start with them. The container reinstalls automatically whenever `package-lock.json` differs from what is installed.
-- Browser end-to-end tests: `scripts/e2e.sh` (see [Checks](#checks)).
-- MySQL is published on `127.0.0.1:3307` (root password `salestrackpro` unless overridden) for database tools on the host.
-- Optional overrides go in an ignored `.env` next to `compose.yaml`: `MYSQL_ROOT_PASSWORD`, `APP_PORT` (default 3000), `DB_PORT` (default 3307). Next.js reads `.env` too, so keep application settings in `.env.local`.
+Everyday commands:
 
-Production build (`compose.prod.yaml`): a standalone Next.js image, no bind mounts, uploads in the `attachments` volume, MySQL not published.
+| Task | Command |
+|---|---|
+| Start, follow logs, stop | `docker compose up -d` · `docker compose logs -f app` · `docker compose down` (data stays in volumes) |
+| Lint, typecheck, build | `docker compose exec app npm run lint` (likewise `typecheck`, `build`) |
+| Browser end-to-end tests | `scripts/e2e.sh` (see [Checks and tests](#checks-and-tests)) |
+| Sample data (needs an administrator) | `docker compose run --rm setup node scripts/seed-sample-data.mjs` |
+| Schema upgrade after pulling code | `docker compose run --rm setup node scripts/create-database.mjs` |
+| Add a dependency | `docker compose exec app npm install <package>`, then `docker compose build` |
+| MySQL from a desktop tool | `127.0.0.1:3307`, user `root`, password `salestrackpro` (unless overridden) |
 
-```bash
-echo "MYSQL_ROOT_PASSWORD=<strong password>" > .env
-docker compose -f compose.yaml -f compose.prod.yaml run --rm setup       # first time only
-docker compose -f compose.yaml -f compose.prod.yaml up -d --build
-```
+Notes:
 
-The app container takes its configuration from `.env.local` (set `APP_URL` there behind a reverse proxy). The production image also carries the database scripts, so later schema upgrades can run from it:
+- Re-running the full `setup` service generates a new app password and overwrites `.env.local`, including any SMTP settings you added. Use the single-script form above for upgrades.
+- Dependencies live in a Docker volume seeded from the image. The container reinstalls automatically whenever `package-lock.json` differs from what is installed.
+- Optional overrides go in an ignored `.env` next to `compose.yaml`: `MYSQL_ROOT_PASSWORD`, `APP_PORT` (default 3000), `DB_PORT` (default 3307, loopback only). Next.js reads `.env` too, so keep application settings in `.env.local`.
+- If `docker` is not on your PATH (Docker Desktop without the CLI link), call it by its full path under `/Applications/Docker.app/Contents/Resources/bin/`. `scripts/e2e.sh` finds it on its own.
 
-```bash
-docker compose -f compose.yaml -f compose.prod.yaml run --rm \
-  -e MYSQL_USER=root -e MYSQL_PASSWORD=<root password> app node scripts/create-database.mjs
-```
+## Running without Docker
 
-## First run without Docker
+- Node.js 20.9 or newer (`node --version`)
+- MySQL 5.7 or 8.x with an administrator account for setup
 
 ```bash
 npm install
@@ -53,23 +55,15 @@ npm run db:user:create                          # restricted app account + .env.
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000), choose **First time setup**, and paste the `USER_MANAGEMENT_KEY` from `.env.local` to create the first administrator. That option disappears once an account exists.
-
-Optional sample data (demo Sales Managers, a Recruiter, leads, activities, tasks):
-
-```bash
-npm run db:seed
-```
-
-Re-running `npm run db:create` after pulling new code applies any schema migrations that have not run yet. A database created by the earlier prototype is upgraded in place; its old free-text leads table is kept as `legacy_leads`.
+Then complete the first-time setup in the browser as above. `npm run db:seed` adds sample data (demo Sales Managers, a Recruiter, leads, activities, tasks) once an administrator exists. Re-running `npm run db:create` after pulling new code applies any migrations that have not run yet; a database created by the earlier prototype is upgraded in place, and its old free-text leads table is kept as `legacy_leads`.
 
 ## Configuration (`.env.local`)
 
-`npm run db:user:create` writes the database settings and a commented template for the rest:
+The setup step writes the database settings and a commented template for the rest:
 
 | Setting | Purpose |
 |---|---|
-| `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD` | Runtime database account (read/write only, no DDL) |
+| `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD` | Runtime database account (read/write only, no DDL). Docker setup writes `MYSQL_HOST=db` |
 | `USER_MANAGEMENT_KEY` | One-time key for creating the first administrator |
 | `APP_URL` | Public URL. Required behind a reverse proxy, and used in password-reset links. An `http://` value also turns off the Secure flag on session cookies, for deployments without TLS |
 | `TRUSTED_ORIGINS` | Extra allowed origins for state-changing requests, comma separated |
@@ -78,6 +72,44 @@ Re-running `npm run db:create` after pulling new code applies any schema migrati
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Outbound email for password resets, set-password links, and two-factor codes |
 
 Email features stay dormant until the `SMTP_*` settings are filled in. Until then administrators set passwords directly from User management and two-factor cannot be switched on.
+
+The setup scripts read `.env.setup.local` (administrator credentials) instead; it also accepts `MYSQL_APP_USER` and `MYSQL_APP_USER_HOST` (the host part of the app account, `%` for access from another machine or container).
+
+## Production
+
+`compose.prod.yaml` overrides the development stack with a standalone Next.js image (about 460 MB), no bind mounts, uploads in the `attachments` volume, and MySQL not published on the host.
+
+```bash
+echo "MYSQL_ROOT_PASSWORD=<strong password>" > .env
+docker compose -f compose.yaml -f compose.prod.yaml run --rm setup       # first time only
+docker compose -f compose.yaml -f compose.prod.yaml up -d --build
+```
+
+- The app container takes its configuration from `.env.local`. Behind a reverse proxy, set `APP_URL` to the public origin and terminate TLS at the proxy.
+- The image carries the database scripts, so later schema upgrades can run from it:
+
+  ```bash
+  docker compose -f compose.yaml -f compose.prod.yaml run --rm \
+    -e MYSQL_USER=root -e MYSQL_PASSWORD=<root password> app node scripts/create-database.mjs
+  ```
+
+- Database files live in the `mysql_data` volume and uploads in `attachments`; back up both.
+- Without Docker: `npm run build` then `npm run start`, or run `node .next/standalone/server.js` after copying `public/` and `.next/static/` next to it, as the Next.js standalone output expects.
+
+## Project layout
+
+```
+src/app/                 Next.js App Router: page.tsx (client shell) and api/** route handlers
+src/features/<area>/     model.ts (types, validation) · repository.ts (SQL, rules) · client.ts (fetch) · React components
+src/lib/                 database pool, dates and timezone, HTTP helpers, mailer, async-data hook
+scripts/                 create-database.mjs (migrations), create-app-user.mjs, seed-sample-data.mjs,
+                         docker-entrypoint.sh (dev container), e2e.sh (browser suite runner)
+tests/e2e/               Selenium end-to-end suite (node:test) with helpers/ui.mjs and helpers/data.mjs
+docs/                    PRD.md (requirements with IDs and status), SPEC.md (design, API, data model, screens)
+Dockerfile               targets: dev (hot reload) and runner (standalone production image)
+compose.yaml             db, app, setup, and the `test` profile (db-test, app-test, selenium, e2e)
+compose.prod.yaml        production override
+```
 
 ## What is implemented
 
@@ -95,9 +127,9 @@ Email features stay dormant until the `SMTP_*` settings are filled in. Until the
 
 ## Not yet connected
 
-Google sign-in, Gmail linking and AI summaries, voice-to-text, OCR of business cards, collaboration threads and mentions, push and email notifications, device authorization, rich-text notes, and live job-board, review, or routing data. Lead generation and the road visit planner show sample content.
+Google sign-in, Gmail linking and AI summaries, voice-to-text, OCR of business cards, collaboration threads and mentions, push and email notifications, device authorization, rich-text notes, and live job-board, review, or routing data. Lead generation and the road visit planner show sample content. Designs for these are in SPEC.md section 10.
 
-## Checks
+## Checks and tests
 
 ```bash
 npm run lint
@@ -107,18 +139,32 @@ npm run build
 
 Inside Docker, prefix each with `docker compose exec app`.
 
-### End-to-end tests (Selenium)
+### Browser end-to-end tests (Selenium)
 
-`scripts/e2e.sh` runs the browser suite in `tests/e2e/` entirely in Docker (compose profile `test`): a production build of the app, a throwaway MySQL kept in memory, a Selenium Chromium grid, and the test runner. Nothing is needed on the host besides Docker.
+`scripts/e2e.sh` runs the suite in `tests/e2e/` entirely in Docker (compose profile `test`): a production build of the app with a fresh schema, a throwaway MySQL kept in memory, a Selenium Chromium grid, and the test runner. Nothing is needed on the host besides Docker. A full run takes about two minutes including container start.
 
 ```bash
 scripts/e2e.sh                               # whole suite
 scripts/e2e.sh tests/e2e/02-leads.test.mjs   # one or more files
 ```
 
-The suite covers first-time setup, sign-in, password change, and reset messaging; the lead life cycle (create, BD action, timeline entries, follow-up task, document upload, edit, status change, list and global search, archive and restore); tasks; account creation, role-limited navigation, queued-lead approval, transfer, and termination hand-off; list of values, settings, target templates, and report drill-downs.
+| File | Covers |
+|---|---|
+| `01-auth.test.mjs` | Sign-in screen, first administrator via the setup link, sign out, wrong password, reset-email message without SMTP, password change and re-login |
+| `02-leads.test.mjs` | Create a lead, BD action, call and note on the timeline, follow-up that becomes a task, document upload, edit, status change, list and global search, archive and restore |
+| `03-tasks.test.mjs` | Create a task linked to a lead, complete it, edit it |
+| `04-team.test.mjs` | Create a Sales Manager, role-limited navigation, historical date queues a lead, admin approval, transfer, termination hand-off, terminated account cannot sign in |
+| `05-admin-reports.test.mjs` | List of values, role rename reflected in the sidebar, target template, report drill-down, action-center metric link |
 
-- Tests use `node:test` with `selenium-webdriver`; shared page helpers live in `tests/e2e/helpers/ui.mjs`.
+- Tests are written with `node:test` and `selenium-webdriver`; the page helpers (labels, dialogs, toasts, navigation) live in `tests/e2e/helpers/ui.mjs`, test data and the bootstrap shortcut in `tests/e2e/helpers/data.mjs`.
 - Watch the browser at [http://localhost:7900](http://localhost:7900) while a run is in progress.
-- A failed test leaves a screenshot and the page DOM in `tests/e2e/output/`.
-- The test app runs on plain HTTP inside the compose network, so it is started with `APP_URL=http://app-test:3000` (see the configuration table).
+- A failed test leaves a screenshot and the page DOM in `tests/e2e/output/` (ignored by Git).
+- The test app runs on plain HTTP inside the compose network, so it starts with `APP_URL=http://app-test:3000` (see the configuration table). Inside the dev container, `npm run test:e2e` runs the same files against the `test` profile hosts.
+
+## Troubleshooting
+
+- **"Could not load the workspace" right after signing in** on an `http://` host other than localhost: the browser dropped the Secure session cookie. Set `APP_URL` to that `http://` origin, or serve the app over HTTPS.
+- **"Password reset emails are not configured yet"** or two-factor cannot be enabled: fill in the `SMTP_*` settings and restart the app.
+- **"Request origin rejected"** behind a proxy: set `APP_URL` (or `TRUSTED_ORIGINS`) to the public origin, and make sure the proxy forwards `X-Forwarded-Host` and `X-Forwarded-Proto`.
+- **Port already in use**: set `APP_PORT` or `DB_PORT` in `.env` and run `docker compose up -d` again.
+- **Stale dependencies after switching branches**: restart the app container; it reinstalls when the lockfile changed. Run `docker compose build` to refresh the image as well.
