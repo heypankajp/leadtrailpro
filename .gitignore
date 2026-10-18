@@ -20,6 +20,9 @@
 # production
 /build
 
+# uploaded lead attachments (see ATTACHMENT_DIR)
+/storage
+
 # misc
 .DS_Store
 *.pem

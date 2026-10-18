@@ -1,60 +1,52 @@
 import { NextResponse } from "next/server";
+import { handleRouteError, jsonError, readJsonBody, requireSameOrigin } from "@/lib/http";
 import { parseCreateUser } from "@/features/users/model";
-import { createUser, listUsers } from "@/features/users/repository";
-import { getRequestUser, hasManagementKey, hasPrivilege, isSameOriginRequest } from "@/features/users/session";
-
-function databaseErrorResponse() {
-  return NextResponse.json({ error: "Could not access users in MySQL." }, { status: 503 });
-}
+import { countUsers, createUser, listDirectory, listUsers } from "@/features/users/repository";
+import { getRequestUser, hasManagementKey, hasPrivilege } from "@/features/users/session";
 
 export async function GET(request: Request) {
-  const mode = new URL(request.url).searchParams.get("mode");
-  const user = await getRequestUser();
-  const canView = mode === "transfer"
-    ? user && hasPrivilege(user, "transfer_leads")
-    : user && hasPrivilege(user, "manage_users");
-  const bootstrap = !canView && hasManagementKey(request);
-  if (!canView && !bootstrap) {
-    return NextResponse.json({ error: "Sign in with the required privilege or enter a valid user-management key." }, { status: 401 });
-  }
   try {
-    const users = await listUsers();
-    if (bootstrap && users.length > 0) {
-      return NextResponse.json({ error: "The bootstrap key is disabled after the first platform account is created." }, { status: 403 });
+    const mode = new URL(request.url).searchParams.get("mode");
+    const user = await getRequestUser();
+    if (mode === "directory") {
+      if (!user) return jsonError(401, "Sign in to continue.");
+      return NextResponse.json({ users: await listDirectory() });
     }
-    return NextResponse.json({ users });
+    if (user && hasPrivilege(user, "manage_users")) {
+      return NextResponse.json({ users: await listUsers({ includeInactive: true }) });
+    }
+    if (hasManagementKey(request)) {
+      if ((await countUsers()) > 0) return jsonError(403, "The bootstrap key is disabled after the first platform account is created.");
+      return NextResponse.json({ users: [] });
+    }
+    return jsonError(user ? 403 : 401, user ? "You do not have permission to manage users." : "Sign in with user-management access or enter a valid user-management key.");
   } catch (error) {
-    console.error("Failed to load users from MySQL.", error instanceof Error ? error.name : "Unknown error");
-    return databaseErrorResponse();
+    return handleRouteError(error, "List users");
   }
 }
 
 export async function POST(request: Request) {
-  if (!isSameOriginRequest(request)) return NextResponse.json({ error: "Request origin rejected." }, { status: 403 });
-  const userAccount = await getRequestUser();
-  const hasAdminSession = userAccount && hasPrivilege(userAccount, "manage_users");
-  const bootstrap = !hasAdminSession && hasManagementKey(request);
-  if (!hasAdminSession && !bootstrap) {
-    return NextResponse.json({ error: "Sign in with user-management access or enter a valid user-management key." }, { status: 401 });
-  }
-  const user = parseCreateUser(await request.json().catch(() => null));
-  if (!user) {
-    return NextResponse.json(
-      { error: "Enter valid user details, a password with at least 12 characters, a role, and valid privileges." },
-      { status: 400 },
-    );
-  }
   try {
-    if (bootstrap && (await listUsers()).length > 0) {
-      return NextResponse.json({ error: "The bootstrap key is disabled after the first platform account is created." }, { status: 403 });
+    requireSameOrigin(request);
+    const actor = await getRequestUser();
+    const hasAdminSession = Boolean(actor && hasPrivilege(actor, "manage_users"));
+    const bootstrap = !hasAdminSession && hasManagementKey(request);
+    if (!hasAdminSession && !bootstrap) {
+      return jsonError(actor ? 403 : 401, actor ? "You do not have permission to manage users." : "Sign in with user-management access or enter a valid user-management key.");
     }
-    return NextResponse.json({ user: await createUser(user) }, { status: 201 });
+    const input = parseCreateUser(await readJsonBody(request));
+    if (!input) {
+      return jsonError(400, "Enter valid user details, a password with at least 12 characters, a role, and valid privileges.");
+    }
+    if (bootstrap) {
+      if ((await countUsers()) > 0) return jsonError(403, "The bootstrap key is disabled after the first platform account is created.");
+      input.role = "admin";
+    }
+    const user = await createUser(input, actor?.id ?? null);
+    return NextResponse.json({ user }, { status: 201 });
   } catch (error) {
-    const mysqlError = error as { code?: string };
-    if (mysqlError.code === "ER_DUP_ENTRY") {
-      return NextResponse.json({ error: "A user with this email address already exists." }, { status: 409 });
-    }
-    console.error("Failed to create user in MySQL.", error instanceof Error ? error.name : "Unknown error");
-    return databaseErrorResponse();
+    const code = (error as { code?: string }).code;
+    if (code === "ER_DUP_ENTRY") return jsonError(409, "A user with this email address already exists.");
+    return handleRouteError(error, "Create user");
   }
 }

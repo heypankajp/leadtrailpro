@@ -1,32 +1,32 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { getRequestUser, isSameOriginRequest, revokeUserSession, sessionCookieName } from "@/features/users/session";
+import { handleRouteError, jsonError, requireSameOrigin } from "@/lib/http";
+import { countUsers } from "@/features/users/repository";
+import { clearedCookieOptions, getRequestUser, revokeUserSession, sessionCookieName } from "@/features/users/session";
 
 export async function GET() {
   try {
     const user = await getRequestUser();
-    return NextResponse.json({ user });
+    const needsSetup = user ? false : (await countUsers()) === 0;
+    return NextResponse.json({ user, needsSetup });
   } catch (error) {
-    console.error("Session lookup failed while accessing MySQL.", error instanceof Error ? error.name : "Unknown error");
-    return NextResponse.json({ error: "Session lookup is temporarily unavailable." }, { status: 503 });
+    return handleRouteError(error, "Session lookup");
   }
 }
 
 export async function DELETE(request: Request) {
-  if (!isSameOriginRequest(request)) return NextResponse.json({ error: "Sign-out request rejected." }, { status: 403 });
-  const cookieStore = await cookies();
-  const token = cookieStore.get(sessionCookieName)?.value;
-  const response = NextResponse.json({ ok: true });
-  response.cookies.set(sessionCookieName, "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 0 });
-  if (token) {
-    try {
-      await revokeUserSession(token);
-    } catch (error) {
-      console.error("Could not revoke sign-out session.", error instanceof Error ? error.name : "Unknown error");
-      const failedResponse = NextResponse.json({ error: "The session could not be revoked. The browser cookie was cleared; contact an administrator if this persists." }, { status: 503 });
-      failedResponse.cookies.set(sessionCookieName, "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 0 });
-      return failedResponse;
-    }
+  if (!request.headers.get("origin")) return jsonError(403, "Sign-out request rejected.");
+  try {
+    requireSameOrigin(request);
+    const cookieStore = await cookies();
+    const token = cookieStore.get(sessionCookieName)?.value;
+    if (token) await revokeUserSession(token);
+    const response = NextResponse.json({ ok: true });
+    response.cookies.set(sessionCookieName, "", clearedCookieOptions);
+    return response;
+  } catch (error) {
+    const response = handleRouteError(error, "Sign-out");
+    response.cookies.set(sessionCookieName, "", clearedCookieOptions);
+    return response;
   }
-  return response;
 }

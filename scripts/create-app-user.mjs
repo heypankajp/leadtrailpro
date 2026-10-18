@@ -27,7 +27,29 @@ if (!host || !adminUser || !adminPassword || !Number.isInteger(port) || port < 1
 
     await writeFile(
       ".env.local",
-      `MYSQL_HOST=${host}\nMYSQL_PORT=${port}\nMYSQL_USER=${appUser}\nMYSQL_PASSWORD=${runtimePassword}\nUSER_MANAGEMENT_KEY=${userManagementKey}\n`,
+      [
+        `MYSQL_HOST=${host}`,
+        `MYSQL_PORT=${port}`,
+        `MYSQL_USER=${appUser}`,
+        `MYSQL_PASSWORD=${runtimePassword}`,
+        `USER_MANAGEMENT_KEY=${userManagementKey}`,
+        "",
+        "# Public URL of the app (needed behind a reverse proxy, and used in password-reset links).",
+        "# APP_URL=https://sales.example.com",
+        "# Business timezone for follow-ups, weekly targets, and the 11 PM auto sign-out.",
+        "BUSINESS_TIMEZONE=America/Toronto",
+        "# Where uploaded documents and profiles are stored (default: ./storage/attachments).",
+        "# ATTACHMENT_DIR=./storage/attachments",
+        "",
+        "# Outbound email for password resets and two-factor codes. Leave blank until you have SMTP details.",
+        "SMTP_HOST=",
+        "SMTP_PORT=587",
+        "SMTP_SECURE=false",
+        "SMTP_USER=",
+        "SMTP_PASSWORD=",
+        "SMTP_FROM=",
+        "",
+      ].join("\n"),
       { mode: 0o600 },
     );
     console.log("Created the restricted app user and user-management key in the ignored .env.local.");

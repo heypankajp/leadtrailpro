@@ -7,20 +7,24 @@
     "build": "next build",
     "db:create": "node --env-file=.env.setup.local scripts/create-database.mjs",
     "db:user:create": "node --env-file=.env.setup.local scripts/create-app-user.mjs",
+    "db:seed": "node --env-file=.env.setup.local scripts/seed-sample-data.mjs",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "lucide-react": "^1.57.0",
     "mammoth": "^1.13.0",
     "mysql2": "^3.24.6",
     "next": "16.4.0",
+    "nodemailer": "^7.0.13",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^20",
+    "@types/nodemailer": "^8.0.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
