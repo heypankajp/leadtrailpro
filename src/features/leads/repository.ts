@@ -1,3 +1,11 @@
+import { getDatabasePool } from "@/lib/db";
+import type { LeadRecordInput, StoredLead } from "./model";
+
+const leadColumns = `
+  name, company_url AS companyUrl, contact, contact_email AS contactEmail,
+    alternate_email AS alternateEmail,  contact_phone AS contactPhone, initials, color, status, action, follow_up AS followUp,
+  owner, city, industry, last_activity AS lastActivity, lead_type AS type,
+  DATE_FORMAT(first_contact, '%Y-%m-%d') AS firstContact, record_state AS recordState
 import { getDatabasePool, affectedRows, fromSqlDateTime, insertId, toSqlDateTime, withTransaction, type Queryable } from "@/lib/db";
 import { addDaysYmd, todayYmd } from "@/lib/dates";
 import { HttpError } from "@/lib/http";
@@ -95,6 +103,58 @@ export function canEditLead(user: UserAccount, lead: LeadSummary) {
   return hasPrivilege(user, "edit_any_lead") || (hasPrivilege(user, "edit_leads") && lead.ownerId === user.id);
 }
 
+export async function createLead(lead: LeadRecordInput): Promise<StoredLead> {
+  const [result] = await getDatabasePool().execute(
+    `INSERT INTO leads (
+      name, company_url, contact, contact_email, alternate_email, contact_phone, initials, color, status,
+      action, follow_up, owner, city, industry, last_activity, lead_type, first_contact, record_state
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    leadValues(lead),
+  );
+  const id = Number((result as { insertId: number | bigint }).insertId);
+  return { ...toLeadResponse(lead), id };
+}
+
+export async function updateLead(id: number, lead: LeadRecordInput): Promise<boolean> {
+  const [result] = await getDatabasePool().execute(
+    `UPDATE leads SET
+      name = ?, company_url = ?, contact = ?, contact_email = ?, alternate_email = ?, contact_phone = ?,
+      initials = ?, color = ?, status = ?, action = ?, follow_up = ?, owner = ?,
+      city = ?, industry = ?, last_activity = ?, lead_type = ?, first_contact = ?,
+      record_state = ?
+    WHERE id = ?`,
+    [...leadValues(lead), id],
+  );
+  if ((result as { affectedRows: number }).affectedRows > 0) return true;
+  const [rows] = await getDatabasePool().execute("SELECT id FROM leads WHERE id = ?", [id]);
+  return (rows as { id: number }[]).length > 0;
+}
+
+export async function removeLead(id: number): Promise<boolean> {
+  const [result] = await getDatabasePool().execute("DELETE FROM leads WHERE id = ?", [id]);
+  return (result as { affectedRows: number }).affectedRows > 0;
+}
+
+export function leadValues(lead: LeadRecordInput) {
+  return [
+    lead.name,
+    lead.companyUrl,
+    lead.contact,
+    lead.contactEmail,
+    lead.alternateEmail,
+    lead.contactPhone,
+    lead.initials,
+    lead.color,
+    lead.status,
+    lead.action,
+    lead.followUp,
+    lead.owner,
+    lead.city,
+    lead.industry,
+    lead.lastActivity,
+    lead.type,
+    lead.firstContact,
+    lead.recordState,
 export function canTransferLead(user: UserAccount, lead: LeadSummary) {
   return hasPrivilege(user, "reassign_leads") || (hasPrivilege(user, "transfer_leads") && lead.ownerId === user.id);
 }
@@ -186,6 +246,11 @@ const toActivity = (row: ActivityRow): LeadActivity => {
     meta = row.meta;
   }
   return {
+    ...lead,
+    companyUrl: lead.companyUrl || undefined,
+    contactEmail: lead.contactEmail || undefined,
+    alternateEmail: lead.alternateEmail || undefined,
+    contactPhone: lead.contactPhone || undefined,
     id: Number(row.id),
     leadId: Number(row.leadId),
     userId: Number(row.userId),

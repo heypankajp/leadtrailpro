@@ -18,6 +18,25 @@ const parseId = async (context: RouteContext) => {
 /** The lead 360 view: record, timeline, tasks, files, and (for auditors) history. */
 export async function GET(_request: Request, context: RouteContext) {
   try {
+    const existing = await getLead(id);
+    if (!existing) return NextResponse.json({ error: "Lead not found." }, { status: 404 });
+    if (existing.recordState !== lead.recordState && !hasPrivilege(user, "archive_leads")) {
+      return NextResponse.json({ error: "You do not have permission to archive, restore, or review leads." }, { status: 403 });
+    }
+    if (existing.owner !== lead.owner && !canTransfer) {
+      return NextResponse.json({ error: "You do not have permission to transfer leads." }, { status: 403 });
+    }
+    const leadFields = [
+      "name", "companyUrl", "contact", "contactEmail", "alternateEmail", "contactPhone", "initials", "color",
+      "status", "action", "followUp", "city", "industry", "lastActivity", "type", "firstContact", "recordState",
+    ] as const;
+    if (!canEdit && leadFields.some((key) => lead[key] !== (existing[key] ?? ""))) {
+      return NextResponse.json({ error: "You can transfer ownership but cannot edit lead details." }, { status: 403 });
+    }
+    if (!(await updateLead(id, lead))) {
+      return NextResponse.json({ error: "Lead not found." }, { status: 404 });
+    }
+    return NextResponse.json({ lead: { ...lead, id } });
     const user = await requireUser();
     requirePrivilege(user, "view_leads", "You do not have permission to view leads.");
     const id = await parseId(context);
