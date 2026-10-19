@@ -2,7 +2,6 @@
 
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import {
-  Activity,
   ArrowLeft,
   ArrowRight,
   ArrowUpRight,
@@ -18,7 +17,6 @@ import {
   CircleHelp,
   Clock3,
   FileText,
-  Flame,
   ExternalLink,
   LayoutDashboard,
   ListTodo,
@@ -67,9 +65,6 @@ const leadActionOptions = [
   "Others ( Please specify )",
 ];
 const statusByView: Partial<Record<string, Status>> = {
-  Cold: "Cold Lead",
-  Warm: "Warm Lead",
-  Hot: "Hot Lead",
   Client: "Client",
 };
 
@@ -131,9 +126,6 @@ const navigation: { title: string; items: { id: string; label: string; icon: Luc
       { id: "home", label: "Action center", icon: LayoutDashboard },
       { id: "leads", label: "My leads", icon: UsersRound, count: "24" },
       { id: "all-leads", label: "All leads", icon: BriefcaseBusiness },
-      { id: "Cold", label: "Cold leads", icon: CircleHelp, tone: "cold" },
-      { id: "Warm", label: "Warm leads", icon: Activity, tone: "warm" },
-      { id: "Hot", label: "Hot leads", icon: Flame, tone: "hot" },
       { id: "Client", label: "Clients", icon: CheckCheck, tone: "client" },
       { id: "queued", label: "Queued leads", icon: Clock3, count: "3" },
       { id: "archive", label: "Archive", icon: FileText },
@@ -317,13 +309,23 @@ export default function Home() {
         !normalized ||
         [lead.name, lead.contact, lead.status, lead.action, lead.city, lead.industry, lead.owner]
           .some((value) => value.toLowerCase().includes(normalized));
-      const status = statusByView[activeView] ?? statusFilter;
-      const matchesStatus = status === "All statuses" || lead.status === status;
+      const matchesStatus = statusFilter === "All statuses" || lead.status === statusFilter;
       const currentOwner = currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : "";
       const matchesView = activeView !== "leads" || lead.owner === "You" || lead.owner === currentOwner;
       return matchesSearch && matchesStatus && matchesView;
     });
   }, [activeView, archivedLeads, currentUser, leads, queuedLeads, search, statusFilter]);
+
+  const totalLeadsForView = useMemo(() => {
+    const source = activeView === "archive" ? archivedLeads : activeView === "queued" ? queuedLeads : leads;
+    const status = statusByView[activeView] ?? statusFilter;
+    const currentOwner = currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : "";
+    return source.filter((lead) => {
+      const matchesStatus = status === "All statuses" || lead.status === status;
+      const matchesView = activeView !== "leads" || lead.owner === "You" || lead.owner === currentOwner;
+      return matchesStatus && matchesView;
+    }).length;
+  }, [activeView, archivedLeads, currentUser, leads, queuedLeads, statusFilter]);
 
   const notify = (message: string) => {
     setToast(message);
@@ -758,9 +760,6 @@ export default function Home() {
     home: "Action center",
     leads: "My leads",
     "all-leads": "All leads",
-    Cold: "Cold leads",
-    Warm: "Warm leads",
-    Hot: "Hot leads",
     Client: "Clients",
     queued: "Queued leads",
     archive: "Archive",
@@ -775,7 +774,7 @@ export default function Home() {
   const renderLeads = (mode: "table" | "follow-up" = "table") => (
     <LeadTable
       leads={filteredLeads}
-      totalCount={activeView === "archive" ? archivedLeads.length : activeView === "queued" ? queuedLeads.length : leads.length}
+      totalCount={activeView === "archive" ? archivedLeads.length : activeView === "queued" ? queuedLeads.length : totalLeadsForView}
       activeView={activeView}
       selected={selected}
       search={search}
@@ -871,14 +870,34 @@ export default function Home() {
   const renderLeadPage = () => (
     <>
       <div className="page-heading">
-        <div><div className="eyebrow">YOUR PIPELINE <span className="eyebrow-dot">·</span> {filteredLeads.length} RECORDS</div><h1>{pageTitles[activeView]}</h1><p>Manage relationships and keep every opportunity moving forward.</p></div>
+        <div><div className="eyebrow">YOUR PIPELINE <span className="eyebrow-dot">·</span> {filteredLeads.length} RECORDS</div><h1>{pageTitles[activeView]}</h1>{activeView === "leads" && <p>Manage relationships and keep every opportunity moving forward.</p>}</div>
         <button className="button button-primary" onClick={() => setDialog("new-lead")}><Plus size={17} /> Add a lead</button>
       </div>
       <div className="lead-summary-strip">
         <span><i className="summary-dot dot-blue" /> <strong>24</strong> total leads</span><span><i className="summary-dot dot-orange" /> <strong>8</strong> need follow-up</span><span><i className="summary-dot dot-green" /> <strong>4</strong> converted this month</span>
       </div>
       <section className="panel leads-panel">
-        <div className="panel-heading leads-panel-heading"><div><h2>All leads</h2><p>Sorted by most recent activity</p></div><button className="icon-button subtle-icon" aria-label="Lead list options" onClick={() => notify("List preferences opened.")}><MoreHorizontal size={18} /></button></div>
+        {activeView === "leads" && (
+          <div className="panel-heading leads-panel-heading"><div><h2>My leads</h2><p>Sorted by most recent activity</p></div><button className="icon-button subtle-icon" aria-label="Lead list options" onClick={() => notify("List preferences opened.")}><MoreHorizontal size={18} /></button></div>
+        )}
+        <div className="lead-status-tabs" role="group" aria-label="Filter leads by status">
+          {([
+            { label: "All", value: "All statuses" },
+            { label: "Hot", value: "Hot Lead" },
+            { label: "Warm", value: "Warm Lead" },
+            { label: "Cold", value: "Cold Lead" },
+          ] as const).map((tab) => (
+            <button
+              key={tab.label}
+              type="button"
+              aria-pressed={statusFilter === tab.value}
+              className={`lead-status-tab lead-status-tab-${tab.label.toLowerCase()} ${statusFilter === tab.value ? "is-active" : ""}`}
+              onClick={() => setStatusFilter(tab.value)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
         {renderLeads()}
       </section>
     </>

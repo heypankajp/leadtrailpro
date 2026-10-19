@@ -302,6 +302,22 @@ h1 { margin: 9px 0 5px; color: #242941; font-size: 25px; font-weight: 690; lette
 .dot-green { background: #63b693; }
 .leads-panel { overflow: hidden; }
 .leads-panel-heading { padding: 16px 17px 14px; }
+.lead-status-tabs { display: flex; align-items: center; gap: 5px; margin: 0 16px 13px; padding: 4px; border: 1px solid #eceef4; border-radius: 8px; background: #f8f9fc; }
+.lead-status-tab { min-height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 14px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #858b9e; font-size: 10px; font-weight: 600; cursor: pointer; transition: background .15s ease, color .15s ease, border-color .15s ease, box-shadow .15s ease; }
+.lead-status-tab::before { width: 7px; height: 7px; border-radius: 50%; background: #a0a5b3; content: ""; }
+.lead-status-tab-all::before { display: none; }
+.lead-status-tab-hot { border-color: #ffe3df; color: #c66c63; background: #fff5f3; }
+.lead-status-tab-hot::before { background: #ed766c; }
+.lead-status-tab-warm { border-color: #f9e9c9; color: #c18a3e; background: #fff9ed; }
+.lead-status-tab-warm::before { background: #eda950; }
+.lead-status-tab-cold { border-color: #dce8fb; color: #6482bd; background: #f3f7ff; }
+.lead-status-tab-cold::before { background: #809bd0; }
+.lead-status-tab:hover { filter: saturate(1.15); }
+.lead-status-tab.is-active { border-color: #e8eaf1; background: #fff; box-shadow: 0 1px 2px #20243a0a; }
+.lead-status-tab-all.is-active { color: #5368d8; }
+.lead-status-tab-hot.is-active { border-color: #ffc9c2; color: #c65349; background: #ffebe8; }
+.lead-status-tab-warm.is-active { border-color: #f1d79e; color: #ad7629; background: #fff3d9; }
+.lead-status-tab-cold.is-active { border-color: #c7d9f7; color: #5273b0; background: #eaf2ff; }
 .leads-panel .lead-toolbar { padding-top: 0; }
 .bulk-bar { display: flex; align-items: center; gap: 12px; margin: 0 16px 10px; padding: 8px 10px; border-radius: 6px; color: #686f83; background: #f5f6ff; font-size: 10px; }
 .bulk-bar > span { font-weight: 650; }
@@ -739,6 +755,8 @@ h1 { margin: 9px 0 5px; color: #242941; font-size: 25px; font-weight: 690; lette
   .opportunity-banner .button { margin-left: 43px; }
   .app-footer { flex-wrap: wrap; gap: 9px 14px; font-size: 8px; }
   .lead-summary-strip { flex-wrap: wrap; gap: 10px 16px; }
+  .lead-status-tabs { gap: 3px; margin-right: 10px; margin-left: 10px; }
+  .lead-status-tab { min-width: 0; flex: 1; gap: 5px; padding: 0 6px; }
   .lead-toolbar { gap: 6px; padding-right: 10px; padding-left: 10px; }
   .lead-search kbd { display: none; }
   .lead-search { min-width: 100px; }
