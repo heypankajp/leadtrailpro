@@ -1239,4 +1239,8 @@ function TaskColumn({ title, count, tone, tasks, onComplete }: { title: string; 
 
 function RouteStop({ time, company, address, status, color, lunch }: { time: string; company: string; address: string; status: string; color: string; lunch?: boolean }) {
   return <div className={`route-stop ${lunch ? "lunch-stop" : ""}`}><div className="route-time">{time}</div><div className={`route-point point-${color}`}>{lunch ? <span>☕</span> : <MapPin size={14} />}</div><div className="route-stop-info"><strong>{company}</strong><small>{address}</small></div><span className="route-status">{status}</span><button className="row-more" aria-label={`Options for ${company}`}><MoreHorizontal size={17} /></button></div>;
+import App from "@/features/shell/App";
+
+export default function Home() {
+  return <App />;
 }

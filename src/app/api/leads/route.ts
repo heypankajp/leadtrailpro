@@ -1,39 +1,31 @@
 import { NextResponse } from "next/server";
-import { parseLeadRecord } from "@/features/leads/model";
+import { asOptionalId, handleRouteError, jsonError, readJsonBody, requireSameOrigin } from "@/lib/http";
+import { parseLeadFilters, parseLeadInput } from "@/features/leads/model";
 import { createLead, listLeads } from "@/features/leads/repository";
-import { getRequestUser, hasPrivilege, isSameOriginRequest } from "@/features/users/session";
+import { requirePrivilege, requireUser } from "@/features/users/session";
 
-function databaseErrorResponse() {
-  return NextResponse.json(
-    { error: "Database connection failed. Verify MySQL is running and the MYSQL_* settings in .env.local." },
-    { status: 503 },
-  );
-}
-
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const user = await getRequestUser();
-    if (!user) return NextResponse.json({ error: "Sign in to view leads." }, { status: 401 });
-    if (!hasPrivilege(user, "view_leads")) return NextResponse.json({ error: "You do not have permission to view leads." }, { status: 403 });
-    return NextResponse.json({ leads: await listLeads() });
+    const user = await requireUser();
+    requirePrivilege(user, "view_leads", "You do not have permission to view leads.");
+    const filters = parseLeadFilters(new URL(request.url).searchParams);
+    return NextResponse.json(await listLeads(filters, user));
   } catch (error) {
-    console.error("Failed to load leads from MySQL.", error instanceof Error ? error.name : "Unknown error");
-    return databaseErrorResponse();
+    return handleRouteError(error, "List leads");
   }
 }
 
 export async function POST(request: Request) {
-  if (!isSameOriginRequest(request)) return NextResponse.json({ error: "Request origin rejected." }, { status: 403 });
-  const user = await getRequestUser();
-  if (!user) return NextResponse.json({ error: "Sign in to create leads." }, { status: 401 });
-  if (!hasPrivilege(user, "create_leads")) return NextResponse.json({ error: "You do not have permission to create leads." }, { status: 403 });
-  const lead = parseLeadRecord(await request.json().catch(() => null));
-  if (!lead) return NextResponse.json({ error: "Invalid lead data." }, { status: 400 });
-
   try {
-    return NextResponse.json({ lead: await createLead(lead) }, { status: 201 });
+    requireSameOrigin(request);
+    const user = await requireUser();
+    requirePrivilege(user, "create_leads", "You do not have permission to create leads.");
+    const body = await readJsonBody(request);
+    const { input, errors } = parseLeadInput(body);
+    if (errors.length) return jsonError(400, errors.join(" "));
+    const lead = await createLead(input, user, asOptionalId(body?.ownerId));
+    return NextResponse.json({ lead }, { status: 201 });
   } catch (error) {
-    console.error("Failed to create lead in MySQL.", error instanceof Error ? error.name : "Unknown error");
-    return databaseErrorResponse();
+    return handleRouteError(error, "Create lead");
   }
 }

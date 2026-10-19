@@ -1,0 +1,143 @@
+import assert from "node:assert/strict";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { after, before, describe } from "node:test";
+import { By, Key, Page, createDriver, outputDir, uiTest, waitForServices, xq } from "./helpers/ui.mjs";
+import { admin, ensureAdmin, runId } from "./helpers/data.mjs";
+
+describe("Leads", () => {
+  const lead = { name: `Acme Robotics ${runId}`, executive: "Priya Patel", phone: "+1 416 555 0101", email: `priya.${runId}@acme.example` };
+  const uploadPath = path.join(outputDir, `upload-${runId}.txt`);
+  let driver;
+  let page;
+
+  before(async () => {
+    await waitForServices();
+    await ensureAdmin();
+    await mkdir(outputDir, { recursive: true });
+    await writeFile(uploadPath, "SalesTrackPro end-to-end upload\n");
+    driver = await createDriver();
+    page = new Page(driver);
+    await page.signIn(admin);
+  });
+  after(async () => { await driver?.quit(); });
+
+  uiTest("adds a lead from the action center", async () => {
+    await page.clickButton("Add a lead", { global: true });
+    await page.dialogTitle("Add a new lead");
+    await page.fill("Client name", lead.name);
+    await page.fill("Client executive", lead.executive);
+    await page.fill("Contact number", lead.phone);
+    await page.fill("Client email(s)", lead.email);
+    await page.fill("City", "Toronto");
+    await page.fill("Client industry", "Robotics");
+    await page.fill("Address", "100 King St W, Toronto");
+    await page.clickButton("Save lead");
+    await page.toast(`${lead.name} added to the pipeline`);
+    await page.dialogTitle(lead.name);
+    await page.eyebrow("LEAD OVERVIEW");
+    assert.equal(await (await page.wait(By.css(".client-executive-name"))).getText(), lead.executive);
+    assert.equal(await (await page.wait(By.css(".detail-owner strong"))).getText(), admin.name);
+  });
+
+  uiTest("updates the BD action from the overview", async () => {
+    const select = await page.wait(By.css('select[aria-label="BD action"]'));
+    await page.setValue(select, "First Call");
+    await page.toast("BD action updated");
+    assert.equal(await page.selectedText(await page.wait(By.css('select[aria-label="BD action"]'))), "First Call");
+  });
+
+  uiTest("logs a call and adds a note on the timeline", async () => {
+    await page.tab("Timeline");
+    await page.clickButton("Log call");
+    await page.fill("Summary", "Intro call with Priya");
+    await page.fill("Notes (optional)", "Discussed the Q1 hiring plan.");
+    await page.clickButton("Save call");
+    await page.toast("Activity recorded");
+    await page.wait(By.xpath('//article[contains(@class,"timeline-entry")]//strong[normalize-space()="Intro call with Priya"]'));
+    await page.clickButton("Add note");
+    await page.fill("Interaction note", "Client wants profiles for two welders.");
+    await page.click(By.css('form.activity-form button[type="submit"]'));
+    await page.toast("Activity recorded");
+    await page.wait(By.xpath('//article[contains(@class,"timeline-entry")]//p[contains(normalize-space(.), "two welders")]'));
+  });
+
+  uiTest("a note with a follow-up instruction offers to create the task", async () => {
+    await page.clickButton("Add note");
+    await page.fill("Interaction note", "Great conversation. Follow up next Monday at 10am about the welders.");
+    const suggestion = await page.wait(By.css(".follow-up-suggestion"));
+    assert.match(await suggestion.getText(), /Create a follow-up task from this note: understood \u201cnext Monday\u201d as .* 10:00 AM/);
+    assert.equal(await (await page.wait(By.css('input[aria-label="Follow-up task title"]'))).getAttribute("value"), `Follow up with ${lead.executive}`);
+    await page.click(By.css('form.activity-form button[type="submit"]'));
+    await page.toast("Activity recorded and follow-up task created");
+    await page.wait(By.xpath(`//article[contains(@class,"timeline-entry")]//strong[starts-with(normalize-space(.), ${xq(`Task created: Follow up with ${lead.executive}`)})]`));
+    await page.wait(By.xpath('//article[contains(@class,"timeline-entry")]//strong[starts-with(normalize-space(.), "Follow-up scheduled for")]'));
+  });
+
+  uiTest("schedules a follow-up that becomes a task", async () => {
+    await page.tab("Overview");
+    await page.clickButton("Schedule follow-up");
+    await page.fill("What needs to happen?", "Send the proposal draft.");
+    await page.clickButton("Schedule follow-up");
+    await page.toast("Follow-up scheduled and added to tasks");
+    await page.tab("Tasks");
+    await page.wait(By.xpath(`//article[contains(@class,"task-card")]//strong[normalize-space()=${xq(`Follow up with ${lead.executive}`)}]`));
+  });
+
+  uiTest("attaches a document", async () => {
+    await page.tab("Documents");
+    const fileInput = await page.wait(By.css('input[type="file"]'), { visible: false });
+    await fileInput.sendKeys(uploadPath);
+    await page.clickButton("Add document");
+    await page.toast("Document attached");
+    await page.wait(By.xpath(`//div[contains(@class,"attachment-row")]//strong[normalize-space()=${xq(path.basename(uploadPath))}]`));
+  });
+
+  uiTest("edits the lead and changes its status", async () => {
+    await page.clickButton("Edit");
+    await page.dialogTitle(`Edit ${lead.name}`);
+    await page.fill("Client executive", "Priya Patel-Singh");
+    await page.clickButton("Save changes");
+    await page.toast("Lead updated");
+    await page.tab("Overview");
+    await page.waitText(By.css(".client-executive-name"), "Priya Patel-Singh");
+    const status = await page.wait(By.css('select[aria-label="Update lead status"]'));
+    await page.setValue(status, "Warm");
+    await page.toast("Status updated");
+  });
+
+  uiTest("finds the lead under Warm leads and by global search", async () => {
+    await page.closeDialog();
+    await page.nav("Warm leads");
+    await page.heading("Warm leads");
+    await page.waitLeadRow(lead.name);
+    const search = await page.wait(By.css('input[aria-label="Search all leads"]'));
+    await search.sendKeys(lead.name, Key.ENTER);
+    await page.heading("All leads");
+    await page.waitLeadRow(lead.name);
+    await page.waitText(By.css(".page-heading .eyebrow"), "1 RECORDS");
+  });
+
+  uiTest("archives the lead and restores it from the archive", async () => {
+    await page.click(By.xpath(`//tr[.//strong[normalize-space()=${xq(lead.name)}]]//button[contains(@class,"client-cell")]`), { global: true });
+    await page.dialogTitle(lead.name);
+    await page.clickButton("Archive");
+    await page.dialogTitle(`Archive ${lead.name}`);
+    await page.fill("Reason (optional)", "Duplicate record");
+    await page.clickButton("Archive lead");
+    await page.toast("Lead archived");
+    await page.eyebrow("ARCHIVED LEAD");
+    await page.closeDialog();
+    await page.nav("Archive");
+    await page.heading("Archive");
+    const row = await page.waitLeadRow(lead.name);
+    assert.match(await row.getText(), /Duplicate record/);
+    await row.findElement(By.xpath('.//button[normalize-space()="Restore"]')).click();
+    await page.dialogTitle("Restore lead");
+    await page.clickButton("Restore");
+    await page.toast("Lead restored to the pipeline");
+    await page.nav("All leads");
+    await page.heading("All leads");
+    await page.waitLeadRow(lead.name);
+  });
+});

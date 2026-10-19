@@ -1,0 +1,140 @@
+# Development stack: MySQL + hot-reloading Next.js dev server.
+#
+#   docker compose run --rm setup   # once: create schema, app user, and .env.local
+#   docker compose up               # http://localhost:3000
+#   docker compose run --rm setup node scripts/seed-sample-data.mjs   # optional demo data
+#
+# Optional overrides go in an ignored `.env` file next to this file:
+#   MYSQL_ROOT_PASSWORD, APP_PORT (default 3000), DB_PORT (default 3307, loopback only)
+#
+# Production: docker compose -f compose.yaml -f compose.prod.yaml up -d --build
+# End-to-end tests (profile "test"): scripts/e2e.sh
+
+name: salestrackpro
+
+x-dev-image: &dev-image
+  build:
+    context: .
+    target: dev
+  image: salestrackpro-dev
+  volumes:
+    - .:/app
+    - node_modules:/app/node_modules
+    - next_cache:/app/.next
+
+services:
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-salestrackpro}
+    ports:
+      - "127.0.0.1:${DB_PORT:-3307}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 20s
+
+  app:
+    <<: *dev-image
+    init: true
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # One-shot setup, run with `docker compose run --rm setup`. Uses the MySQL root
+  # account to create or upgrade the schema and the restricted app account, then
+  # writes .env.local (MYSQL_HOST=db) into the project directory.
+  setup:
+    <<: *dev-image
+    profiles: ["setup"]
+    environment:
+      MYSQL_HOST: db
+      MYSQL_PORT: "3306"
+      MYSQL_USER: root
+      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:-salestrackpro}
+      MYSQL_APP_USER_HOST: "%"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["sh", "-c", "node scripts/create-database.mjs && node scripts/create-app-user.mjs"]
+
+  # ---------------------------------------------------------------------------
+  # End-to-end tests (profile "test"). scripts/e2e.sh wires these together:
+  # a throwaway MySQL in memory, the production build of the app with a fresh
+  # schema, a Selenium Chromium grid, and the test runner (tests/e2e).
+  db-test:
+    image: mysql:8.4
+    profiles: ["test"]
+    environment:
+      MYSQL_ROOT_PASSWORD: test
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -ptest --silent"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+      start_period: 10s
+
+  app-test:
+    build:
+      context: .
+      target: runner
+    image: salestrackpro
+    profiles: ["test"]
+    init: true
+    environment:
+      MYSQL_HOST: db-test
+      MYSQL_PORT: "3306"
+      MYSQL_USER: root
+      MYSQL_PASSWORD: test
+      USER_MANAGEMENT_KEY: e2e-user-management-key
+      BUSINESS_TIMEZONE: America/Toronto
+      APP_URL: http://app-test:3000   # plain http inside the compose network: see session.ts cookie flags
+    command: ["sh", "-c", "node scripts/create-database.mjs && exec node server.js"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/auth/session').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+      start_period: 5s
+    depends_on:
+      db-test:
+        condition: service_healthy
+
+  selenium:
+    image: selenium/standalone-chromium:4
+    profiles: ["test"]
+    shm_size: 2g
+    environment:
+      SE_SCREEN_WIDTH: "1600"
+      SE_SCREEN_HEIGHT: "1200"
+      SE_NODE_SESSION_TIMEOUT: "600"
+      SE_VNC_NO_PASSWORD: "1"
+    ports:
+      - "127.0.0.1:7900:7900"   # noVNC: open http://localhost:7900 to watch the browser during a run
+
+  e2e:
+    <<: *dev-image
+    profiles: ["test"]
+    environment:
+      E2E_BASE_URL: http://app-test:3000
+      E2E_SELENIUM_URL: http://selenium:4444
+      E2E_USER_MANAGEMENT_KEY: e2e-user-management-key
+    depends_on:
+      app-test:
+        condition: service_healthy
+      selenium:
+        condition: service_started
+    command: ["npm", "run", "test:e2e"]
+
+volumes:
+  mysql_data:
+  node_modules:
+  next_cache:
