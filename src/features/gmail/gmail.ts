@@ -1,18 +1,16 @@
+/**
+ * Gmail linking (MAIL-01, MAIL-03): each user authorizes read-only access to their own mailbox; the refresh token is
+ * stored AES-256-GCM encrypted under GMAIL_TOKEN_KEY in `gmail_connections`. The lead Emails tab lists recent
+ * messages whose participants include one of the lead's client email addresses.
+ */
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import type { RowDataPacket } from "mysql2/promise";
 import { getDatabasePool } from "@/lib/db";
+import { appBaseUrl } from "@/lib/http";
+import { recordAudit } from "@/features/audit/repository";
+import type { LeadEmail } from "./model";
 
-export type LeadEmail = {
-  id: string;
-  direction: "sent" | "received";
-  from: string;
-  to: string;
-  cc: string;
-  subject: string;
-  snippet: string;
-  date: string;
-  mailbox: string;
-};
+export type { LeadEmail } from "./model";
 
 export const gmailScope = "https://www.googleapis.com/auth/gmail.readonly openid email";
 export const gmailStateCookie = "salestrackpro_gmail_state";
@@ -26,7 +24,7 @@ export function googleConfig() {
 }
 
 export function redirectUri(request: Request) {
-  return process.env.GOOGLE_REDIRECT_URI || `${new URL(request.url).origin}/api/gmail/callback`;
+  return process.env.GOOGLE_REDIRECT_URI || `${appBaseUrl(request)}/api/gmail/callback`;
 }
 
 function encryptionKey(secret: string) {
@@ -101,6 +99,7 @@ export async function saveConnection(userId: number, googleEmail: string, refres
      ON DUPLICATE KEY UPDATE google_email = VALUES(google_email), refresh_token_encrypted = VALUES(refresh_token_encrypted)`,
     [userId, googleEmail, encryptToken(refreshToken, config.tokenKey)],
   );
+  await recordAudit(getDatabasePool(), { actorId: userId, action: "gmail.connected", entityType: "user", entityId: userId, after: { googleEmail }, details: `Connected Gmail account ${googleEmail}` });
 }
 
 export async function getConnectionEmail(userId: number) {
@@ -109,7 +108,10 @@ export async function getConnectionEmail(userId: number) {
 }
 
 export async function removeConnection(userId: number) {
+  const googleEmail = await getConnectionEmail(userId);
+  if (!googleEmail) return;
   await getDatabasePool().query("DELETE FROM gmail_connections WHERE user_id = ?", [userId]);
+  await recordAudit(getDatabasePool(), { actorId: userId, action: "gmail.disconnected", entityType: "user", entityId: userId, before: { googleEmail }, details: `Disconnected Gmail account ${googleEmail}` });
 }
 
 type GmailPart = { mimeType?: string; body?: { data?: string }; parts?: GmailPart[] };

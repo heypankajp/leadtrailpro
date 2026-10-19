@@ -302,22 +302,6 @@ h1 { margin: 9px 0 5px; color: #242941; font-size: 25px; font-weight: 690; lette
 .dot-green { background: #63b693; }
 .leads-panel { overflow: hidden; }
 .leads-panel-heading { padding: 16px 17px 14px; }
-.lead-status-tabs { display: flex; align-items: center; gap: 5px; margin: 0 16px 13px; padding: 4px; border: 1px solid #eceef4; border-radius: 8px; background: #f8f9fc; }
-.lead-status-tab { min-height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 14px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #858b9e; font-size: 10px; font-weight: 600; cursor: pointer; transition: background .15s ease, color .15s ease, border-color .15s ease, box-shadow .15s ease; }
-.lead-status-tab::before { width: 7px; height: 7px; border-radius: 50%; background: #a0a5b3; content: ""; }
-.lead-status-tab-all::before { display: none; }
-.lead-status-tab-hot { border-color: #ffe3df; color: #c66c63; background: #fff5f3; }
-.lead-status-tab-hot::before { background: #ed766c; }
-.lead-status-tab-warm { border-color: #f9e9c9; color: #c18a3e; background: #fff9ed; }
-.lead-status-tab-warm::before { background: #eda950; }
-.lead-status-tab-cold { border-color: #dce8fb; color: #6482bd; background: #f3f7ff; }
-.lead-status-tab-cold::before { background: #809bd0; }
-.lead-status-tab:hover { filter: saturate(1.15); }
-.lead-status-tab.is-active { border-color: #e8eaf1; background: #fff; box-shadow: 0 1px 2px #20243a0a; }
-.lead-status-tab-all.is-active { color: #5368d8; }
-.lead-status-tab-hot.is-active { border-color: #ffc9c2; color: #c65349; background: #ffebe8; }
-.lead-status-tab-warm.is-active { border-color: #f1d79e; color: #ad7629; background: #fff3d9; }
-.lead-status-tab-cold.is-active { border-color: #c7d9f7; color: #5273b0; background: #eaf2ff; }
 .leads-panel .lead-toolbar { padding-top: 0; }
 .bulk-bar { display: flex; align-items: center; gap: 12px; margin: 0 16px 10px; padding: 8px 10px; border-radius: 6px; color: #686f83; background: #f5f6ff; font-size: 10px; }
 .bulk-bar > span { font-weight: 650; }
@@ -755,8 +739,6 @@ h1 { margin: 9px 0 5px; color: #242941; font-size: 25px; font-weight: 690; lette
   .opportunity-banner .button { margin-left: 43px; }
   .app-footer { flex-wrap: wrap; gap: 9px 14px; font-size: 8px; }
   .lead-summary-strip { flex-wrap: wrap; gap: 10px 16px; }
-  .lead-status-tabs { gap: 3px; margin-right: 10px; margin-left: 10px; }
-  .lead-status-tab { min-width: 0; flex: 1; gap: 5px; padding: 0 6px; }
   .lead-toolbar { gap: 6px; padding-right: 10px; padding-left: 10px; }
   .lead-search kbd { display: none; }
   .lead-search { min-width: 100px; }
@@ -810,32 +792,6 @@ h1 { margin: 9px 0 5px; color: #242941; font-size: 25px; font-weight: 690; lette
   .toast-message { right: 12px; bottom: 12px; left: 12px; max-width: none; }
 }
 
-.lead-emails { margin-top: 16px; padding: 12px 0; border-top: 1px solid #e5e7eb; font-size: 0.85rem; }
-.lead-emails-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-.lead-emails ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
-.lead-emails li { display: grid; gap: 2px; padding: 8px; border: 1px solid #e5e7eb; border-radius: 6px; }
-.lead-emails li p { margin: 0; color: #4b5563; }
-.email-direction { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; }
-.email-direction.sent { color: #2563eb; }
-.email-direction.received { color: #059669; }
-.link-button { background: none; border: 0; padding: 0; color: #2563eb; cursor: pointer; text-decoration: underline; font: inherit; }
-.lead-emails ul { max-height: 520px; overflow-y: auto; }
-.lead-emails li small { overflow-wrap: anywhere; }
-.lead-emails li .email-body { max-height: 160px; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 6px; background: #f9fafb; border-radius: 4px; }
-.lead-emails .link-button, .lead-emails a.button { display: inline-flex; align-items: center; gap: 4px; }
-.lead-emails li, .lead-emails li small, .lead-emails li .email-body { font-size: calc(0.85rem - 2px); }
-.lead-emails li .email-direction { font-size: calc(0.7rem - 2px); }
-.lead-emails .gmail-disconnect { display: inline-flex; align-items: center; gap: 4px; padding: 5px 12px; border: 0; border-radius: 999px; background: #2563eb; color: #fff; font: inherit; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
-.lead-emails .gmail-disconnect:hover { background: #1d4ed8; }
-.detail-ai { position: relative; }
-.detail-ai:has(.gmail-controls) { padding-right: 190px; }
-.gmail-controls { position: absolute; top: 6px; right: 8px; display: inline-flex; align-items: center; gap: 4px; font-size: 9px; color: #6d66a4; }
-.gmail-controls .gmail-disconnect, .gmail-controls .gmail-connect { padding: 2px 8px; font-size: 9px; font-weight: 600; border: 0; border-radius: 999px; background: #2563eb; color: #fff; display: inline-flex; align-items: center; gap: 3px; cursor: pointer; text-decoration: none; }
-.lead-emails li, .lead-emails li small, .lead-emails li .email-body { font-size: calc(0.85rem - 3px); }
-.lead-emails li .email-direction { font-size: calc(0.7rem - 3px); }
-.detail-tabs { display: flex; gap: 4px; margin: 10px 0; border-bottom: 1px solid #e5e7eb; }
-.detail-tabs button { padding: 6px 14px; border: 0; border-bottom: 2px solid transparent; background: none; color: #6b7280; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
-.detail-tabs button.active { color: #6d66a4; border-bottom-color: #6d66a4; }
 /* ---------------------------------------------------------------------------
    Additions for the data-backed workspace: filters, dialogs, timeline, admin.
    --------------------------------------------------------------------------- */
@@ -1091,3 +1047,14 @@ h1 { margin: 9px 0 5px; color: #242941; font-size: 25px; font-weight: 690; lette
 @media (max-width: 640px) {
   .follow-up-suggestion-fields, .holiday-add { grid-template-columns: 1fr; }
 }
+
+/* ---- Lead Emails tab (Gmail, MAIL-01/03) ---- */
+.lead-emails { display: grid; gap: 10px; padding-top: 4px; }
+.lead-emails .gmail-controls { align-items: center; padding-top: 10px; }
+.lead-emails .gmail-controls .field-hint { flex-basis: 100%; }
+.email-list { display: grid; gap: 8px; }
+.email-entry { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid #eceef4; border-radius: 7px; background: #fff; }
+.email-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.email-head strong { flex: 1; min-width: 0; color: #2f3449; font-size: 11px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.email-head small, .email-entry > small { color: #8a90a2; font-size: 9px; overflow-wrap: anywhere; }
+.email-body { max-height: 160px; overflow-y: auto; margin: 2px 0 0; padding: 8px; border-radius: 5px; color: #50566c; background: #f8f9fc; font-size: 10px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }

@@ -10,6 +10,7 @@ import { fileSize, formatDate, formatDateTime, formatTimeOfDay, fromLocalInput, 
 import { suggestFollowUp } from "@/lib/natural-dates";
 import { useAsyncData } from "@/lib/useAsyncData";
 import { documentLabels, previewableMimeTypes, type LeadAttachment } from "@/features/attachments/model";
+import LeadEmails from "@/features/gmail/LeadEmails";
 import { useApp } from "@/features/shell/AppContext";
 import { Avatar, Dialog, EmptyState, ErrorText, Field, KeyValue, Loading, PromptDialog, StatusPill, Tabs } from "@/features/shell/components";
 import { createTask, updateTask } from "@/features/tasks/client";
@@ -22,7 +23,7 @@ import { attachmentUrl, fetchLead, logActivity, removeAttachment, reviewLead, se
 import LeadFormDialog from "./LeadFormDialog";
 import { activityLabels, type LeadActivity, type LoggableActivityType } from "./model";
 
-type Tab = "overview" | "timeline" | "files" | "profiles" | "tasks" | "history";
+type Tab = "overview" | "timeline" | "emails" | "files" | "profiles" | "tasks" | "history";
 
 const activityIcon = (type: LeadActivity["type"]) => {
   switch (type) {
@@ -136,6 +137,7 @@ export default function LeadDetailDialog({ leadId, onClose }: { leadId: number; 
           tabs={[
             { id: "overview", label: "Overview" },
             { id: "timeline", label: "Timeline", count: detail.activities.length },
+            { id: "emails", label: "Emails" },
             { id: "files", label: "Documents", count: documents.length },
             { id: "profiles", label: "Profiles shared", count: profiles.length },
             { id: "tasks", label: "Tasks", count: detail.tasks.filter((task) => task.status === "open").length },
@@ -153,6 +155,7 @@ export default function LeadDetailDialog({ leadId, onClose }: { leadId: number; 
           }} />
         )}
         {tab === "timeline" && <TimelineTab detail={detail} onLogged={(message) => refresh(message ?? "Activity recorded")} />}
+        {tab === "emails" && <LeadEmails leadId={lead.id} addresses={lead.clientEmails} />}
         {(tab === "files" || tab === "profiles") && (
           <FilesTab key={tab} category={tab === "files" ? "document" : "profile"} files={tab === "files" ? documents : profiles} leadId={lead.id} onChanged={(message) => refresh(message)} />
         )}

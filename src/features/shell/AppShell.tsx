@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   AlertCircle, Activity, BriefcaseBusiness, Building2, Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, Clock3, FileText, Flame, KeyRound,
   LayoutDashboard, ListTodo, LogOut, Map, Menu, PanelLeftClose, PanelLeftOpen, Search, Settings2, ShieldCheck, SlidersHorizontal, Target, TrendingUp, UsersRound,
@@ -107,6 +107,32 @@ export default function AppShell({ user, setUser, signOut }: { user: UserAccount
     const timer = window.setTimeout(() => setToast(null), toast.tone === "error" ? 5000 : 3000);
     return () => window.clearTimeout(timer);
   }, [toast]);
+
+  // The Gmail OAuth callback lands on /?gmail=<status>; show the outcome once and clean the URL. The ref keeps the
+  // outcome across StrictMode's double effect run, and the toast is raised from a timer callback, not the effect body.
+  const gmailOutcome = useRef<string | null>(null);
+  useEffect(() => {
+    if (gmailOutcome.current === null) {
+      const params = new URLSearchParams(window.location.search);
+      gmailOutcome.current = params.get("gmail") ?? "";
+      if (gmailOutcome.current) {
+        params.delete("gmail");
+        const search = params.toString();
+        window.history.replaceState(null, "", `${window.location.pathname}${search ? `?${search}` : ""}${window.location.hash}`);
+      }
+    }
+    const outcome = gmailOutcome.current;
+    if (!outcome) return;
+    const outcomes: Record<string, [string, ToastTone]> = {
+      connected: ["Gmail connected. Open a lead's Emails tab to see messages.", "success"],
+      denied: ["Gmail connection was cancelled.", "error"],
+      failed: ["Gmail could not be connected. Try again.", "error"],
+      not_configured: ["Gmail is not configured on this server.", "error"],
+    };
+    const [message, tone] = outcomes[outcome] ?? ["Gmail status updated.", "info"];
+    const timer = window.setTimeout(() => notify(message, tone), 0);
+    return () => window.clearTimeout(timer);
+  }, [notify]);
 
   const openLead = useCallback((id: number) => setActiveLeadId(id), []);
   const openNewLead = useCallback(() => setNewLeadOpen(true), []);

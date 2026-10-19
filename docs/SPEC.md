@@ -54,6 +54,7 @@ Next.js 16 (App Router) — route handlers under src/app/api/**            Node.
 | `BUSINESS_TIMEZONE` | optional | IANA zone, default `America/Toronto` (BR-12) |
 | `ATTACHMENT_DIR` | optional | Attachment root, default `./storage/attachments` |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | for email | Mailer; absent → email features report "not configured" |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GMAIL_TOKEN_KEY`, `GOOGLE_REDIRECT_URI` | for Gmail | OAuth client for Gmail linking (MAIL-01); the token key encrypts stored refresh tokens; redirect defaults to `APP_URL/api/gmail/callback`. Absent → the Emails tab reports "not configured" |
 
 `.env.setup.local` (administrator credentials, optional `MYSQL_APP_USER` and `MYSQL_APP_USER_HOST`) is used only by the setup scripts and never by the app. In Docker the `setup` service passes the same variables as environment and does not need the file.
 
@@ -190,7 +191,11 @@ setting_key PK · value_json. Keys: `role_labels` `{admin, sales_manager, recrui
 
 ### 3.13 `schema_migrations`
 
-version PK · name · applied_at. Versions: 1 core schema; 2 `users.auto_logout_time` and the `business_calendar` setting.
+version PK · name · applied_at. Versions: 1 core schema; 2 `users.auto_logout_time` and the `business_calendar` setting; 3 `gmail_connections`.
+
+### 3.14 `gmail_connections` (MAIL-01)
+
+user_id PK FK → users (CASCADE) · google_email VARCHAR(254) · refresh_token_encrypted TEXT (AES-256-GCM under SHA-256(`GMAIL_TOKEN_KEY`), stored as `iv.tag.ciphertext` base64) · created_at · updated_at. One link per user; reconnecting replaces it.
 
 ---
 
@@ -328,6 +333,16 @@ All endpoints return JSON; errors are `{ "error": string }` with status 400 (val
 | `GET /api/target-templates` · `POST` · `PATCH /{id}` · `POST /{id}/assign` `{ userIds }` | session / manage_targets |
 | `GET /api/audit?entityType=&entityId=&actorId=&limit=` | view_audit |
 
+### 6.8 Gmail (MAIL-01, MAIL-03)
+
+| Method & path | Auth | Request → response |
+|---|---|---|
+| `GET /api/gmail` | session | `{ configured, connectedEmail, allMailboxes }` (allMailboxes = view_team_reports) |
+| `DELETE /api/gmail` | session + same origin | removes the link and its token; audit `gmail.disconnected` |
+| `GET /api/gmail/connect` | session | sets a 10-minute `salestrackpro_gmail_state` cookie (path `/api/gmail`) and redirects to Google consent (scope `gmail.readonly openid email`, offline access) |
+| `GET /api/gmail/callback` | session | verifies `state`, exchanges the code, stores the encrypted refresh token and the Google email, audit `gmail.connected`; redirects to `/?gmail=connected\|denied\|failed`, which the shell shows as a toast |
+| `GET /api/leads/{id}/emails` | view_leads | `{ emails (newest 25 across mailboxes), failures }` for the lead's `client_emails`; the viewer's mailbox, or every connected mailbox for view_team_reports. Each mailbox is queried live (`from:/to:/cc:` search, ten messages per mailbox); a mailbox whose token no longer works counts as a failure instead of breaking the response |
+
 ---
 
 ## 7. Domain logic
@@ -402,7 +417,8 @@ Client use: `features/tasks/NaturalDateField` shows "Understood “…” as <da
 |---|---|
 | `features/auth` | `AuthScreen`, `ChangePasswordDialog` |
 | `features/dashboard` | `ActionCenter` |
-| `features/leads` | `LeadListPage` (toolbar, filters panel, bulk bar, pagination), `LeadTable`, `LeadFormDialog` (all fields), `LeadDetailDialog` (Overview, Timeline, Documents, Profiles shared, Tasks, Audit tabs; transfer, archive/restore, approve/reject, schedule follow-up, quick BD action/response/status updates) |
+| `features/gmail` | `LeadEmails` (Emails tab: configuration note, connect/disconnect, recent messages), `client.ts`, server `gmail.ts` (OAuth exchange, token encryption, Gmail search) |
+| `features/leads` | `LeadListPage` (toolbar, filters panel, bulk bar, pagination), `LeadTable`, `LeadFormDialog` (all fields), `LeadDetailDialog` (Overview, Timeline, Emails, Documents, Profiles shared, Tasks, Audit tabs; transfer, archive/restore, approve/reject, schedule follow-up, quick BD action/response/status updates) |
 | `features/tasks` | `TasksPage` (Overdue / Today / Upcoming / Done columns, mine/team), `TaskFormDialog` (lead search, assignee, typed or picked due date, priority, checklist), `NaturalDateField` (TASK-03 preview) |
 | `features/reports` | `ReportsPage` (period chips, user filter, stat tiles, daily stacked bars, performance table with drill-down dialog, CSV export) |
 | `features/admin` | `AdminPage` router, `UsersPanel` (+ `UserFormDialog`, password dialog, terminate dialog, login history), `ListValuesPanel`, `TargetsPanel`, `SettingsPanel` (role names, reminder days, business-calendar holidays), device placeholder |
@@ -494,9 +510,9 @@ As built: all fields in a two-column dialog; owner selector for admins on create
 | Latest interactions (newest first)            |
 | [Add Note] [Mic] [Message @user/@all...]      |
 ```
-As built tabs: Overview, Timeline (log call/email/visit, add note), Documents, Profiles shared, Tasks, Audit (admins). Header actions: Edit, Transfer, Approve/Reject, Archive/Restore; status select in the header.
+As built tabs: Overview, Timeline (log call/email/visit, add note), Emails (Gmail, A6), Documents, Profiles shared, Tasks, Audit (admins). Header actions: Edit, Transfer, Approve/Reject, Archive/Restore; status select in the header.
 
-### A6. Gmail / Email Tab — planned (see §10.2)
+### A6. Gmail / Email Tab — partial: recent messages through a connected Gmail account (see §6.8 and §10.2)
 
 ```
 +---------------------------------------------------------------------+
@@ -630,7 +646,9 @@ As built: templates table (name, stage, daily/weekly leads, daily/weekly visits,
 OAuth 2.0 authorization-code flow with PKCE via a `/api/auth/google` start and `/api/auth/google/callback` route. Match the verified Google email to an active `users` row (no auto-provisioning, per AUTH-01), then create the normal session. Store the Google subject id in a new `user_identities(user_id, provider, subject)` table.
 
 ### 10.2 Gmail integration (MAIL-*)
-Per-user mailbox authorization (Gmail API `readonly` + `send` scopes) with refresh tokens in `mailbox_connections`. A background sync (cron or queue) pulls messages whose participants match a lead's `client_emails` and stores headers/bodies in `lead_emails` (lead_id, message_id, thread_id, direction, from, to, subject, snippet, body, sent_at) and attachments metadata. Ownership change switches the mailbox used for future association; history stays. The Email tab renders threads; reply/forward call the Gmail send API. AI summaries (email and interaction) are generated by an LLM over the thread and timeline, cached in `lead_summaries` with a hash of the inputs and refreshed when inputs change.
+As built (first cut, §6.8): per-user read-only Gmail link with the refresh token encrypted in `gmail_connections`; the Emails tab queries Gmail live for the lead's client addresses and lists the newest messages with body text. Still planned, as designed below: stored threads, owner-mailbox association on transfer, reply/forward, attachments, and summaries.
+
+Target design: per-user mailbox authorization (Gmail API `readonly` + `send` scopes) with refresh tokens in `mailbox_connections`. A background sync (cron or queue) pulls messages whose participants match a lead's `client_emails` and stores headers/bodies in `lead_emails` (lead_id, message_id, thread_id, direction, from, to, subject, snippet, body, sent_at) and attachments metadata. Ownership change switches the mailbox used for future association; history stays. The Email tab renders threads; reply/forward call the Gmail send API. AI summaries (email and interaction) are generated by an LLM over the thread and timeline, cached in `lead_summaries` with a hash of the inputs and refreshed when inputs change.
 
 ### 10.3 Collaboration and notifications (COLL-*, NTF-*)
 `lead_messages` (lead_id, parent_id, author_id, body_rich, edited_at, deleted_at) with mention parsing into `message_mentions`. A `notifications` table (user_id, type, entity, read_at) fed by the same events that already write `audit_log`; delivery workers send email (existing mailer) and push (FCM/APNs) by preference. Real-time via Server-Sent Events from `/api/events` (presence and typing use short-lived rows keyed by lead).
@@ -665,4 +683,4 @@ Store notes as sanitized HTML from a constrained editor (bold, italic, lists, li
 - `npm run typecheck`, `npm run lint`, `npm run build` must pass.
 - Unit tests (`tests/unit`, `node:test` on Node 22 type stripping, `npm run test:unit`): the natural-language date parser (working days, relative phrases, weekday names, periods, month names, explicit spellings, times of day) and the note follow-up suggestion rules.
 - End-to-end API suite (kept outside the repo during development) covers: first-run setup, bootstrap key lock-out, login and origin checks, seeding, reference data, role permissions for every mutating endpoint, queued review, edit/transfer rules, activities, lead 360 and audit visibility, tasks and checklists, uploads with versioning and type rejection, downloads, soft delete, dashboard, team and own reports, all periods, drill-down, list-value rename propagation and inactive-value rejection, settings, templates and assignment, user updates with extra privileges, bulk archive/restore/reassign, login history, admin and self password changes, SMTP-missing responses, termination cascade and session revocation, last-admin guard, audit action coverage, rate limiting, sign-out.
-- Browser end-to-end suite (`tests/e2e`, Selenium + `node:test`, run with `scripts/e2e.sh` against a production build, an in-memory MySQL, and a Chromium grid in Docker): first-time setup, sign-in, password change and reset messaging, lead life cycle (create, BD action, timeline, note that offers a follow-up task, follow-up task, document upload, edit, status, search, archive/restore), tasks (including a due date typed in words), user creation, a per-account sign-out time ending an older session, role-limited navigation, queued-lead approval, transfer, termination hand-off, list of values, settings, business-calendar holiday, target templates, report drill-down.
+- Browser end-to-end suite (`tests/e2e`, Selenium + `node:test`, run with `scripts/e2e.sh` against a production build, an in-memory MySQL, and a Chromium grid in Docker): first-time setup, sign-in, password change and reset messaging, lead life cycle (create, BD action, timeline, note that offers a follow-up task, Emails tab without Gmail configured, follow-up task, document upload, edit, status, search, archive/restore), tasks (including a due date typed in words), user creation, a per-account sign-out time ending an older session, role-limited navigation, queued-lead approval, transfer, termination hand-off, list of values, settings, business-calendar holiday, target templates, report drill-down.

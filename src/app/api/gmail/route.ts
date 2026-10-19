@@ -1,25 +1,32 @@
 import { NextResponse } from "next/server";
-import { getRequestUser, isSameOriginRequest } from "@/features/users/session";
+import { handleRouteError, requireSameOrigin } from "@/lib/http";
 import { getConnectionEmail, googleConfig, removeConnection } from "@/features/gmail/gmail";
+import type { GmailStatus } from "@/features/gmail/model";
+import { hasPrivilege, requireUser } from "@/features/users/session";
 
+/** Gmail link status for the signed-in user (MAIL-01). */
 export async function GET() {
-  const user = await getRequestUser();
-  if (!user) return NextResponse.json({ error: "Sign in to use Gmail." }, { status: 401 });
   try {
-    return NextResponse.json({
+    const user = await requireUser();
+    const status: GmailStatus = {
       configured: Boolean(googleConfig()),
       connectedEmail: (await getConnectionEmail(user.id)) ?? null,
-      isAdmin: user.role === "Administrator",
-    });
-  } catch {
-    return NextResponse.json({ error: "Gmail status could not be loaded." }, { status: 503 });
+      allMailboxes: hasPrivilege(user, "view_team_reports"),
+    };
+    return NextResponse.json(status);
+  } catch (error) {
+    return handleRouteError(error, "Gmail status");
   }
 }
 
+/** Removes the signed-in user's Gmail link and its stored refresh token. */
 export async function DELETE(request: Request) {
-  if (!isSameOriginRequest(request)) return NextResponse.json({ error: "Request origin rejected." }, { status: 403 });
-  const user = await getRequestUser();
-  if (!user) return NextResponse.json({ error: "Sign in to use Gmail." }, { status: 401 });
-  await removeConnection(user.id);
-  return NextResponse.json({ ok: true });
+  try {
+    requireSameOrigin(request);
+    const user = await requireUser();
+    await removeConnection(user.id);
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return handleRouteError(error, "Disconnect Gmail");
+  }
 }

@@ -19,7 +19,7 @@ const maxTwoFactorAttempts = 5;
 
 // Cookies are Secure in production unless APP_URL declares a plain-http deployment (an internal host without TLS,
 // or the end-to-end stack); browsers drop Secure cookies over http on anything but localhost.
-const secureCookies = process.env.NODE_ENV === "production" && !/^http:\/\//i.test(process.env.APP_URL?.trim() ?? "");
+export const secureCookies = process.env.NODE_ENV === "production" && !/^http:\/\//i.test(process.env.APP_URL?.trim() ?? "");
 const baseCookie = { httpOnly: true, secure: secureCookies, sameSite: "lax" as const, path: "/" };
 export const sessionCookieOptions = { ...baseCookie, maxAge: sessionLifetimeSeconds };
 export const twoFactorCookieOptions = { ...baseCookie, maxAge: twoFactorLifetimeSeconds };

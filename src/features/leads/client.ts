@@ -44,15 +44,5 @@ export async function uploadAttachment(leadId: number, file: File, category: "do
   return result.attachment;
 }
 
-export function leadPayload(lead: StoredLead, recordState: LeadRecordState): LeadRecordInput {
-  return {
-    ...lead,
-    companyUrl: lead.companyUrl ?? "",
-    contactEmail: lead.contactEmail ?? "",
-    alternateEmail: lead.alternateEmail ?? "",
-    contactPhone: lead.contactPhone ?? "",
-    recordState,
-  };
-}
 export const removeAttachment = (id: number) => api<{ ok: true }>(`/api/attachments/${id}`, { method: "DELETE" });
 export const attachmentUrl = (id: number, download = false) => `/api/attachments/${id}${download ? "?download=1" : ""}`;

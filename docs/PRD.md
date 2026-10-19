@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Source | `Sales_Tracker_App_BRD_SRS.docx`, version 1.0, dated October 13, 2026 |
+| Source | `Sales_Tracker_App_BRD_SRS.docx`, version 1.0, dated October 13, 2026. An updated BRD/SRS (`docs/Sales_Tracker_App_BRD_SRS_Updated.pdf`) was added on October 19, 2026 and has not yet been reconciled with this PRD |
 | PRD version | 1.0 — October 17, 2026; reviewed October 18, 2026 (no requirement changes; packaging and verification notes added) |
 | Companion | `SPEC.md` (technical specification and screen designs) |
 | Status legend | **Implemented** — in the current codebase · **Partial** — some of the requirement is built · **Planned** — not started, depends on an external service or a later phase |
@@ -35,7 +35,7 @@ React frontend, Node.js backend, responsive web experience, Android and iPhone s
 |---|---|---|
 | Phase 1 — Core | Roles, authentication, leads with the full field set, ownership, queued leads, search/filter/archive, interaction timeline, tasks, documents and profiles, action center, targets, reports, user administration, list of values, audit | Implemented (see per-requirement status) |
 | Phase 2 — Internal features | Collaboration threads and mentions, in-app notifications, rich-text notes, device authorization | Planned |
-| Phase 3 — Integrations | Google sign-in, Gmail linking and AI summaries, voice-to-text, OCR, job-board and review data, route optimization, push/email notifications | Planned |
+| Phase 3 — Integrations | Google sign-in, Gmail linking and AI summaries, voice-to-text, OCR, job-board and review data, route optimization, push/email notifications | Planned; a first cut of Gmail linking (per-user read-only mailbox link, lead Emails tab) is built and waits on a Google Cloud OAuth client |
 
 ---
 
@@ -218,9 +218,9 @@ React frontend, Node.js backend, responsive web experience, Android and iPhone s
 
 | ID | Requirement | Status |
 |---|---|---|
-| MAIL-01 | Emails sent to and received from the client email addresses are linked to the lead. | Planned |
-| MAIL-02 | The owner's mailbox is the primary mailbox; on transfer, future association follows the new owner, history is preserved. | Planned |
-| MAIL-03 | Lead Email tab shows sent and received emails as threads in chronological conversation view, with sender, recipients, subject, timestamp, body preview/body, and permitted attachments. | Planned |
+| MAIL-01 | Emails sent to and received from the client email addresses are linked to the lead. | Partial — the lead's Emails tab lists recent messages whose sender or recipients include one of the lead's client emails, read live from the viewer's connected Gmail (administrators: every connected mailbox). Messages are not stored per lead yet |
+| MAIL-02 | The owner's mailbox is the primary mailbox; on transfer, future association follows the new owner, history is preserved. | Planned (today the viewer's own mailbox is read, not the owner's) |
+| MAIL-03 | Lead Email tab shows sent and received emails as threads in chronological conversation view, with sender, recipients, subject, timestamp, body preview/body, and permitted attachments. | Partial — newest 25 messages with direction, sender, recipients, subject, time, and body text; threads and attachments planned |
 | MAIL-04 | Reply, forward, and attach from within the application when authorized. | Planned |
 | MAIL-05 | Create follow-up tasks from emails. | Planned |
 | MAIL-06 | AI suggests a follow-up email from the full thread. | Planned |
@@ -372,7 +372,7 @@ All lists are Admin-maintainable. Seeded values:
 
 1. **Device identification.** Standard browsers cannot read a MAC address. Device authorization needs either a managed-device identifier (MDM), a native/mobile wrapper, or a registration token per browser. Decision pending.
 2. **Email delivery.** Password reset, invitations, and 2FA depend on SMTP credentials that are not yet available. Until then Admins set passwords directly and 2FA cannot be enabled.
-3. **Google Workspace.** OAuth sign-in and Gmail linking need a Google Cloud project, verified consent screen, and domain-wide or per-user authorization.
+3. **Google Workspace.** OAuth sign-in and Gmail linking need a Google Cloud project, verified consent screen, and domain-wide or per-user authorization. The Gmail link is coded (per-user consent, read-only scope) and stays dormant until `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GMAIL_TOKEN_KEY` are set.
 4. **External data sources.** Indeed, company careers pages, Glassdoor, and Google reviews have their own terms; the BRD scopes these to "when lawfully/technically available".
 5. **Business calendar.** Resolved: Admins keep the public-holiday list under Settings → Business calendar. Weekends and listed holidays are non-working days for "yesterday" in reports, target scaling, and natural-language dates.
 6. **Native mobile.** Android/iPhone support is met by the responsive web app for now; native apps (camera capture, push) are Phase 3.
@@ -397,7 +397,7 @@ All lists are Admin-maintainable. Seeded values:
 | §12 Collaboration | COLL-01..06 | Planned |
 | §13 Files | FILE-01..08 | Implemented except AI summaries and upload notifications |
 | §14 OCR | OCR-01..03 | Planned |
-| §15 Gmail | MAIL-01..09 | Planned |
+| §15 Gmail | MAIL-01..09 | Partial (recent messages via connected Gmail; threads, send, summaries planned) |
 | §16 Lead generation | LGEN-01..05 | Planned (preview) |
 | §17 Road planner | PLAN-01..04 | Planned (preview); visits feed reports |
 | §18 Targets | TGT-01..06 | Implemented |

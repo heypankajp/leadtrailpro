@@ -8,7 +8,7 @@ SalesTrackPro is a sales workspace for a staffing and recruitment business, buil
 |---|---|
 | Stack | Next.js 16.4 (App Router, Turbopack), React 19, TypeScript 5, MySQL 8.4 (5.7 also works), hand-written CSS |
 | Packaging | Docker: hot-reloading development stack, standalone production image, one-shot setup service |
-| Tests | ESLint, `tsc`, production build, a unit suite for the natural-language date parser, and a 34-test Selenium browser suite that runs in Docker |
+| Tests | ESLint, `tsc`, production build, a unit suite for the natural-language date parser, and a 35-test Selenium browser suite that runs in Docker |
 | Email | Password resets, set-password links, and two-factor codes stay dormant until `SMTP_*` is configured |
 | Preview pages | Lead generation and the road visit planner show sample content until data sources are connected |
 
@@ -70,8 +70,18 @@ The setup step writes the database settings and a commented template for the res
 | `BUSINESS_TIMEZONE` | Business day for follow-ups, weekly targets, reports, and each account's daily auto sign-out time (default `America/Toronto`) |
 | `ATTACHMENT_DIR` | Where uploaded documents and profiles are stored (default `./storage/attachments`) |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Outbound email for password resets, set-password links, and two-factor codes |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GMAIL_TOKEN_KEY`, `GOOGLE_REDIRECT_URI` | Gmail linking for the lead Emails tab. The token key is any long random string that encrypts stored refresh tokens; the redirect URI defaults to `APP_URL/api/gmail/callback` |
 
 Email features stay dormant until the `SMTP_*` settings are filled in. Until then administrators set passwords directly from User management and two-factor cannot be switched on.
+
+### Gmail linking
+
+Each user connects their own Google account from a lead's **Emails** tab (read-only Gmail scope). The tab then lists recent messages exchanged with the lead's client email addresses; administrators see messages from every connected mailbox. To enable it:
+
+1. In Google Cloud Console, enable the Gmail API and create an OAuth client of type Web application with the redirect URI `<APP_URL>/api/gmail/callback` (for local development `http://localhost:3000/api/gmail/callback`).
+2. Put `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GMAIL_TOKEN_KEY` in `.env.local` and restart the app. The `gmail_connections` table is created by the schema script (migration 3).
+
+Until these exist the Emails tab explains that Gmail is not configured, and emails are logged by hand on the Timeline.
 
 The setup scripts read `.env.setup.local` (administrator credentials) instead; it also accepts `MYSQL_APP_USER` and `MYSQL_APP_USER_HOST` (the host part of the app account, `%` for access from another machine or container).
 
@@ -105,7 +115,8 @@ src/lib/                 database pool, dates and timezone, HTTP helpers, mailer
 scripts/                 create-database.mjs (migrations), create-app-user.mjs, seed-sample-data.mjs,
                          docker-entrypoint.sh (dev container), e2e.sh (browser suite runner)
 tests/e2e/               Selenium end-to-end suite (node:test) with helpers/ui.mjs and helpers/data.mjs
-docs/                    PRD.md (requirements with IDs and status), SPEC.md (design, API, data model, screens)
+docs/                    PRD.md (requirements with IDs and status), SPEC.md (design, API, data model, screens),
+                         Sales_Tracker_App_BRD_SRS_Updated.pdf (the updated BRD/SRS, not yet reconciled with PRD.md)
 Dockerfile               targets: dev (hot reload) and runner (standalone production image)
 compose.yaml             db, app, setup, and the `test` profile (db-test, app-test, selenium, e2e)
 compose.prod.yaml        production override
@@ -117,6 +128,7 @@ compose.prod.yaml        production override
 - **Sign-in and security.** Email and password with scrypt hashes, database-backed sign-in rate limiting and login history, optional email two-factor codes, per-account daily auto sign-out at a configurable time, change password, forgot-password links, and administrator password resets.
 - **Leads.** All BRD section 6 fields, owner as a user reference, creator becomes owner, transfer and administrator reassignment (open tasks follow the lead), bulk archive, restore, and reassign, independent archive search, and queued leads for historical first-contact dates with approve and reject.
 - **Timeline.** Logged calls, emails, visits, and interaction notes, plus automatic entries for status, BD action, client response, follow-up, transfer, state, task, and file events. Most recently active leads sort first.
+- **Emails (Gmail).** Each user can link their Gmail account; a lead's Emails tab lists recent messages to or from the lead's client addresses with direction, sender, recipients, subject, time, and body text. Administrators see every connected mailbox. Dormant until a Google OAuth client is configured.
 - **Search and filters.** Keyword search across lead fields and notes; filters for lead type, status, category, size, city, owner, client response, BD action, and date ranges; sortable, paginated lists.
 - **Tasks.** Tasks with lead, assignee, due date and time, priority, description, and checklist. Due dates can be typed in words (“next Monday at 10am”, “in two weeks”, “Feb 1”, “January”) and are shown for confirmation before saving; month names and relative periods skip weekends and business-calendar holidays. Follow-ups scheduled from a lead set the follow-up date and create a reminder task, and a note that mentions a next step with a date (“follow up next week”, “send the proposal by Friday”) offers to create that task when the note is saved.
 - **Files.** Documents and a separate Resumes/Profiles Shared area, with in-app preview for PDF, images, text, and Word files, version numbers for re-uploads, and administrator soft delete.
@@ -127,7 +139,7 @@ compose.prod.yaml        production override
 
 ## Not yet connected
 
-Google sign-in, Gmail linking and AI summaries, voice-to-text, OCR of business cards, collaboration threads and mentions, push and email notifications, device authorization, rich-text notes, and live job-board, review, or routing data. Lead generation and the road visit planner show sample content. Designs for these are in SPEC.md section 10.
+Google sign-in, stored email threads with reply and forward, AI summaries, voice-to-text, OCR of business cards, collaboration threads and mentions, push and email notifications, device authorization, rich-text notes, and live job-board, review, or routing data. Lead generation and the road visit planner show sample content. Designs for these are in SPEC.md section 10.
 
 ## Checks and tests
 
@@ -148,19 +160,11 @@ Inside Docker, prefix each with `docker compose exec app`.
 scripts/e2e.sh                               # whole suite
 scripts/e2e.sh tests/e2e/02-leads.test.mjs   # one or more files
 ```
-The app uses representative sample data. Persistent storage, authentication and role enforcement, Gmail, AI, OCR, live job sources, and route optimization are not connected; those limitations are documented in README.md.
-## Gmail integration
-
-The lead overview shows recent emails exchanged with the lead's executive and alternate email addresses. Each user connects their own Gmail (read-only scope); administrators see emails from every connected mailbox.
-
-1. In Google Cloud Console, enable the Gmail API and create an OAuth client (Web application) with the redirect URI `http://localhost:3000/api/gmail/callback`.
-2. Add to `.env.local`: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GMAIL_TOKEN_KEY` (any long random string; encrypts stored refresh tokens) and optionally `GOOGLE_REDIRECT_URI`.
-3. Run `npm run db:create` to add the `gmail_connections` table, then restart the dev server.
 
 | File | Covers |
 |---|---|
 | `01-auth.test.mjs` | Sign-in screen, first administrator via the setup link, sign out, wrong password, reset-email message without SMTP, password change and re-login |
-| `02-leads.test.mjs` | Create a lead, BD action, call and note on the timeline, a note that offers and creates a follow-up task, follow-up that becomes a task, document upload, edit, status change, list and global search, archive and restore |
+| `02-leads.test.mjs` | Create a lead, BD action, call and note on the timeline, a note that offers and creates a follow-up task, Emails tab without Gmail configured, follow-up that becomes a task, document upload, edit, status change, list and global search, archive and restore |
 | `03-tasks.test.mjs` | Create a task linked to a lead, complete it, edit it, type a due date in words and confirm the resolved date |
 | `04-team.test.mjs` | Create a Sales Manager, a per-account sign-out time ends a session started before it, role-limited navigation, historical date queues a lead, admin approval, transfer, termination hand-off, terminated account cannot sign in |
 | `05-admin-reports.test.mjs` | List of values, role rename reflected in the sidebar, business-calendar holiday, target template, report drill-down, action-center metric link |

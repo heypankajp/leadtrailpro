@@ -74,6 +74,12 @@ describe("Leads", () => {
     await page.wait(By.xpath('//article[contains(@class,"timeline-entry")]//strong[starts-with(normalize-space(.), "Follow-up scheduled for")]'));
   });
 
+  uiTest("the Emails tab explains that Gmail is not configured", async () => {
+    await page.tab("Emails");
+    const note = await page.wait(By.css(".lead-emails .note-warning"));
+    assert.match(await note.getText(), /Gmail is not configured/);
+  });
+
   uiTest("schedules a follow-up that becomes a task", async () => {
     await page.tab("Overview");
     await page.clickButton("Schedule follow-up");
