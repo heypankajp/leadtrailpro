@@ -1018,3 +1018,32 @@ h1 { margin: 9px 0 5px; color: #242941; font-size: 25px; font-weight: 690; lette
   .detail-summary > .detail-owner { padding: 0; border-left: 0; }
   .modal-wide, .modal-narrow { width: 100%; }
 }
+
+/* ---- Natural-language dates, note follow-up suggestions, business calendar (TASK-03, NOTE-05, AUTH-07) ---- */
+.natural-date-hint.is-resolved { color: #3f8a6b; }
+.natural-date-hint.is-resolved strong { font-weight: 650; }
+.natural-date-hint.is-unresolved { color: #c25f58; }
+.follow-up-suggestion { align-items: flex-start; color: #4d5a8a; background: #f3f5fd; }
+.follow-up-suggestion svg { color: #5f70df; margin-top: 2px; }
+.follow-up-suggestion-body { display: grid; flex: 1; gap: 8px; min-width: 0; }
+.follow-up-suggestion-body .checklist-item { align-items: flex-start; color: #4d5a8a; font-size: 9px; font-weight: 500; line-height: 1.5; }
+.follow-up-suggestion-body .checklist-item input { flex: 0 0 auto; margin-top: 2px; }
+.follow-up-suggestion-fields { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.follow-up-suggestion-fields input { width: 100%; min-height: 31px; padding: 0 8px; border: 1px solid #dfe3f3; border-radius: 6px; color: #50566c; background: #fff; font-size: 10px; }
+.holiday-editor { grid-template-columns: 1fr; gap: 8px; }
+.holiday-editor legend { display: inline-flex; align-items: center; gap: 5px; }
+.holiday-editor > .field-hint { margin: 0; }
+.holiday-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.holiday-row { display: flex; align-items: center; gap: 10px; min-height: 31px; padding: 0 10px; border: 1px solid #eceef4; border-radius: 6px; color: #50566c; font-size: 10px; }
+.holiday-row strong { font-weight: 600; white-space: nowrap; }
+.holiday-row span { flex: 1; min-width: 0; overflow: hidden; color: #71778a; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+.holiday-row button { display: inline-grid; place-items: center; padding: 2px; border: 0; border-radius: 50%; background: #eef0f5; color: #7b8194; cursor: pointer; }
+.holiday-add { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: 8px; align-items: end; }
+.holiday-add .button { min-height: 35px; }
+.security-options .inline-time { flex-wrap: wrap; }
+.security-options input[type="time"] { min-height: 29px; padding: 0 6px; border: 1px solid #e8eaf0; border-radius: 6px; color: #50566c; background: #fff; font-size: 10px; }
+.security-options input[type="time"]:disabled { color: #b2b6c2; background: #f8f9fc; }
+.security-options .inline-time small { flex-basis: 100%; }
+@media (max-width: 640px) {
+  .follow-up-suggestion-fields, .holiday-add { grid-template-columns: 1fr; }
+}

@@ -23,7 +23,8 @@ export async function PATCH(request: Request) {
     if (!body) return jsonError(400, "Invalid settings.");
     const roleLabels = body.roleLabels && typeof body.roleLabels === "object" ? body.roleLabels as Record<string, string> : undefined;
     const reminders = body.reminders && typeof body.reminders === "object" ? body.reminders as { inactivityDays?: number } : undefined;
-    const settings = await updateSettings({ roleLabels, reminders }, user.id);
+    const holidays = body.holidays !== undefined ? body.holidays : undefined;
+    const settings = await updateSettings({ roleLabels, reminders, holidays }, user.id);
     return NextResponse.json({ settings });
   } catch (error) {
     return handleRouteError(error, "Update settings");

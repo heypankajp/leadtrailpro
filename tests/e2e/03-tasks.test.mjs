@@ -57,4 +57,18 @@ describe("Tasks and reminders", () => {
     await page.toast("Task updated");
     await page.wait(By.xpath(`//strong[normalize-space()=${xq(`${title} (updated)`)}]`));
   });
+
+  uiTest("understands a due date typed in words", async () => {
+    const typed = `Send the proposal ${runId}`;
+    await page.clickButton("Create task", { global: true });
+    await page.dialogTitle("Create task");
+    await page.fill("Title", typed);
+    await page.fill("Type a due date", "next Monday at 10am");
+    const hint = await page.wait(By.css(".natural-date-hint.is-resolved"));
+    assert.match(await hint.getText(), /Understood \u201cnext Monday\u201d as .* 10:00 AM/);
+    assert.match(await (await page.control("Due date and time")).getAttribute("value"), /^\d{4}-\d{2}-\d{2}T10:00$/, "the resolved date is shown in the date picker for confirmation");
+    await page.clickButton("Create task");
+    await page.toast("Task created");
+    await page.wait(By.xpath(`//section[contains(@class,"task-column")][.//h2[contains(normalize-space(.),"Upcoming")]]//strong[normalize-space()=${xq(typed)}]`));
+  });
 });

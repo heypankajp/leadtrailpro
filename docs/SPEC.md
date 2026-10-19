@@ -109,6 +109,7 @@ All tables: InnoDB, utf8mb4, `utf8mb4_unicode_ci`.
 | is_active | BOOLEAN | false after termination |
 | terminated_at | DATETIME NULL | |
 | two_factor_enabled, auto_logout_enabled | BOOLEAN | AUTH-06, AUTH-07 |
+| auto_logout_time | CHAR(5) DEFAULT '23:00' | AUTH-07: daily sign-out time `HH:MM` in the business timezone (migration 2) |
 | target_template_id | INT UNSIGNED NULL FK → target_templates (SET NULL) | explicit assignment; otherwise stage default |
 | created_at, updated_at | TIMESTAMP | |
 
@@ -185,11 +186,11 @@ id · name VARCHAR(80) UNIQUE · stage · daily_leads · weekly_leads · daily_v
 
 ### 3.12 `app_settings`
 
-setting_key PK · value_json. Keys: `role_labels` `{admin, sales_manager, recruiter}` (ROLE-02), `reminders` `{inactivityDays}` (TASK-05).
+setting_key PK · value_json. Keys: `role_labels` `{admin, sales_manager, recruiter}` (ROLE-02), `reminders` `{inactivityDays}` (TASK-05), `business_calendar` `{holidays: [{date, name}]}` sorted by date (RPT-03, TASK-03).
 
 ### 3.13 `schema_migrations`
 
-version PK · name · applied_at.
+version PK · name · applied_at. Versions: 1 core schema; 2 `users.auto_logout_time` and the `business_calendar` setting.
 
 ---
 
@@ -199,7 +200,7 @@ version PK · name · applied_at.
 |---|---|
 | Password hashing | Node `scrypt`, 16-byte random salt, 64-byte key, constant-time compare. Unknown accounts hash a dummy value so timing does not reveal existence (AUTH-01). |
 | Session | 32 random bytes (base64url) in cookie `salestrackpro_session` (httpOnly, SameSite=Lax, Secure in production unless `APP_URL` is `http://`, 8 h). Only the SHA-256 hash is stored. Sessions are deleted on sign-out, password change (other sessions), termination, and deactivation. |
-| Auto sign-out (AUTH-07) | On every request, if the account has `auto_logout_enabled` and the session was created before the latest 23:00 in the business timezone, the session is deleted and the request is treated as signed out. |
+| Auto sign-out (AUTH-07) | On every request, if the account has `auto_logout_enabled` and the session was created before the latest occurrence of the account's `auto_logout_time` (default 23:00) in the business timezone, the session is deleted and the request is treated as signed out. |
 | Two-factor (AUTH-06) | Password OK + `two_factor_enabled` → create `email_tokens` row (purpose `two_factor`, hash of a 6-digit code, hash of a random challenge), set cookie `salestrackpro_2fa` (10 min), email the code, respond `{requiresTwoFactor:true}`. `POST /api/auth/two-factor` matches cookie + code, max 5 attempts, then creates the session and clears the challenge cookie. Requires SMTP; sign-in explains when it is missing. |
 | Password reset (AUTH-05) | `POST /api/auth/forgot-password` always returns 200 when SMTP exists (503 "not configured" otherwise); creates a 30-minute token (max 3 per 15 min per user) and emails `${APP_URL}/?reset=<token>`. The SPA reads `?reset=`, shows the reset form, and calls `POST /api/auth/reset-password`, which consumes the token and revokes all sessions. Admins can trigger the same email per user (invitation). |
 | Rate limiting (AUTH-11) | `login_history` counts failures in the last 15 minutes: ≥10 per email or ≥50 per address → 429. Works across instances and restarts. |
@@ -267,9 +268,9 @@ All endpoints return JSON; errors are `{ "error": string }` with status 400 (val
 
 | Method & path | Auth | Response |
 |---|---|---|
-| `GET /api/reference` | session | `{ listValues (active, by key), users (active directory), roleLabels, inactivityDays, targetTemplates, mailerConfigured, today, timeZone }` |
+| `GET /api/reference` | session | `{ listValues (active, by key), users (active directory), roleLabels, inactivityDays, holidays (dates), targetTemplates, mailerConfigured, today, timeZone }` |
 | `GET /api/settings` | session | `{ settings, mailerConfigured, timeZone }` |
-| `PATCH /api/settings` | manage_settings | `{ roleLabels?, reminders? }` → `{ settings }` |
+| `PATCH /api/settings` | manage_settings | `{ roleLabels?, reminders?, holidays? [{date, name}] }` → `{ settings }` (holidays: valid dates, names ≤ 80 characters, ≤ 400 entries, duplicates collapse) |
 
 ### 6.3 Users
 
@@ -278,7 +279,7 @@ All endpoints return JSON; errors are `{ "error": string }` with status 400 (val
 | `GET /api/users` | manage_users (or `?mode=directory` for any user; or bootstrap key) | `{ users }` |
 | `POST /api/users` | manage_users or bootstrap key | CreateUserInput → `{ user }` (201) |
 | `GET /api/users/{id}` | manage_users | `{ user, loginHistory }` |
-| `PATCH /api/users/{id}` | manage_users | partial user (names, email, phone, role, stage, extraPrivileges, twoFactorEnabled, autoLogoutEnabled, targetTemplateId, active). Guards: last active admin, self-deactivation. |
+| `PATCH /api/users/{id}` | manage_users | partial user (names, email, phone, role, stage, extraPrivileges, twoFactorEnabled, autoLogoutEnabled, autoLogoutTime `HH:MM`, targetTemplateId, active). Guards: last active admin, self-deactivation. |
 | `POST /api/users/{id}/terminate` | manage_users | `{ reassignToUserId, reason }` → `{ leadsReassigned, tasksReassigned, user }` |
 | `POST /api/users/{id}/password` | manage_users | `{ password }` |
 | `POST /api/users/{id}/reset-link` | manage_users | emails a set-password link (503 without SMTP) |
@@ -294,7 +295,7 @@ All endpoints return JSON; errors are `{ "error": string }` with status 400 (val
 | `POST /api/leads/{id}/transfer` | canTransferLead | `{ ownerId, reason }` |
 | `POST /api/leads/{id}/review` | review_queued | `{ approve, comment }` |
 | `POST /api/leads/{id}/state` | archive_leads | `{ state: active\|archived, reason }` |
-| `POST /api/leads/{id}/activities` | add_notes (note) / log_activities (call, email, visit) | `{ type, summary, body, occurredAt }` → `{ activity, lead }` |
+| `POST /api/leads/{id}/activities` | add_notes (note) / log_activities (call, email, visit); manage_tasks for `followUpTask` | `{ type, summary, body, occurredAt, followUpTask?: { title, description?, dueAt, assigneeId? (owner), priority?, setFollowUpDate? } }` → `{ activity, task, lead }`. The task is created after the activity (active leads only); with `setFollowUpDate` and edit rights the lead's follow-up date moves to the due date (business-timezone day). |
 | `GET /api/leads/{id}/attachments` | view_leads | `{ attachments }` |
 | `POST /api/leads/{id}/attachments` | upload_files | multipart `file`, `category`, `label` → `{ attachment }` |
 | `POST /api/leads/bulk` | archive_leads / reassign_leads | `{ ids, action: archive\|restore\|reassign, ownerId?, reason? }` → `{ count }` |
@@ -371,13 +372,19 @@ Report "Target %": targets are scaled to the period — `daily_leads × business
 
 ### 7.8 Report periods (RPT-03)
 
-Computed in the business timezone: today; yesterday = previous business day (Mon–Fri); this week = Monday to today; last week = previous Monday to Sunday; month to date; last month; year to date. Daily series buckets activity instants by business day.
+Computed in the business timezone: today; yesterday = previous working day (Mon–Fri minus business-calendar holidays); this week = Monday to today; last week = previous Monday to Sunday; month to date; last month; year to date. Daily series buckets activity instants by business day.
 
 ### 7.9 Dashboard composition (AC-*)
 
 Calls/emails/visits = counts of user-logged activities by type for this week and last week (own, or whole team for admins). Follow-ups = active leads by `follow_up_date` (< today, = today, = tomorrow). Needs attention = active leads with `last_activity_at` older than `inactivityDays`. Open tasks = assignee's open tasks (overdue count by `due_at`). Recent leads = active leads by `last_activity_at`.
 
 ---
+
+### 7.10 Natural-language dates (TASK-03, NOTE-05)
+
+`src/lib/natural-dates.ts` is a dependency-free parser shared by the browser (live preview) and `tests/unit`. `parseNaturalDate(text, { anchor, holidays })` finds the earliest date phrase (a phrase inside a longer one, such as "Feb" inside "Feb 1", is ignored) and resolves it against the anchor calendar date: relative words (today, tomorrow, day after tomorrow, next week/month/quarter/year, end of week/month/year), weekday names, periods ("in two weeks", "six months", "3 business days"), month names alone (first working day of the next such month, year included when given), and explicit dates in several spellings (`Feb 1`, `1st of February 2027`, `Feb/01/2027`, `02/01/2027` month first, `2027-02-01`). Working day = Monday to Friday minus the `business_calendar` holidays. Relative results and month names roll forward to the next working day and report `adjusted`; weekday names move only when they hit a holiday; explicit dates are kept as written. A time of day (`at 10am`, `3:30 pm`, `at 3` = 15:00, `14:45`, noon, morning 09:00, afternoon 14:00, evening 17:00, end of day 17:00) is read from the remaining text.
+
+Client use: `features/tasks/NaturalDateField` shows "Understood “…” as <date> at <time>" and fills the date/time inputs, which stay editable (the confirmation step). It appears in `TaskFormDialog` and in the lead follow-up scheduler. `suggestFollowUp(text, { anchor, today, holidays, person, company })` (NOTE-05) additionally requires a next-step cue in the sentence holding the date (strong: follow up, call back, check in, reach out, touch base, remind, revisit, next step, schedule…; weak: will, need to, should, by, before, due, meet, send… unless the sentence also has a past-tense cue) and a date not before today. The note form uses the interaction date as the anchor, shows the offer with an editable title, date, and time, and sends `followUpTask` with the activity when the offer stays ticked.
 
 ## 8. Client application design
 
@@ -396,9 +403,9 @@ Calls/emails/visits = counts of user-logged activities by type for this week and
 | `features/auth` | `AuthScreen`, `ChangePasswordDialog` |
 | `features/dashboard` | `ActionCenter` |
 | `features/leads` | `LeadListPage` (toolbar, filters panel, bulk bar, pagination), `LeadTable`, `LeadFormDialog` (all fields), `LeadDetailDialog` (Overview, Timeline, Documents, Profiles shared, Tasks, Audit tabs; transfer, archive/restore, approve/reject, schedule follow-up, quick BD action/response/status updates) |
-| `features/tasks` | `TasksPage` (Overdue / Today / Upcoming / Done columns, mine/team), `TaskFormDialog` (lead search, assignee, due, priority, checklist) |
+| `features/tasks` | `TasksPage` (Overdue / Today / Upcoming / Done columns, mine/team), `TaskFormDialog` (lead search, assignee, typed or picked due date, priority, checklist), `NaturalDateField` (TASK-03 preview) |
 | `features/reports` | `ReportsPage` (period chips, user filter, stat tiles, daily stacked bars, performance table with drill-down dialog, CSV export) |
-| `features/admin` | `AdminPage` router, `UsersPanel` (+ `UserFormDialog`, password dialog, terminate dialog, login history), `ListValuesPanel`, `TargetsPanel`, `SettingsPanel`, device placeholder |
+| `features/admin` | `AdminPage` router, `UsersPanel` (+ `UserFormDialog`, password dialog, terminate dialog, login history), `ListValuesPanel`, `TargetsPanel`, `SettingsPanel` (role names, reminder days, business-calendar holidays), device placeholder |
 | `features/users` | `UserDirectoryDialog` (person picker) |
 | `features/preview` | `LeadGenerationPage`, `PlannerPage` (labelled previews) |
 | `features/shell` | `App`, `AppShell`, `AppContext`, shared `Dialog`, `Tabs`, `Field`, `Pagination`, `PromptDialog`, `Avatar`, `StatusPill`, `EmptyState` |
@@ -637,8 +644,8 @@ A `lead_generation_results` table (user_id, company, url, radius_km, payload JSO
 ### 10.6 Device authorization (AUTH-08..10)
 `devices` (id, user_id, identifier, type, label, first_seen, last_seen, status) with the identifier coming from an MDM/managed-browser header or a native app. Login records the device; a policy flag per user refuses unknown devices. Admin screen A12 manages status.
 
-### 10.7 Rich text, voice, OCR, natural-language dates (NOTE-03..05, OCR-*, TASK-03)
-Store notes as sanitized HTML from a constrained editor (bold, italic, lists, links). Voice via the Web Speech API on desktop/Android and native dictation on iOS, editable before save. OCR via a vision API with a review form before populating the lead. Natural-language dates via a parser (e.g. chrono) with confirmation before creating a task; month-only inputs resolve to the first business day using a holiday calendar table.
+### 10.7 Rich text, voice, OCR (NOTE-03, NOTE-04, OCR-*)
+Store notes as sanitized HTML from a constrained editor (bold, italic, lists, links). Voice via the Web Speech API on desktop/Android and native dictation on iOS, editable before save; the transcript feeds the same follow-up suggestion as typed notes (§7.10). OCR via a vision API with a review form before populating the lead.
 
 ---
 
@@ -656,5 +663,6 @@ Store notes as sanitized HTML from a constrained editor (bold, italic, lists, li
 ## 12. Verification
 
 - `npm run typecheck`, `npm run lint`, `npm run build` must pass.
+- Unit tests (`tests/unit`, `node:test` on Node 22 type stripping, `npm run test:unit`): the natural-language date parser (working days, relative phrases, weekday names, periods, month names, explicit spellings, times of day) and the note follow-up suggestion rules.
 - End-to-end API suite (kept outside the repo during development) covers: first-run setup, bootstrap key lock-out, login and origin checks, seeding, reference data, role permissions for every mutating endpoint, queued review, edit/transfer rules, activities, lead 360 and audit visibility, tasks and checklists, uploads with versioning and type rejection, downloads, soft delete, dashboard, team and own reports, all periods, drill-down, list-value rename propagation and inactive-value rejection, settings, templates and assignment, user updates with extra privileges, bulk archive/restore/reassign, login history, admin and self password changes, SMTP-missing responses, termination cascade and session revocation, last-admin guard, audit action coverage, rate limiting, sign-out.
-- Browser end-to-end suite (`tests/e2e`, Selenium + `node:test`, run with `scripts/e2e.sh` against a production build, an in-memory MySQL, and a Chromium grid in Docker): first-time setup, sign-in, password change and reset messaging, lead life cycle (create, BD action, timeline, follow-up task, document upload, edit, status, search, archive/restore), tasks, user creation, role-limited navigation, queued-lead approval, transfer, termination hand-off, list of values, settings, target templates, report drill-down.
+- Browser end-to-end suite (`tests/e2e`, Selenium + `node:test`, run with `scripts/e2e.sh` against a production build, an in-memory MySQL, and a Chromium grid in Docker): first-time setup, sign-in, password change and reset messaging, lead life cycle (create, BD action, timeline, note that offers a follow-up task, follow-up task, document upload, edit, status, search, archive/restore), tasks (including a due date typed in words), user creation, a per-account sign-out time ending an older session, role-limited navigation, queued-lead approval, transfer, termination hand-off, list of values, settings, business-calendar holiday, target templates, report drill-down.

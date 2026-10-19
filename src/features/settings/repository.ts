@@ -1,12 +1,28 @@
 import { getDatabasePool, withTransaction, type Queryable } from "@/lib/db";
+import { isValidYmd } from "@/lib/dates";
 import { HttpError } from "@/lib/http";
 import { recordAudit } from "@/features/audit/repository";
 import { defaultRoleLabels, systemRoles } from "@/features/users/model";
 import type { SystemRole } from "@/features/users/model";
 
-import type { AppSettings } from "./model";
+import { maxHolidayNameLength, maxHolidays, type AppSettings, type Holiday } from "./model";
 
-const defaults: AppSettings = { roleLabels: { ...defaultRoleLabels }, reminders: { inactivityDays: 7 } };
+const defaults: AppSettings = { roleLabels: { ...defaultRoleLabels }, reminders: { inactivityDays: 7 }, holidays: [] };
+
+/** Keeps well-formed, unique holidays sorted by date; returns the first problem found (for input validation). */
+function normalizeHolidays(value: unknown): { holidays: Holiday[]; error: string | null } {
+  if (!Array.isArray(value)) return { holidays: [], error: "Holidays must be a list." };
+  if (value.length > maxHolidays) return { holidays: [], error: `Keep the holiday list to ${maxHolidays} dates or fewer.` };
+  const byDate = new Map<string, Holiday>();
+  for (const entry of value) {
+    const date = entry && typeof entry === "object" ? (entry as Holiday).date : undefined;
+    const name = entry && typeof entry === "object" ? (entry as Holiday).name : undefined;
+    if (typeof date !== "string" || !isValidYmd(date)) return { holidays: [], error: "Each holiday needs a valid date (YYYY-MM-DD)." };
+    if (typeof name !== "string" || !name.trim() || name.trim().length > maxHolidayNameLength) return { holidays: [], error: `Each holiday needs a name of up to ${maxHolidayNameLength} characters.` };
+    byDate.set(date, { date, name: name.trim() });
+  }
+  return { holidays: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)), error: null };
+}
 
 async function readSetting<T>(db: Queryable, key: string, fallback: T): Promise<T> {
   const [rows] = await db.query("SELECT value_json AS value FROM app_settings WHERE setting_key = ?", [key]);
@@ -21,13 +37,21 @@ async function readSetting<T>(db: Queryable, key: string, fallback: T): Promise<
 export async function getSettings(db: Queryable = getDatabasePool()): Promise<AppSettings> {
   const roleLabels = await readSetting<Partial<Record<SystemRole, string>>>(db, "role_labels", {});
   const reminders = await readSetting<Partial<AppSettings["reminders"]>>(db, "reminders", {});
+  const calendar = await readSetting<{ holidays?: unknown }>(db, "business_calendar", {});
+  const { holidays, error } = normalizeHolidays(calendar.holidays ?? []);
   return {
     roleLabels: Object.fromEntries(systemRoles.map((role) => [role, roleLabels[role]?.trim() || defaults.roleLabels[role]])) as Record<SystemRole, string>,
     reminders: { inactivityDays: Number.isInteger(reminders.inactivityDays) && Number(reminders.inactivityDays) > 0 ? Number(reminders.inactivityDays) : defaults.reminders.inactivityDays },
+    holidays: error ? [] : holidays,
   };
 }
 
-export async function updateSettings(changes: { roleLabels?: Partial<Record<SystemRole, string>>; reminders?: { inactivityDays?: number } }, actorId: number): Promise<AppSettings> {
+/** Holiday dates only, for working-day arithmetic. */
+export async function listHolidayDates(db: Queryable = getDatabasePool()): Promise<string[]> {
+  return (await getSettings(db)).holidays.map((holiday) => holiday.date);
+}
+
+export async function updateSettings(changes: { roleLabels?: Partial<Record<SystemRole, string>>; reminders?: { inactivityDays?: number }; holidays?: unknown }, actorId: number): Promise<AppSettings> {
   return withTransaction(async (connection) => {
     const current = await getSettings(connection);
     if (changes.roleLabels) {
@@ -53,6 +77,18 @@ export async function updateSettings(changes: { roleLabels?: Partial<Record<Syst
         [JSON.stringify(next)],
       );
       await recordAudit(connection, { actorId, action: "setting.updated", entityType: "setting", before: current.reminders, after: next, details: "Updated reminder settings" });
+    }
+    if (changes.holidays !== undefined) {
+      const { holidays, error } = normalizeHolidays(changes.holidays);
+      if (error) throw new HttpError(400, error);
+      await connection.query(
+        "INSERT INTO app_settings (setting_key, value_json) VALUES ('business_calendar', ?) ON DUPLICATE KEY UPDATE value_json = VALUES(value_json)",
+        [JSON.stringify({ holidays })],
+      );
+      const changed = JSON.stringify(current.holidays) !== JSON.stringify(holidays);
+      if (changed) {
+        await recordAudit(connection, { actorId, action: "setting.updated", entityType: "setting", before: { holidays: current.holidays }, after: { holidays }, details: `Updated the business calendar (${holidays.length} holiday${holidays.length === 1 ? "" : "s"})` });
+      }
     }
     return getSettings(connection);
   });

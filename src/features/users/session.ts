@@ -77,7 +77,7 @@ export async function getSessionUser(token: string): Promise<UserAccount | null>
   const user = toUser(row);
   if (user.autoLogoutEnabled) {
     const createdAt = new Date(fromSqlDateTime(row.sessionCreatedAt) ?? row.sessionCreatedAt);
-    if (createdAt.getTime() < lastAutoLogoutCutoff().getTime()) {
+    if (createdAt.getTime() < lastAutoLogoutCutoff(user.autoLogoutTime).getTime()) {
       await getDatabasePool().query("DELETE FROM user_sessions WHERE token_hash = ?", [tokenHash]);
       return null;
     }

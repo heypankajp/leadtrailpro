@@ -3,7 +3,7 @@
 import { useCallback, useState, type FormEvent } from "react";
 import { KeyRound, Mail, Pencil, Plus, UserMinus, UserPlus } from "lucide-react";
 import { errorMessage } from "@/lib/api";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, formatTimeOfDay } from "@/lib/format";
 import { useAsyncData } from "@/lib/useAsyncData";
 import { useApp } from "@/features/shell/AppContext";
 import { Avatar, Dialog, ErrorText, Field, Loading } from "@/features/shell/components";
@@ -72,7 +72,7 @@ export default function UsersPanel() {
         <section className="panel team-panel">
           <div className="table-scroll">
             <table className="lead-table team-table">
-              <thead><tr><th>NAME</th><th>ROLE</th><th>STAGE</th><th>TARGETS</th><th>2FA</th><th>11 PM LOGOUT</th><th>STATUS</th><th><span className="sr-only">Actions</span></th></tr></thead>
+              <thead><tr><th>NAME</th><th>ROLE</th><th>STAGE</th><th>TARGETS</th><th>2FA</th><th>AUTO SIGN-OUT</th><th>STATUS</th><th><span className="sr-only">Actions</span></th></tr></thead>
               <tbody>
                 {users.map((user) => (
                   <tr key={user.id} className={user.active ? "" : "row-inactive"}>
@@ -81,7 +81,7 @@ export default function UsersPanel() {
                     <td>{stageLabels[user.stage]}</td>
                     <td><span className="muted-cell">{templateName(user.targetTemplateId)}</span></td>
                     <td><span className={`badge ${user.twoFactorEnabled ? "badge-on" : "badge-muted"}`}>{user.twoFactorEnabled ? "On" : "Off"}</span></td>
-                    <td><span className={`badge ${user.autoLogoutEnabled ? "badge-on" : "badge-muted"}`}>{user.autoLogoutEnabled ? "On" : "Off"}</span></td>
+                    <td><span className={`badge ${user.autoLogoutEnabled ? "badge-on" : "badge-muted"}`}>{user.autoLogoutEnabled ? `On · ${formatTimeOfDay(user.autoLogoutTime)}` : "Off"}</span></td>
                     <td>{user.active ? <span className="badge badge-on">Active</span> : <span className="badge badge-off" title={user.terminatedAt ? `Terminated ${formatDateTime(user.terminatedAt)}` : undefined}>Terminated</span>}</td>
                     <td>
                       <span className="row-actions">

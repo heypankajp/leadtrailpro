@@ -8,7 +8,7 @@ SalesTrackPro is a sales workspace for a staffing and recruitment business, buil
 |---|---|
 | Stack | Next.js 16.4 (App Router, Turbopack), React 19, TypeScript 5, MySQL 8.4 (5.7 also works), hand-written CSS |
 | Packaging | Docker: hot-reloading development stack, standalone production image, one-shot setup service |
-| Tests | ESLint, `tsc`, production build, and a 30-test Selenium browser suite that runs in Docker |
+| Tests | ESLint, `tsc`, production build, a unit suite for the natural-language date parser, and a 34-test Selenium browser suite that runs in Docker |
 | Email | Password resets, set-password links, and two-factor codes stay dormant until `SMTP_*` is configured |
 | Preview pages | Lead generation and the road visit planner show sample content until data sources are connected |
 
@@ -67,7 +67,7 @@ The setup step writes the database settings and a commented template for the res
 | `USER_MANAGEMENT_KEY` | One-time key for creating the first administrator |
 | `APP_URL` | Public URL. Required behind a reverse proxy, and used in password-reset links. An `http://` value also turns off the Secure flag on session cookies, for deployments without TLS |
 | `TRUSTED_ORIGINS` | Extra allowed origins for state-changing requests, comma separated |
-| `BUSINESS_TIMEZONE` | Business day for follow-ups, weekly targets, reports, and the 11 PM auto sign-out (default `America/Toronto`) |
+| `BUSINESS_TIMEZONE` | Business day for follow-ups, weekly targets, reports, and each account's daily auto sign-out time (default `America/Toronto`) |
 | `ATTACHMENT_DIR` | Where uploaded documents and profiles are stored (default `./storage/attachments`) |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Outbound email for password resets, set-password links, and two-factor codes |
 
@@ -114,15 +114,15 @@ compose.prod.yaml        production override
 ## What is implemented
 
 - **Roles and privileges.** Three system roles (Admin, Sales Manager, Recruiter) with renamable display names. Each role has default privileges; administrators can grant extras per account.
-- **Sign-in and security.** Email and password with scrypt hashes, database-backed sign-in rate limiting and login history, optional email two-factor codes, per-account 11 PM auto sign-out, change password, forgot-password links, and administrator password resets.
+- **Sign-in and security.** Email and password with scrypt hashes, database-backed sign-in rate limiting and login history, optional email two-factor codes, per-account daily auto sign-out at a configurable time, change password, forgot-password links, and administrator password resets.
 - **Leads.** All BRD section 6 fields, owner as a user reference, creator becomes owner, transfer and administrator reassignment (open tasks follow the lead), bulk archive, restore, and reassign, independent archive search, and queued leads for historical first-contact dates with approve and reject.
 - **Timeline.** Logged calls, emails, visits, and interaction notes, plus automatic entries for status, BD action, client response, follow-up, transfer, state, task, and file events. Most recently active leads sort first.
 - **Search and filters.** Keyword search across lead fields and notes; filters for lead type, status, category, size, city, owner, client response, BD action, and date ranges; sortable, paginated lists.
-- **Tasks.** Tasks with lead, assignee, due date and time, priority, description, and checklist. Follow-ups scheduled from a lead set the follow-up date and create a reminder task.
+- **Tasks.** Tasks with lead, assignee, due date and time, priority, description, and checklist. Due dates can be typed in words (“next Monday at 10am”, “in two weeks”, “Feb 1”, “January”) and are shown for confirmation before saving; month names and relative periods skip weekends and business-calendar holidays. Follow-ups scheduled from a lead set the follow-up date and create a reminder task, and a note that mentions a next step with a date (“follow up next week”, “send the proposal by Friday”) offers to create that task when the note is saved.
 - **Files.** Documents and a separate Resumes/Profiles Shared area, with in-app preview for PDF, images, text, and Word files, version numbers for re-uploads, and administrator soft delete.
 - **Action center.** Calls, emails, and visits this week versus last week, overdue, today, and tomorrow follow-ups, target progress, leads with no activity, open tasks, and recent leads.
 - **Targets and reports.** Target templates per productivity stage, assignment per person, and reports for today, yesterday (business day), this week, last week, month to date, last month, and year to date with drill-down to the underlying records and CSV export. Tool-engagement counts (logins, updates, tasks, files) are included.
-- **Administration.** User management with terminate-and-reassign, list-of-values management with rename that flows through to existing leads, target templates, and settings.
+- **Administration.** User management with terminate-and-reassign, list-of-values management with rename that flows through to existing leads, target templates, and settings (role names, reminder days, and the business calendar of public holidays).
 - **Audit.** Every create, update, transfer, approval, archive, file, task, user, value, and settings change is recorded with actor, time, and before/after values. Lead history is shown on the lead for administrators.
 
 ## Not yet connected
@@ -135,6 +135,7 @@ Google sign-in, Gmail linking and AI summaries, voice-to-text, OCR of business c
 npm run lint
 npm run typecheck
 npm run build
+npm run test:unit     # natural-language date parser (node:test, no database needed)
 ```
 
 Inside Docker, prefix each with `docker compose exec app`.
@@ -151,10 +152,10 @@ scripts/e2e.sh tests/e2e/02-leads.test.mjs   # one or more files
 | File | Covers |
 |---|---|
 | `01-auth.test.mjs` | Sign-in screen, first administrator via the setup link, sign out, wrong password, reset-email message without SMTP, password change and re-login |
-| `02-leads.test.mjs` | Create a lead, BD action, call and note on the timeline, follow-up that becomes a task, document upload, edit, status change, list and global search, archive and restore |
-| `03-tasks.test.mjs` | Create a task linked to a lead, complete it, edit it |
-| `04-team.test.mjs` | Create a Sales Manager, role-limited navigation, historical date queues a lead, admin approval, transfer, termination hand-off, terminated account cannot sign in |
-| `05-admin-reports.test.mjs` | List of values, role rename reflected in the sidebar, target template, report drill-down, action-center metric link |
+| `02-leads.test.mjs` | Create a lead, BD action, call and note on the timeline, a note that offers and creates a follow-up task, follow-up that becomes a task, document upload, edit, status change, list and global search, archive and restore |
+| `03-tasks.test.mjs` | Create a task linked to a lead, complete it, edit it, type a due date in words and confirm the resolved date |
+| `04-team.test.mjs` | Create a Sales Manager, a per-account sign-out time ends a session started before it, role-limited navigation, historical date queues a lead, admin approval, transfer, termination hand-off, terminated account cannot sign in |
+| `05-admin-reports.test.mjs` | List of values, role rename reflected in the sidebar, business-calendar holiday, target template, report drill-down, action-center metric link |
 
 - Tests are written with `node:test` and `selenium-webdriver`; the page helpers (labels, dialogs, toasts, navigation) live in `tests/e2e/helpers/ui.mjs`, test data and the bootstrap shortcut in `tests/e2e/helpers/data.mjs`.
 - Watch the browser at [http://localhost:7900](http://localhost:7900) while a run is in progress.

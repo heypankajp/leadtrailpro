@@ -1,7 +1,7 @@
 import { api, toQuery } from "@/lib/api";
 import type { AuditEntry } from "@/features/audit/model";
 import type { ListKey, ListValue, ListValuesByKey } from "@/features/list-values/model";
-import type { AppSettings } from "@/features/settings/model";
+import type { AppSettings, Holiday } from "@/features/settings/model";
 import type { TargetTemplate, TargetTemplateInput } from "@/features/targets/model";
 import type { SystemRole } from "@/features/users/model";
 
@@ -16,7 +16,7 @@ export const updateTargetTemplate = (id: number, input: Partial<TargetTemplateIn
 export const assignTargetTemplate = (id: number, userIds: number[]) => api<{ ok: true }>(`/api/target-templates/${id}/assign`, { method: "POST", json: { userIds } });
 
 export const fetchSettings = () => api<{ settings: AppSettings; mailerConfigured: boolean; timeZone: string }>("/api/settings");
-export const updateSettings = (changes: { roleLabels?: Partial<Record<SystemRole, string>>; reminders?: { inactivityDays: number } }) =>
+export const updateSettings = (changes: { roleLabels?: Partial<Record<SystemRole, string>>; reminders?: { inactivityDays: number }; holidays?: Holiday[] }) =>
   api<{ settings: AppSettings }>("/api/settings", { method: "PATCH", json: changes });
 
 export const fetchAudit = (query: { entityType?: string; entityId?: number; actorId?: number; limit?: number } = {}) => api<{ entries: AuditEntry[] }>(`/api/audit${toQuery(query)}`);

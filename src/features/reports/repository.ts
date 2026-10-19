@@ -4,7 +4,7 @@ import { selectLeads } from "@/features/leads/repository";
 import type { LeadSummary } from "@/features/leads/model";
 import { listTasks } from "@/features/tasks/repository";
 import type { Task } from "@/features/tasks/model";
-import { getSettings } from "@/features/settings/repository";
+import { getSettings, listHolidayDates } from "@/features/settings/repository";
 import { resolveTargetTemplate } from "@/features/targets/repository";
 import type { TargetTemplate } from "@/features/targets/model";
 import { listUsers } from "@/features/users/repository";
@@ -55,9 +55,9 @@ function progressPercent(parts: { achieved: number; target: number }[]): number 
 }
 
 /** Targets scaled to the period: daily figures by business days, monthly conversions by calendar days. */
-function scaledTargets(template: TargetTemplate | null, range: DateRange) {
+function scaledTargets(template: TargetTemplate | null, range: DateRange, holidays: readonly string[]) {
   if (!template) return { leads: 0, visits: 0, conversions: 0 };
-  const businessDays = Math.max(businessDaysBetween(range.startYmd, range.endExclusiveYmd), 1);
+  const businessDays = Math.max(businessDaysBetween(range.startYmd, range.endExclusiveYmd, holidays), 1);
   const days = Math.max(daysBetween(range.startYmd, range.endExclusiveYmd), 1);
   const weeks = days / 7;
   return {
@@ -69,7 +69,8 @@ function scaledTargets(template: TargetTemplate | null, range: DateRange) {
 
 export async function performanceReport(period: ReportPeriod, viewer: UserAccount, userId: number | null): Promise<{ range: DateRange; rows: PerformanceRow[]; series: { date: string; calls: number; emails: number; visits: number; leads: number }[] }> {
   const db = getDatabasePool();
-  const range = periodRange(period);
+  const holidays = await listHolidayDates(db);
+  const range = periodRange(period, undefined, undefined, holidays);
   const teamWide = hasPrivilege(viewer, "view_team_reports");
   let users = await listUsers({ includeInactive: true }, db);
   if (!teamWide) users = users.filter((user) => user.id === viewer.id);
@@ -93,7 +94,7 @@ export async function performanceReport(period: ReportPeriod, viewer: UserAccoun
   for (const user of users) {
     const activity = activities.get(user.id) ?? { calls: 0, emails: 0, visits: 0, notes: 0 };
     const template = await resolveTargetTemplate(user, db);
-    const targets = scaledTargets(template, range);
+    const targets = scaledTargets(template, range, holidays);
     const achieved = { leads: leadsCreated.get(user.id) ?? 0, visits: activity.visits, conversions: conversions.get(user.id) ?? 0 };
     rows.push({
       userId: user.id, name: user.name, role: user.role, stage: user.stage,
@@ -132,7 +133,7 @@ export async function performanceReport(period: ReportPeriod, viewer: UserAccoun
 
 export async function drilldown(period: ReportPeriod, viewer: UserAccount, userId: number, metric: DrilldownMetric): Promise<{ activities?: { id: number; leadId: number; leadName: string; summary: string; body: string | null; occurredAt: string }[]; leads?: LeadSummary[]; tasks?: Task[] }> {
   const db = getDatabasePool();
-  const range = periodRange(period);
+  const range = periodRange(period, undefined, undefined, await listHolidayDates(db));
   const startSql = toSqlDateTime(range.start);
   const endSql = toSqlDateTime(range.end);
   if (metric === "leads") {
@@ -159,9 +160,11 @@ export async function buildDashboard(viewer: UserAccount, scope: "mine" | "team"
   const db = getDatabasePool();
   const teamWide = scope === "team" && hasPrivilege(viewer, "view_team_reports");
   const userIds = teamWide ? null : [viewer.id];
+  const settings = await getSettings(db);
+  const holidays = settings.holidays.map((holiday) => holiday.date);
   const today = todayYmd();
-  const thisWeek = periodRange("this_week");
-  const lastWeek = periodRange("last_week");
+  const thisWeek = periodRange("this_week", undefined, undefined, holidays);
+  const lastWeek = periodRange("last_week", undefined, undefined, holidays);
   const sum = (counts: Map<number, ActivityCounts>, key: keyof ActivityCounts) => [...counts.values()].reduce((total, entry) => total + entry[key], 0);
   const thisCounts = await activityCounts(db, userIds, thisWeek);
   const lastCounts = await activityCounts(db, userIds, lastWeek);
@@ -175,7 +178,7 @@ export async function buildDashboard(viewer: UserAccount, scope: "mine" | "team"
   };
 
   const template = await resolveTargetTemplate(viewer, db);
-  const monthRange = periodRange("month_to_date");
+  const monthRange = periodRange("month_to_date", undefined, undefined, holidays);
   const weekStart = startOfWeekYmd(today);
   const [weekLeads] = await db.query("SELECT COUNT(*) AS count FROM leads WHERE created_by = ? AND created_at >= ? AND created_at < ?", [viewer.id, toSqlDateTime(thisWeek.start), toSqlDateTime(thisWeek.end)]);
   const [monthConversions] = await db.query("SELECT COUNT(*) AS count FROM lead_activities WHERE user_id = ? AND activity_type = 'status_change' AND value_code = 'client' AND occurred_at >= ? AND occurred_at < ?", [viewer.id, toSqlDateTime(monthRange.start), toSqlDateTime(monthRange.end)]);
@@ -190,7 +193,6 @@ export async function buildDashboard(viewer: UserAccount, scope: "mine" | "team"
   };
   targets.percent = progressPercent([targets.leads, targets.visits, targets.conversions]);
 
-  const settings = await getSettings(db);
   const inactiveSince = toSqlDateTime(new Date(Date.now() - settings.reminders.inactivityDays * 86_400_000));
   const inactiveLeads = await selectLeads(`l.record_state = 'active' AND l.last_activity_at < ? ${ownerClause}`, [inactiveSince, ...ownerParams], "l.last_activity_at ASC", 20, db);
   const openTasks = await listTasks({ assigneeId: teamWide ? undefined : viewer.id, status: "open", limit: 200 }, db);

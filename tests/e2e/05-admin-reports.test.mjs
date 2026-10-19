@@ -40,6 +40,20 @@ describe("Administration and reports", () => {
     await page.waitText(By.css(".workspace-switcher strong"), "Admin");
   });
 
+  uiTest("adds a holiday to the business calendar", async () => {
+    const name = `Company holiday ${runId}`;
+    const row = By.xpath(`//li[contains(@class,"holiday-row")][.//span[normalize-space()=${xq(name)}]]`);
+    await page.fill("Holiday date", "2026-12-24", { global: true });
+    await page.fill("Holiday name", name, { global: true });
+    await page.clickButton("Add holiday", { global: true });
+    await page.wait(row);
+    await page.clickButton("Save settings", { global: true });
+    await page.toast("Settings saved");
+    await driver.navigate().refresh();
+    await page.heading("Settings");
+    await page.wait(row);
+  });
+
   uiTest("creates a target template", async () => {
     await page.nav("Targets & templates");
     await page.heading("Targets & templates");

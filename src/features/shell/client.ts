@@ -8,6 +8,8 @@ export type ReferenceData = {
   users: UserSummary[];
   roleLabels: Record<SystemRole, string>;
   inactivityDays: number;
+  /** Holiday dates (`YYYY-MM-DD`) from the business calendar; weekends are always non-working. */
+  holidays: string[];
   targetTemplates: TargetTemplate[];
   mailerConfigured: boolean;
   today: string;

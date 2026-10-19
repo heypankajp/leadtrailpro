@@ -10,6 +10,7 @@ import { useApp } from "@/features/shell/AppContext";
 import { Dialog, ErrorText, Field } from "@/features/shell/components";
 import { createTask, updateTask } from "./client";
 import { taskPriorities, type ChecklistItem, type Task, type TaskPriority } from "./model";
+import NaturalDateField from "./NaturalDateField";
 
 type Props = { task?: Task; leadId?: number | null; leadName?: string | null; defaultAssigneeId?: number; onClose: () => void; onSaved: (task: Task) => void };
 
@@ -68,7 +69,8 @@ export default function TaskFormDialog({ task, leadId, leadName, defaultAssignee
           <select value={assigneeId} onChange={(event) => setAssigneeId(event.target.value)}>{reference.users.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select>
         </Field>
         <Field label="Priority"><select value={priority} onChange={(event) => setPriority(event.target.value as TaskPriority)}>{taskPriorities.map((option) => <option key={option} value={option}>{option[0].toUpperCase()}{option.slice(1)}</option>)}</select></Field>
-        <Field label="Due date and time"><input type="datetime-local" value={dueAt} onChange={(event) => setDueAt(event.target.value)} /></Field>
+        <NaturalDateField onResolve={(result, time) => setDueAt(`${result.date}T${time}`)} />
+        <Field label="Due date and time" hint="Confirm or adjust the date before saving."><input type="datetime-local" value={dueAt} onChange={(event) => setDueAt(event.target.value)} /></Field>
         <Field label="Lead" hint={lead ? undefined : "Optional. Search by client name."}>
           {lead ? (
             <span className="chip-value">{lead.name}{!leadId && <button type="button" aria-label="Remove lead" onClick={() => setLead(null)}><X size={12} /></button>}</span>

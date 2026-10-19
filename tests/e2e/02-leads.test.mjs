@@ -62,6 +62,18 @@ describe("Leads", () => {
     await page.wait(By.xpath('//article[contains(@class,"timeline-entry")]//p[contains(normalize-space(.), "two welders")]'));
   });
 
+  uiTest("a note with a follow-up instruction offers to create the task", async () => {
+    await page.clickButton("Add note");
+    await page.fill("Interaction note", "Great conversation. Follow up next Monday at 10am about the welders.");
+    const suggestion = await page.wait(By.css(".follow-up-suggestion"));
+    assert.match(await suggestion.getText(), /Create a follow-up task from this note: understood \u201cnext Monday\u201d as .* 10:00 AM/);
+    assert.equal(await (await page.wait(By.css('input[aria-label="Follow-up task title"]'))).getAttribute("value"), `Follow up with ${lead.executive}`);
+    await page.click(By.css('form.activity-form button[type="submit"]'));
+    await page.toast("Activity recorded and follow-up task created");
+    await page.wait(By.xpath(`//article[contains(@class,"timeline-entry")]//strong[starts-with(normalize-space(.), ${xq(`Task created: Follow up with ${lead.executive}`)})]`));
+    await page.wait(By.xpath('//article[contains(@class,"timeline-entry")]//strong[starts-with(normalize-space(.), "Follow-up scheduled for")]'));
+  });
+
   uiTest("schedules a follow-up that becomes a task", async () => {
     await page.tab("Overview");
     await page.clickButton("Schedule follow-up");

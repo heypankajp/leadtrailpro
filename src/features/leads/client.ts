@@ -1,7 +1,7 @@
 import { api, toQuery } from "@/lib/api";
 import type { LeadAttachment } from "@/features/attachments/model";
 import type { AuditEntry } from "@/features/audit/model";
-import type { Task } from "@/features/tasks/model";
+import type { Task, TaskPriority } from "@/features/tasks/model";
 import type { LeadActivity, LeadInput, LeadPage, LeadRecordState, LeadSortKey, LeadSummary, LoggableActivityType } from "./model";
 
 export type LeadQuery = Partial<{
@@ -29,8 +29,11 @@ export const reviewLead = (id: number, approve: boolean, comment: string) => api
 export const setLeadState = (id: number, state: "active" | "archived", reason: string) => api<{ lead: LeadSummary }>(`/api/leads/${id}/state`, { method: "POST", json: { state, reason } });
 export const bulkLeads = (ids: number[], action: "archive" | "restore" | "reassign", options: { ownerId?: number; reason?: string } = {}) =>
   api<{ ok: true; count: number }>("/api/leads/bulk", { method: "POST", json: { ids, action, ...options } });
-export const logActivity = (id: number, entry: { type: LoggableActivityType; summary: string; body: string; occurredAt: string | null }) =>
-  api<{ activity: LeadActivity; lead: LeadSummary }>(`/api/leads/${id}/activities`, { method: "POST", json: entry });
+/** Task the note asked for (NOTE-05); `setFollowUpDate` also moves the lead's next follow-up to the due date when the user may edit the lead. */
+export type FollowUpTaskInput = { title: string; description?: string; dueAt: string | null; assigneeId?: number; priority?: TaskPriority; setFollowUpDate?: boolean };
+
+export const logActivity = (id: number, entry: { type: LoggableActivityType; summary: string; body: string; occurredAt: string | null; followUpTask?: FollowUpTaskInput }) =>
+  api<{ activity: LeadActivity; task: Task | null; lead: LeadSummary }>(`/api/leads/${id}/activities`, { method: "POST", json: entry });
 
 export async function uploadAttachment(leadId: number, file: File, category: "document" | "profile", label: string): Promise<LeadAttachment> {
   const form = new FormData();

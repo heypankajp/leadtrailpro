@@ -65,7 +65,7 @@ React frontend, Node.js backend, responsive web experience, Android and iPhone s
 | AUTH-04 | Every user can change their own password. | Requires the current password; other sessions are signed out. | Implemented |
 | AUTH-05 | Forgot-password flow sends a secure reset link or code to the registered email. | Link expires in 30 minutes; the response does not reveal whether the address exists. | Implemented (dormant until SMTP is configured) |
 | AUTH-06 | Two-factor authentication by OTP sent to the registered email; Admin enables and configures it per account. | After a correct password the user must enter a 6-digit emailed code that expires in 10 minutes; 5 wrong codes invalidate it. | Implemented (dormant until SMTP is configured) |
-| AUTH-07 | Admin can enable automatic daily logout per account, with a configurable logout time that defaults to 11:00 PM Eastern. The user must sign in again afterwards, including 2FA when enabled. | Any session started before the most recent cutoff (business timezone) is rejected once the cutoff passes. | Partial — the switch is per account, but the time is fixed at 11:00 PM; a per-account time is not configurable yet |
+| AUTH-07 | Admin can enable automatic daily logout per account, with a configurable logout time that defaults to 11:00 PM Eastern. The user must sign in again afterwards, including 2FA when enabled. | Any session started before the most recent cutoff (business timezone) is rejected once the cutoff passes. The switch and the time are set per account under User management; the time defaults to 11:00 PM. | Implemented |
 | AUTH-08 | Admin can authorize specific company phones and laptops per Sales Manager or Recruiter and restrict sign-in to those devices. | Sign-in from an unauthorized device is refused when the policy is active. | Planned (needs a managed-device or mobile identifier; browsers cannot read hardware IDs) |
 | AUTH-09 | The system maintains device-identification information and login history. | Every sign-in attempt stores time, result, address, and browser; Admin can view it per user. | Partial (login history implemented; device identifiers planned) |
 | AUTH-10 | Admin has a Device Authorization screen listing devices, assigned person, type, first/last login, status, with authorize, revoke, and reassign actions. | — | Planned |
@@ -167,16 +167,16 @@ React frontend, Node.js backend, responsive web experience, Android and iPhone s
 | NOTE-02 | Sales Managers and permitted Recruiters can add notes; historical notes stay attributed. | Recruiters have the note privilege by default. | Implemented |
 | NOTE-03 | Rich text: bold, italics, lists, links. | — | Planned (plain text with line breaks today) |
 | NOTE-04 | Voice-to-text for notes on computer, Android, and iPhone; transcription editable before saving. | — | Planned |
-| NOTE-05 | Natural-language follow-up instructions inside notes may create tasks/reminders after confirmation. | — | Planned |
+| NOTE-05 | Natural-language follow-up instructions inside notes may create tasks/reminders after confirmation. | A next-step phrase with a date in a note (or in the notes of a call, email, or visit) offers a task with the resolved date, time, and title shown for review. The task is created on save only while the offer stays ticked, and the lead's follow-up date moves to it. | Implemented |
 | NOTE-06 | Calls, emails, and visits can be logged as timeline entries with a summary, notes, and the time they occurred. | These entries feed the Action Center and reports. | Implemented (extension that makes AC-02 measurable) |
 
 ### 3.9 Follow-up interpretation, tasks, and reminders (BRD §11)
 
 | ID | Requirement | Acceptance criteria | Status |
 |---|---|---|---|
-| TASK-01 | Tasks can be created manually or directly from a lead (and later from notes, emails, threads). | Manual creation and creation from a lead are available. | Partial |
+| TASK-01 | Tasks can be created manually or directly from a lead (and later from notes, emails, threads). | Manual creation, creation from a lead, and creation from notes (NOTE-05) are available; emails and threads wait on Phases 2 and 3. | Partial |
 | TASK-02 | Task fields: lead, title, description, assignee, due date/time, priority, status, checklist, creator, timestamps. | All present. | Implemented |
-| TASK-03 | Natural-language due dates typed in notes or task fields: "follow up tomorrow", "follow up Monday", an explicit date such as "Feb/01/2026", "next week", "next month", a month name such as "January", or a period such as "six months". A month name alone resolves to the first working day of that month, subject to the business-calendar configuration. Relative periods ("six months") are counted from the date of the source interaction, not from today. | The parsed date is shown for confirmation before the task is created. | Planned |
+| TASK-03 | Natural-language due dates typed in notes or task fields: "follow up tomorrow", "follow up Monday", an explicit date such as "Feb/01/2026", "next week", "next month", a month name such as "January", or a period such as "six months". A month name alone resolves to the first working day of that month, subject to the business-calendar configuration. Relative periods ("six months") are counted from the date of the source interaction, not from today. | The resolved date is shown beside the field in the task form, the follow-up scheduler, and the note form before anything is saved. Month names and relative periods skip weekends and the holidays in the business calendar; weekday names are kept unless they fall on a holiday; explicit dates are kept as written. Notes count relative periods from the interaction date. | Implemented |
 | TASK-04 | Task updates notify assignees; users can comment and use collaborative checklists. | Checklists implemented; notifications and comments planned. | Partial |
 | TASK-05 | Remind the responsible Sales Manager when a lead has had no action for one week, based on configurable action/status rules. | "Needs attention" list on the Action Center; the number of days is an Admin setting. Rules that vary by BD action or status are not yet built. | Partial |
 | TASK-06 | Daily and weekly reminders for pending/overdue activities. | — | Planned (needs notification delivery) |
@@ -264,7 +264,7 @@ React frontend, Node.js backend, responsive web experience, Android and iPhone s
 |---|---|---|---|
 | RPT-01 | Sales Manager dashboard: calls/emails/visits this week vs last week; follow-ups yesterday/today/tomorrow; target achievement, lead creation, conversions, outstanding tasks, recent activity; graphical with drill-down. | — | Implemented |
 | RPT-02 | Admin performance dashboard: summary for all Sales Managers; click a name for the individual report. | — | Implemented |
-| RPT-03 | Periods: Today; Yesterday (business-day logic); This Week; Last Week; Month to Date; Last Month; Year to Date. | "Yesterday" skips weekends. | Implemented |
+| RPT-03 | Periods: Today; Yesterday (business-day logic); This Week; Last Week; Month to Date; Last Month; Year to Date. | "Yesterday" skips weekends and the holidays in the business calendar. | Implemented |
 | RPT-04 | Drill-down from charts/cards to the exact leads/activities behind each number; open the entire lead from there. | — | Implemented |
 | RPT-05 | Tool engagement report for all Sales Managers and for an individual: logins, usage time where measurable, leads created/updated/converted, interactions, tasks created/completed, voice notes, documents attached, other feature usage; filters by date range, person, role/stage, and target template; graphical presentation with drill-down to supporting records. | Counts for logins, leads, updates, conversions, interactions, tasks, files are in the report with drill-down; usage time and voice notes are not measured; filters by stage and template are not yet in the UI. | Partial |
 | RPT-06 | Reports exportable to PDF/Excel. | CSV export implemented; PDF planned. | Partial |
@@ -277,7 +277,7 @@ React frontend, Node.js backend, responsive web experience, Android and iPhone s
 | USR-02 | Admin pre-adds email and role before the person can sign in. | — | Implemented |
 | USR-03 | Admin can add another Admin. | At least one active Admin must always remain. | Implemented |
 | USR-04 | Admin can configure role display names. | — | Implemented |
-| USR-05 | Admin can enable/configure 2FA and 11 PM auto-logout per account. | — | Implemented |
+| USR-05 | Admin can enable/configure 2FA and 11 PM auto-logout per account. | The auto-logout switch and its time of day are per account. | Implemented |
 | USR-06 | Admin can manage authorized company devices per person. | — | Planned |
 | USR-07 | Terminated accounts lose sign-in access but remain in historical audit records. | Sessions are revoked immediately; the record is kept and marked terminated. | Implemented |
 | USR-08 | Termination prompts for lead reassignment (another Sales Manager, the Admin, another Admin), selective or bulk. | — | Implemented |
@@ -327,7 +327,7 @@ React frontend, Node.js backend, responsive web experience, Android and iPhone s
 | BR-04 | A First Contact Date earlier than yesterday creates a Queued Lead requiring Admin approval. | Implemented |
 | BR-05 | Keyword search covers all searchable lead data except attachment contents. | Implemented |
 | BR-06 | Admin can archive one or many filtered/searched leads. | Implemented |
-| BR-07 | 2FA and 11:00 PM Eastern auto-logout are configured per account by Admin. | Implemented |
+| BR-07 | 2FA and the daily auto-logout time (default 11:00 PM Eastern) are configured per account by Admin. | Implemented |
 | BR-08 | Authorized-company-device restriction is configured by Admin. | Planned |
 | BR-09 | Admin can terminate a Sales Manager and reassign leads to another Sales Manager, self, or another Admin. | Implemented |
 | BR-10 | All dropdown values are Admin-maintainable and renamable with audit history. | Implemented |
@@ -374,7 +374,7 @@ All lists are Admin-maintainable. Seeded values:
 2. **Email delivery.** Password reset, invitations, and 2FA depend on SMTP credentials that are not yet available. Until then Admins set passwords directly and 2FA cannot be enabled.
 3. **Google Workspace.** OAuth sign-in and Gmail linking need a Google Cloud project, verified consent screen, and domain-wide or per-user authorization.
 4. **External data sources.** Indeed, company careers pages, Glassdoor, and Google reviews have their own terms; the BRD scopes these to "when lawfully/technically available".
-5. **Business calendar.** The first-working-day rule for month-only reminders needs a holiday calendar; weekends are excluded today, public holidays are not.
+5. **Business calendar.** Resolved: Admins keep the public-holiday list under Settings → Business calendar. Weekends and listed holidays are non-working days for "yesterday" in reports, target scaling, and natural-language dates.
 6. **Native mobile.** Android/iPhone support is met by the responsive web app for now; native apps (camera capture, push) are Phase 3.
 7. **Usage time.** "Application usage/time where measurable" requires client-side activity tracking that is not yet defined.
 
@@ -392,8 +392,8 @@ All lists are Admin-maintainable. Seeded values:
 | §7 Ownership | OWN-01..06 | Implemented |
 | §8 Queued leads | QUE-01..03 | Implemented |
 | §9 Search/filter/archive | SRCH-01..07 | Implemented |
-| §10 Notes/voice | NOTE-01..06 | Partial (rich text, voice, NL parsing planned) |
-| §11 Tasks/reminders | TASK-01..07 | Partial (NL dates, notifications planned) |
+| §10 Notes/voice | NOTE-01..06 | Partial (rich text and voice planned) |
+| §11 Tasks/reminders | TASK-01..07 | Partial (notifications planned) |
 | §12 Collaboration | COLL-01..06 | Planned |
 | §13 Files | FILE-01..08 | Implemented except AI summaries and upload notifications |
 | §14 OCR | OCR-01..03 | Planned |

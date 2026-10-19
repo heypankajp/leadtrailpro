@@ -59,6 +59,13 @@ export function fromLocalInput(value: string): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
+/** Formats an `HH:MM` time of day in the viewer's locale ("23:00" → "11:00 PM"). */
+export function formatTimeOfDay(hhmm: string | null | undefined, fallback = "—"): string {
+  if (!hhmm || !/^\d{2}:\d{2}$/.test(hhmm)) return fallback;
+  const [hour, minute] = hhmm.split(":").map(Number);
+  return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(2000, 0, 1, hour, minute));
+}
+
 export function initials(name: string): string {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("") || "?";
 }

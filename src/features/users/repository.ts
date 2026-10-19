@@ -3,7 +3,8 @@ import { randomBytes, scrypt as scryptCallback } from "node:crypto";
 import { getDatabasePool, affectedRows, fromSqlDateTime, insertId, toSqlDateTime, withTransaction, type Queryable } from "@/lib/db";
 import { HttpError } from "@/lib/http";
 import { recordAudit, diffRecords } from "@/features/audit/repository";
-import { effectivePrivileges, isPrivilege, isSystemRole, isUserStage } from "./model";
+import { isValidTimeOfDay } from "@/lib/dates";
+import { defaultAutoLogoutTime, effectivePrivileges, isPrivilege, isSystemRole, isUserStage } from "./model";
 import type { CreateUserInput, SystemRole, UpdateUserInput, UserAccount, UserPrivilege, UserStage, UserSummary } from "./model";
 
 const scrypt = promisify(scryptCallback);
@@ -21,6 +22,7 @@ export type UserRow = {
   terminatedAt: string | null;
   twoFactorEnabled: number | boolean;
   autoLogoutEnabled: number | boolean;
+  autoLogoutTime: string | null;
   targetTemplateId: number | null;
   createdAt: string;
 };
@@ -28,7 +30,7 @@ export type UserRow = {
 export const userColumns = `
   u.id, u.first_name AS firstName, u.last_name AS lastName, u.email, u.phone, u.role, u.privileges, u.stage,
   u.is_active AS active, u.terminated_at AS terminatedAt, u.two_factor_enabled AS twoFactorEnabled,
-  u.auto_logout_enabled AS autoLogoutEnabled, u.target_template_id AS targetTemplateId, u.created_at AS createdAt
+  u.auto_logout_enabled AS autoLogoutEnabled, u.auto_logout_time AS autoLogoutTime, u.target_template_id AS targetTemplateId, u.created_at AS createdAt
 `;
 
 function parsePrivileges(value: string[] | string): UserPrivilege[] {
@@ -58,6 +60,7 @@ export function toUser(row: UserRow): UserAccount {
     terminatedAt: fromSqlDateTime(row.terminatedAt),
     twoFactorEnabled: Boolean(row.twoFactorEnabled),
     autoLogoutEnabled: Boolean(row.autoLogoutEnabled),
+    autoLogoutTime: isValidTimeOfDay(row.autoLogoutTime) ? row.autoLogoutTime : defaultAutoLogoutTime,
     targetTemplateId: row.targetTemplateId === null ? null : Number(row.targetTemplateId),
     createdAt: fromSqlDateTime(row.createdAt) ?? row.createdAt,
   };
@@ -111,11 +114,11 @@ export async function createUser(input: CreateUserInput, actorId: number | null)
   const passwordHash = await hashPassword(input.password);
   return withTransaction(async (connection) => {
     const [result] = await connection.query(
-      `INSERT INTO users (first_name, last_name, email, phone, password_hash, role, privileges, stage, two_factor_enabled, auto_logout_enabled, target_template_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO users (first_name, last_name, email, phone, password_hash, role, privileges, stage, two_factor_enabled, auto_logout_enabled, auto_logout_time, target_template_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         input.firstName, input.lastName, input.email, input.phone, passwordHash, input.role,
-        JSON.stringify(input.extraPrivileges), input.stage, input.twoFactorEnabled, input.autoLogoutEnabled, input.targetTemplateId,
+        JSON.stringify(input.extraPrivileges), input.stage, input.twoFactorEnabled, input.autoLogoutEnabled, input.autoLogoutTime, input.targetTemplateId,
       ],
     );
     const id = insertId(result);
@@ -132,7 +135,7 @@ export function auditView(user: UserAccount): Record<string, unknown> {
   return {
     firstName: user.firstName, lastName: user.lastName, email: user.email, phone: user.phone, role: user.role, stage: user.stage,
     extraPrivileges: user.extraPrivileges, active: user.active, twoFactorEnabled: user.twoFactorEnabled,
-    autoLogoutEnabled: user.autoLogoutEnabled, targetTemplateId: user.targetTemplateId,
+    autoLogoutEnabled: user.autoLogoutEnabled, autoLogoutTime: user.autoLogoutTime, targetTemplateId: user.targetTemplateId,
   };
 }
 
@@ -152,6 +155,7 @@ export async function updateUser(id: number, input: UpdateUserInput, actorId: nu
     if (input.extraPrivileges !== undefined) set("privileges", JSON.stringify(input.extraPrivileges));
     if (input.twoFactorEnabled !== undefined) set("two_factor_enabled", input.twoFactorEnabled);
     if (input.autoLogoutEnabled !== undefined) set("auto_logout_enabled", input.autoLogoutEnabled);
+    if (input.autoLogoutTime !== undefined) set("auto_logout_time", input.autoLogoutTime);
     if (input.targetTemplateId !== undefined) set("target_template_id", input.targetTemplateId);
     if (input.active !== undefined) {
       set("is_active", input.active);

@@ -3,7 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { errorMessage } from "@/lib/api";
-import type { UserAccount } from "@/features/users/model";
+import { defaultAutoLogoutTime, type UserAccount } from "@/features/users/model";
 import { ErrorText } from "@/features/shell/components";
 import { createBootstrapAdmin, login, requestPasswordReset, resetPassword, verifyTwoFactor } from "./client";
 
@@ -75,7 +75,7 @@ export default function AuthScreen({ checking, needsSetup, initialError, onSigne
     void run(async () => {
       await createBootstrapAdmin({
         firstName: setup.firstName, lastName: setup.lastName, email: setup.email, phone: setup.phone, password: setup.password, role: "admin", stage: "full_productive",
-        extraPrivileges: [], twoFactorEnabled: false, autoLogoutEnabled: false, targetTemplateId: null,
+        extraPrivileges: [], twoFactorEnabled: false, autoLogoutEnabled: false, autoLogoutTime: defaultAutoLogoutTime, targetTemplateId: null,
       }, setup.key);
       const result = await login(setup.email, setup.password);
       if (result.user) onSignedIn(result.user);

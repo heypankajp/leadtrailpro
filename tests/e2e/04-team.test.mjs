@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, describe } from "node:test";
-import { By, Page, addLead, createDriver, uiTest, waitForServices, xq } from "./helpers/ui.mjs";
+import { By, Page, addLead, baseUrl, createDriver, uiTest, waitForServices, xq } from "./helpers/ui.mjs";
 import { admin, ensureAdmin, isoDate, manager, runId } from "./helpers/data.mjs";
 
 describe("Team, roles, and lead ownership", () => {
@@ -33,6 +33,40 @@ describe("Team, roles, and lead ownership", () => {
     await page.clickButton("Create user");
     await page.toast(`Account created for ${manager.name}`);
     await page.wait(By.xpath(`//table//tr[.//strong[normalize-space()=${xq(manager.name)}]]`));
+  });
+
+  uiTest("a per-account sign-out time ends sessions started before it", async (t) => {
+    // The manager signs in through the API first, so this session predates the cutoff the admin is about to set.
+    const login = await fetch(`${baseUrl}/api/auth/login`, {
+      method: "POST", headers: { "Content-Type": "application/json", Origin: baseUrl }, body: JSON.stringify({ email: manager.email, password: manager.password }),
+    });
+    assert.equal(login.status, 200, await login.text().catch(() => ""));
+    const cookie = login.headers.get("set-cookie").split(";")[0];
+    const sessionUser = async () => (await fetch(`${baseUrl}/api/auth/session`, { headers: { Cookie: cookie } }).then((response) => response.json())).user;
+    assert.equal((await sessionUser())?.email, manager.email);
+
+    // Cutoff = the next whole minute in the business timezone (app-test runs with BUSINESS_TIMEZONE=America/Toronto).
+    const clock = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: "America/Toronto", hourCycle: "h23", hour: "2-digit", minute: "2-digit" }).formatToParts(new Date()).map((part) => [part.type, part.value]));
+    const minutes = Number(clock.hour) * 60 + Number(clock.minute) + 1;
+    if (minutes >= 24 * 60) { t.skip("too close to midnight for a same-day cutoff"); return; }
+    const cutoff = `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+
+    await page.click(By.css(`button[aria-label="Edit ${manager.name}"]`), { global: true });
+    await page.dialogTitle(`Edit ${manager.name}`);
+    await page.click(By.xpath('.//label[contains(normalize-space(.), "Automatic daily sign-out")]/input'));
+    await page.fill("Sign out every day at", cutoff);
+    await page.clickButton("Save changes");
+    await page.toast(`${manager.name} updated`);
+    await page.wait(By.xpath(`//table//tr[.//strong[normalize-space()=${xq(manager.name)}]]//span[contains(@class,"badge") and starts-with(normalize-space(.), "On")]`));
+
+    // Once the cutoff passes, the session that started before it is rejected on its next request.
+    const deadline = Date.now() + 90 * 1000;
+    let user = await sessionUser();
+    while (user && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      user = await sessionUser();
+    }
+    assert.equal(user, null, `the session should end once ${cutoff} passes`);
   });
 
   uiTest("the sales manager sees a limited menu", async () => {

@@ -1,7 +1,10 @@
 /**
  * Date helpers for the business timezone (default America/Toronto, per the BRD's Eastern-time rules).
  * All instants are UTC; calendar dates are expressed as `YYYY-MM-DD` in the business timezone.
+ * Working-day rules (weekends plus the admin-managed holiday list) live in `natural-dates.ts`.
  */
+
+import { isWorkingDay } from "./natural-dates";
 
 export function businessTimeZone(): string {
   return process.env.BUSINESS_TIMEZONE || "America/Toronto";
@@ -111,17 +114,17 @@ export function isWeekend(ymd: string): boolean {
   return weekday === 0 || weekday === 6;
 }
 
-/** Most recent business day strictly before the given date (skips Saturday and Sunday). */
-export function previousBusinessDay(ymd: string): string {
+/** Most recent business day strictly before the given date (skips weekends and listed holidays). */
+export function previousBusinessDay(ymd: string, holidays: readonly string[] = []): string {
   let candidate = addDaysYmd(ymd, -1);
-  while (isWeekend(candidate)) candidate = addDaysYmd(candidate, -1);
+  while (!isWorkingDay(candidate, holidays)) candidate = addDaysYmd(candidate, -1);
   return candidate;
 }
 
-export function businessDaysBetween(startYmd: string, endExclusiveYmd: string): number {
+export function businessDaysBetween(startYmd: string, endExclusiveYmd: string, holidays: readonly string[] = []): number {
   let count = 0;
   for (let cursor = startYmd; compareYmd(cursor, endExclusiveYmd) < 0; cursor = addDaysYmd(cursor, 1)) {
-    if (!isWeekend(cursor)) count += 1;
+    if (isWorkingDay(cursor, holidays)) count += 1;
   }
   return count;
 }
@@ -151,15 +154,15 @@ export function rangeFromYmd(startYmd: string, endExclusiveYmd: string, timeZone
   return { startYmd, endExclusiveYmd, start: startOfDayUtc(startYmd, timeZone), end: startOfDayUtc(endExclusiveYmd, timeZone) };
 }
 
-/** Calendar range for a report period. "Yesterday" uses the previous business day, per the BRD. */
-export function periodRange(period: ReportPeriod, now = new Date(), timeZone = businessTimeZone()): DateRange {
+/** Calendar range for a report period. "Yesterday" uses the previous business day (weekends and holidays skipped), per the BRD. */
+export function periodRange(period: ReportPeriod, now = new Date(), timeZone = businessTimeZone(), holidays: readonly string[] = []): DateRange {
   const today = todayYmd(now, timeZone);
   const tomorrow = addDaysYmd(today, 1);
   switch (period) {
     case "today":
       return rangeFromYmd(today, tomorrow, timeZone);
     case "yesterday": {
-      const day = previousBusinessDay(today);
+      const day = previousBusinessDay(today, holidays);
       return rangeFromYmd(day, addDaysYmd(day, 1), timeZone);
     }
     case "this_week":
@@ -179,9 +182,16 @@ export function periodRange(period: ReportPeriod, now = new Date(), timeZone = b
   }
 }
 
-/** The most recent occurrence of the configured auto-logout time (default 23:00) in the business timezone. */
-export function lastAutoLogoutCutoff(now = new Date(), timeZone = businessTimeZone()): Date {
+export const timeOfDayPattern = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+export function isValidTimeOfDay(value: unknown): value is string {
+  return typeof value === "string" && timeOfDayPattern.test(value);
+}
+
+/** The most recent occurrence of an account's auto sign-out time (`HH:MM`, default 23:00) in the business timezone. */
+export function lastAutoLogoutCutoff(time = "23:00", now = new Date(), timeZone = businessTimeZone()): Date {
+  const [hour, minute] = (isValidTimeOfDay(time) ? time : "23:00").split(":").map(Number);
   const today = todayYmd(now, timeZone);
-  const todayCutoff = zonedDateTimeToUtc(today, 23, 0, 0, timeZone);
-  return todayCutoff.getTime() <= now.getTime() ? todayCutoff : zonedDateTimeToUtc(addDaysYmd(today, -1), 23, 0, 0, timeZone);
+  const todayCutoff = zonedDateTimeToUtc(today, hour, minute, 0, timeZone);
+  return todayCutoff.getTime() <= now.getTime() ? todayCutoff : zonedDateTimeToUtc(addDaysYmd(today, -1), hour, minute, 0, timeZone);
 }

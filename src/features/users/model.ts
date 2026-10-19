@@ -1,3 +1,5 @@
+import { isValidTimeOfDay } from "@/lib/dates";
+
 export const systemRoles = ["admin", "sales_manager", "recruiter"] as const;
 export type SystemRole = (typeof systemRoles)[number];
 
@@ -87,9 +89,13 @@ export type UserAccount = {
   terminatedAt: string | null;
   twoFactorEnabled: boolean;
   autoLogoutEnabled: boolean;
+  /** Daily sign-out time (`HH:MM` in the business timezone) applied when autoLogoutEnabled is on. */
+  autoLogoutTime: string;
   targetTemplateId: number | null;
   createdAt: string;
 };
+
+export const defaultAutoLogoutTime = "23:00";
 
 /** Compact user for owner and assignee selectors. */
 export type UserSummary = { id: number; name: string; role: SystemRole; active: boolean };
@@ -105,6 +111,7 @@ export type CreateUserInput = {
   extraPrivileges: UserPrivilege[];
   twoFactorEnabled: boolean;
   autoLogoutEnabled: boolean;
+  autoLogoutTime: string;
   targetTemplateId: number | null;
 };
 
@@ -137,6 +144,7 @@ export function parseCreateUser(value: unknown): CreateUserInput | null {
   if (!isValidPassword(body.password)) return null;
   if (!isSystemRole(body.role)) return null;
   if (body.stage !== undefined && !isUserStage(body.stage)) return null;
+  if (body.autoLogoutTime !== undefined && !isValidTimeOfDay(body.autoLogoutTime)) return null;
   const extras = body.extraPrivileges ?? body.privileges ?? [];
   if (!Array.isArray(extras) || !extras.every(isPrivilege)) return null;
   const targetTemplateId = optionalId(body.targetTemplateId);
@@ -153,6 +161,7 @@ export function parseCreateUser(value: unknown): CreateUserInput | null {
     extraPrivileges: [...new Set(extras as UserPrivilege[])],
     twoFactorEnabled: body.twoFactorEnabled === true,
     autoLogoutEnabled: body.autoLogoutEnabled === true,
+    autoLogoutTime: isValidTimeOfDay(body.autoLogoutTime) ? body.autoLogoutTime : defaultAutoLogoutTime,
     targetTemplateId: targetTemplateId ?? null,
   };
 }
@@ -196,6 +205,10 @@ export function parseUpdateUser(value: unknown): UpdateUserInput | null {
   if (body.autoLogoutEnabled !== undefined) {
     if (typeof body.autoLogoutEnabled !== "boolean") return null;
     input.autoLogoutEnabled = body.autoLogoutEnabled;
+  }
+  if (body.autoLogoutTime !== undefined) {
+    if (!isValidTimeOfDay(body.autoLogoutTime)) return null;
+    input.autoLogoutTime = body.autoLogoutTime;
   }
   if (body.targetTemplateId !== undefined) {
     const id = optionalId(body.targetTemplateId);

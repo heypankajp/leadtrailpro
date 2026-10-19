@@ -378,6 +378,17 @@ const migrations = [
       );
     },
   },
+  {
+    version: 2,
+    name: "per-account auto sign-out time (AUTH-07) and business calendar holidays",
+    async run(connection) {
+      await addColumnIfMissing(connection, "users", "auto_logout_time", "CHAR(5) NOT NULL DEFAULT '23:00'");
+      await connection.query(
+        "INSERT IGNORE INTO app_settings (setting_key, value_json) VALUES (?, ?)",
+        ["business_calendar", JSON.stringify({ holidays: [] })],
+      );
+    },
+  },
 ];
 
 if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port > 65535) {

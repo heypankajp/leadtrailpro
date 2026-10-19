@@ -6,7 +6,7 @@ import { errorMessage } from "@/lib/api";
 import { useApp } from "@/features/shell/AppContext";
 import { Dialog, ErrorText } from "@/features/shell/components";
 import { createUser, updateUser } from "@/features/users/client";
-import { rolePrivileges, stageLabels, systemRoles, userPrivileges, userStages, type SystemRole, type UserAccount, type UserPrivilege, type UserStage } from "@/features/users/model";
+import { defaultAutoLogoutTime, rolePrivileges, stageLabels, systemRoles, userPrivileges, userStages, type SystemRole, type UserAccount, type UserPrivilege, type UserStage } from "@/features/users/model";
 
 type Props = { user?: UserAccount; onClose: () => void; onSaved: (user: UserAccount) => void };
 
@@ -16,7 +16,7 @@ export default function UserFormDialog({ user, onClose, onSaved }: Props) {
     firstName: user?.firstName ?? "", lastName: user?.lastName ?? "", email: user?.email ?? "", phone: user?.phone ?? "",
     role: (user?.role ?? "sales_manager") as SystemRole, stage: (user?.stage ?? "onboarding") as UserStage,
     targetTemplateId: user?.targetTemplateId ? String(user.targetTemplateId) : "", twoFactorEnabled: user?.twoFactorEnabled ?? false, autoLogoutEnabled: user?.autoLogoutEnabled ?? false,
-    password: "", confirmPassword: "",
+    autoLogoutTime: user?.autoLogoutTime ?? defaultAutoLogoutTime, password: "", confirmPassword: "",
   });
   const [extras, setExtras] = useState<UserPrivilege[]>(user?.extraPrivileges ?? []);
   const [showPassword, setShowPassword] = useState(false);
@@ -34,7 +34,7 @@ export default function UserFormDialog({ user, onClose, onSaved }: Props) {
     const shared = {
       firstName: form.firstName, lastName: form.lastName, email: form.email, phone: form.phone, role: form.role, stage: form.stage,
       extraPrivileges: extras.filter((privilege) => !defaults.includes(privilege)), twoFactorEnabled: form.twoFactorEnabled, autoLogoutEnabled: form.autoLogoutEnabled,
-      targetTemplateId: form.targetTemplateId ? Number(form.targetTemplateId) : null,
+      autoLogoutTime: form.autoLogoutTime || defaultAutoLogoutTime, targetTemplateId: form.targetTemplateId ? Number(form.targetTemplateId) : null,
     };
     try {
       const result = user ? await updateUser(user.id, shared) : await createUser({ ...shared, password: form.password });
@@ -77,7 +77,8 @@ export default function UserFormDialog({ user, onClose, onSaved }: Props) {
         <fieldset className="user-privileges security-options">
           <legend>Security</legend>
           <label><input type="checkbox" checked={form.twoFactorEnabled} disabled={!reference.mailerConfigured && !form.twoFactorEnabled} onChange={(event) => set("twoFactorEnabled", event.target.checked)} />Two-factor sign-in by email code{!reference.mailerConfigured && <small> (needs SMTP settings)</small>}</label>
-          <label><input type="checkbox" checked={form.autoLogoutEnabled} onChange={(event) => set("autoLogoutEnabled", event.target.checked)} />Automatic sign-out at 11:00 PM ({reference.timeZone})</label>
+          <label><input type="checkbox" checked={form.autoLogoutEnabled} onChange={(event) => set("autoLogoutEnabled", event.target.checked)} />Automatic daily sign-out</label>
+          <label className="inline-time">Sign out every day at<input type="time" value={form.autoLogoutTime} disabled={!form.autoLogoutEnabled} required={form.autoLogoutEnabled} onChange={(event) => set("autoLogoutTime", event.target.value)} /><small>{reference.timeZone}. Sessions started before this time end; the next sign-in needs the password{form.twoFactorEnabled ? " and the two-factor code" : ""}.</small></label>
         </fieldset>
         <fieldset className="user-privileges">
           <legend>Privileges · {roleLabel(form.role)} defaults are included; tick extras to grant more</legend>

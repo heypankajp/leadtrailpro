@@ -1,17 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   Archive, ArrowLeft, CalendarCheck2, Check, Download, ExternalLink, FileText, History, Mail, MapPin, MessageSquare, Paperclip, Pencil, Phone, Plus, RotateCcw, Trash2, UserRound, Users,
 } from "lucide-react";
 import mammoth from "mammoth";
 import { errorMessage } from "@/lib/api";
-import { fileSize, formatDate, formatDateTime, fromLocalInput, relativeTime, toLocalInput } from "@/lib/format";
+import { fileSize, formatDate, formatDateTime, formatTimeOfDay, fromLocalInput, relativeTime, toLocalInput } from "@/lib/format";
+import { suggestFollowUp } from "@/lib/natural-dates";
 import { useAsyncData } from "@/lib/useAsyncData";
 import { documentLabels, previewableMimeTypes, type LeadAttachment } from "@/features/attachments/model";
 import { useApp } from "@/features/shell/AppContext";
 import { Avatar, Dialog, EmptyState, ErrorText, Field, KeyValue, Loading, PromptDialog, StatusPill, Tabs } from "@/features/shell/components";
 import { createTask, updateTask } from "@/features/tasks/client";
+import NaturalDateField from "@/features/tasks/NaturalDateField";
 import TaskFormDialog from "@/features/tasks/TaskFormDialog";
 import type { Task } from "@/features/tasks/model";
 import UserDirectoryDialog from "@/features/users/UserDirectoryDialog";
@@ -150,7 +152,7 @@ export default function LeadDetailDialog({ leadId, onClose }: { leadId: number; 
             await refresh("Follow-up scheduled and added to tasks");
           }} />
         )}
-        {tab === "timeline" && <TimelineTab detail={detail} onLogged={() => refresh("Activity recorded")} />}
+        {tab === "timeline" && <TimelineTab detail={detail} onLogged={(message) => refresh(message ?? "Activity recorded")} />}
         {(tab === "files" || tab === "profiles") && (
           <FilesTab key={tab} category={tab === "files" ? "document" : "profile"} files={tab === "files" ? documents : profiles} leadId={lead.id} onChanged={(message) => refresh(message)} />
         )}
@@ -274,6 +276,7 @@ function OverviewTab({ detail, canEdit, onQuickUpdate, onScheduleFollowUp }: {
         scheduling ? (
           <form className="lead-form follow-up-form" onSubmit={schedule}>
             <p className="follow-up-intro field-wide">Set the next step for <strong>{lead.clientName}</strong>. The reminder goes to the owner&apos;s task list.</p>
+            <NaturalDateField label="Type the follow-up date" placeholder="next Tuesday at 2pm, in a week, end of month..." onResolve={(result, resolvedTime) => { setDate(result.date); setTime(resolvedTime); }} />
             <Field label="Follow-up date" required><input type="date" value={date} min={reference.today} onChange={(event) => setDate(event.target.value)} required autoFocus /></Field>
             <Field label="Follow-up time" required><input type="time" value={time} onChange={(event) => setTime(event.target.value)} required /></Field>
             <Field label="What needs to happen?" wide><textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Call back about the revised proposal..." /></Field>
@@ -288,28 +291,49 @@ function OverviewTab({ detail, canEdit, onQuickUpdate, onScheduleFollowUp }: {
   );
 }
 
-function TimelineTab({ detail, onLogged }: { detail: LeadDetail; onLogged: () => Promise<void> }) {
-  const { can } = useApp();
+type FollowUpDraft = { key: string; enabled: boolean; title: string; date: string; time: string };
+
+function TimelineTab({ detail, onLogged }: { detail: LeadDetail; onLogged: (message?: string) => Promise<void> }) {
+  const { can, reference } = useApp();
+  const { lead } = detail;
   const [type, setType] = useState<LoggableActivityType | null>(null);
   const [summary, setSummary] = useState("");
   const [body, setBody] = useState("");
   const [occurredAt, setOccurredAt] = useState(toLocalInput(new Date().toISOString()));
+  const [taskDraft, setTaskDraft] = useState<FollowUpDraft | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const canLog = can("log_activities") && detail.lead.recordState === "active";
-  const canNote = can("add_notes") && detail.lead.recordState !== "archived";
+  const canLog = can("log_activities") && lead.recordState === "active";
+  const canNote = can("add_notes") && lead.recordState !== "archived";
+  const canSuggest = can("manage_tasks") && lead.recordState === "active";
 
-  const open = (next: LoggableActivityType) => { setType(next); setSummary(""); setBody(""); setOccurredAt(toLocalInput(new Date().toISOString())); setError(""); };
+  // NOTE-05: a follow-up instruction with a date in the note offers a task; relative periods count from the interaction date.
+  const suggestion = useMemo(() => {
+    if (!canSuggest || !type) return null;
+    const anchor = /^\d{4}-\d{2}-\d{2}/.test(occurredAt) ? occurredAt.slice(0, 10) : reference.today;
+    return suggestFollowUp(`${summary}\n${body}`, { anchor, today: reference.today, holidays: reference.holidays, person: lead.clientExecutive, company: lead.clientName });
+  }, [canSuggest, type, summary, body, occurredAt, reference.today, reference.holidays, lead.clientExecutive, lead.clientName]);
+  const suggestionKey = suggestion ? `${suggestion.date}|${suggestion.time ?? ""}|${suggestion.title}` : "";
+  const draft: FollowUpDraft | null = suggestion
+    ? (taskDraft?.key === suggestionKey ? taskDraft : { key: suggestionKey, enabled: true, title: suggestion.title, date: suggestion.date, time: suggestion.time ?? "09:00" })
+    : null;
+  const updateDraft = (changes: Partial<FollowUpDraft>) => { if (draft) setTaskDraft({ ...draft, ...changes }); };
+
+  const open = (next: LoggableActivityType) => { setType(next); setSummary(""); setBody(""); setOccurredAt(toLocalInput(new Date().toISOString())); setTaskDraft(null); setError(""); };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!type) return;
     setBusy(true);
     setError("");
+    const followUpTask = draft?.enabled && suggestion
+      ? { title: draft.title.trim() || suggestion.title, description: suggestion.sentence, dueAt: fromLocalInput(`${draft.date}T${draft.time}`), setFollowUpDate: true }
+      : undefined;
     try {
-      await logActivity(detail.lead.id, { type, summary, body, occurredAt: fromLocalInput(occurredAt) });
+      await logActivity(lead.id, { type, summary, body, occurredAt: fromLocalInput(occurredAt), followUpTask });
       setType(null);
-      await onLogged();
+      setTaskDraft(null);
+      await onLogged(followUpTask ? "Activity recorded and follow-up task created" : undefined);
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -330,8 +354,26 @@ function TimelineTab({ detail, onLogged }: { detail: LeadDetail; onLogged: () =>
       {type && (
         <form className="lead-form activity-form" onSubmit={submit}>
           {type !== "note" && <Field label="Summary" wide><input value={summary} onChange={(event) => setSummary(event.target.value)} maxLength={500} placeholder={type === "call" ? "Spoke with HR about the Q1 hiring plan" : type === "email" ? "Sent the introduction email" : "On-site meeting with the plant manager"} autoFocus /></Field>}
-          <Field label={type === "note" ? "Interaction note" : "Notes (optional)"} wide required={type === "note"}><textarea rows={4} value={body} onChange={(event) => setBody(event.target.value)} maxLength={10000} placeholder="What was discussed, commitments, next steps..." autoFocus={type === "note"} required={type === "note"} /></Field>
+          <Field label={type === "note" ? "Interaction note" : "Notes (optional)"} wide required={type === "note"} hint={canSuggest ? "Mention the next step with a date (\u201cfollow up next Tuesday\u201d, \u201csend the proposal by Friday\u201d) and a task will be offered." : undefined}><textarea rows={4} value={body} onChange={(event) => setBody(event.target.value)} maxLength={10000} placeholder="What was discussed, commitments, next steps..." autoFocus={type === "note"} required={type === "note"} /></Field>
           <Field label="When"><input type="datetime-local" value={occurredAt} max={toLocalInput(new Date().toISOString())} onChange={(event) => setOccurredAt(event.target.value)} required /></Field>
+          {draft && suggestion && (
+            <div className="form-note follow-up-suggestion field-wide">
+              <CalendarCheck2 size={14} />
+              <div className="follow-up-suggestion-body">
+                <label className="checklist-item">
+                  <input type="checkbox" checked={draft.enabled} onChange={(event) => updateDraft({ enabled: event.target.checked })} />
+                  <span>Create a follow-up task from this {type === "note" ? "note" : type}: understood &ldquo;{suggestion.matched}&rdquo; as <strong>{formatDate(draft.date)} at {formatTimeOfDay(draft.time)}</strong>{suggestion.adjusted ? " (moved to the next working day)" : ""}. The lead&apos;s next follow-up date moves there too.</span>
+                </label>
+                {draft.enabled && (
+                  <div className="follow-up-suggestion-fields">
+                    <input aria-label="Follow-up task title" value={draft.title} maxLength={200} onChange={(event) => updateDraft({ title: event.target.value })} />
+                    <input aria-label="Follow-up task date" type="date" value={draft.date} onChange={(event) => updateDraft({ date: event.target.value })} />
+                    <input aria-label="Follow-up task time" type="time" value={draft.time} onChange={(event) => updateDraft({ time: event.target.value })} />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
           <ErrorText message={error} />
           <div className="modal-actions"><button type="button" className="button button-outline" onClick={() => setType(null)}>Cancel</button><button type="submit" className="button button-primary" disabled={busy}>{busy ? "Saving..." : type === "note" ? "Add note" : `Save ${type}`}</button></div>
         </form>
