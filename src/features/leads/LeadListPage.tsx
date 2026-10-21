@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAsyncData } from "@/lib/useAsyncData";
 import { ChevronDown, Filter, Plus, Search, SlidersHorizontal, UserRound, X } from "lucide-react";
+import { reasonListFor } from "@/features/list-values/model";
 import { useApp } from "@/features/shell/AppContext";
 import { ErrorText, Loading, Pagination, PromptDialog } from "@/features/shell/components";
 import UserDirectoryDialog from "@/features/users/UserDirectoryDialog";
@@ -30,12 +31,12 @@ const sortLabels: Record<LeadSortKey, string> = {
 };
 
 type Filters = {
-  q: string; statusId: string; leadTypeId: string; leadCategoryId: string; companySizeId: string; cityId: string; ownerId: string; clientResponseId: string; bdActionId: string;
+  q: string; statusId: string; statusReasonId: string; leadTypeId: string; leadCategoryId: string; companySizeId: string; cityId: string; ownerId: string; clientResponseId: string; bdActionId: string;
   firstContactFrom: string; firstContactTo: string; followUpFrom: string; followUpTo: string; contractSignedFrom: string; contractSignedTo: string; sort: LeadSortKey; direction: "asc" | "desc";
 };
 
 const emptyFilters: Filters = {
-  q: "", statusId: "", leadTypeId: "", leadCategoryId: "", companySizeId: "", cityId: "", ownerId: "", clientResponseId: "", bdActionId: "",
+  q: "", statusId: "", statusReasonId: "", leadTypeId: "", leadCategoryId: "", companySizeId: "", cityId: "", ownerId: "", clientResponseId: "", bdActionId: "",
   firstContactFrom: "", firstContactTo: "", followUpFrom: "", followUpTo: "", contractSignedFrom: "", contractSignedTo: "", sort: "last_activity", direction: "desc",
 };
 
@@ -72,7 +73,7 @@ export default function LeadListPage({ view }: { view: LeadListView }) {
     const numeric = (value: string) => (value ? Number(value) : undefined);
     return {
       ...base,
-      statusId: numeric(filters.statusId), leadTypeId: numeric(filters.leadTypeId), leadCategoryId: numeric(filters.leadCategoryId), companySizeId: numeric(filters.companySizeId),
+      statusId: numeric(filters.statusId), statusReasonId: numeric(filters.statusReasonId), leadTypeId: numeric(filters.leadTypeId), leadCategoryId: numeric(filters.leadCategoryId), companySizeId: numeric(filters.companySizeId),
       cityId: numeric(filters.cityId), ownerId: numeric(filters.ownerId), clientResponseId: numeric(filters.clientResponseId), bdActionId: numeric(filters.bdActionId),
       firstContactFrom: filters.firstContactFrom || undefined, firstContactTo: filters.firstContactTo || undefined, followUpFrom: filters.followUpFrom || undefined, followUpTo: filters.followUpTo || undefined,
       contractSignedFrom: filters.contractSignedFrom || undefined, contractSignedTo: filters.contractSignedTo || undefined,
@@ -82,7 +83,9 @@ export default function LeadListPage({ view }: { view: LeadListView }) {
   const fetcher = useCallback(() => fetchLeads(query), [query]);
   const { data, error, loading } = useAsyncData<LeadPage>(fetcher, dataVersion);
 
-  const update = (changes: Partial<Filters>) => { setFilters((current) => ({ ...current, ...changes })); setPage(1); setSelected([]); };
+  // Changing the status filter resets the reason filter, which only applies to Lost Lead and Disqualified (LEAD-07).
+  const update = (changes: Partial<Filters>) => { setFilters((current) => ({ ...current, ...(changes.statusId !== undefined ? { statusReasonId: "" } : {}), ...changes })); setPage(1); setSelected([]); };
+  const reasonKey = reasonListFor(reference.listValues.status.find((item) => String(item.id) === filters.statusId)?.code);
   const activeFilterCount = Object.entries(filters).filter(([key, value]) => !["q", "sort", "direction"].includes(key) && value).length;
   const statusViews = ["cold", "warm", "hot", "client"];
   const owners = reference.users.filter((user) => user.role !== "recruiter");
@@ -125,6 +128,9 @@ export default function LeadListPage({ view }: { view: LeadListView }) {
             </div>
             {!statusViews.includes(view) && (
               <label className="select-filter"><Filter size={15} />{options(reference.listValues.status, "All statuses", filters.statusId, "statusId")}<ChevronDown size={14} /></label>
+            )}
+            {reasonKey && (
+              <label className="select-filter">{options(reference.listValues[reasonKey], "Any reason", filters.statusReasonId, "statusReasonId")}<ChevronDown size={14} /></label>
             )}
             <label className="select-filter">
               <SlidersHorizontal size={15} />

@@ -2,6 +2,7 @@ import { getDatabasePool, affectedRows, fromSqlDateTime, insertId, toSqlDateTime
 import { addDaysYmd, todayYmd } from "@/lib/dates";
 import { HttpError } from "@/lib/http";
 import { recordAudit, diffRecords } from "@/features/audit/repository";
+import { reasonListFor, statusLabel } from "@/features/list-values/model";
 import { assertListValue, getListValue } from "@/features/list-values/repository";
 import { getUser } from "@/features/users/repository";
 import { hasPrivilege } from "@/features/users/model";
@@ -11,7 +12,7 @@ import type { ActivityType, LeadActivity, LeadFilters, LeadInput, LeadPage, Lead
 
 // ---- Row mapping ----
 
-type LeadRow = Omit<LeadSummary, "clientEmails" | "lastActivityAt" | "createdAt" | "updatedAt"> & {
+type LeadRow = Omit<LeadSummary, "clientEmails" | "lastActivityAt" | "createdAt" | "updatedAt" | "statusLabel"> & {
   clientEmails: string | string[];
   lastActivityAt: string;
   createdAt: string;
@@ -19,26 +20,28 @@ type LeadRow = Omit<LeadSummary, "clientEmails" | "lastActivityAt" | "createdAt"
 };
 
 export const leadSelect = `
-  SELECT l.id, l.owner_id AS ownerId, CONCAT(o.first_name, ' ', o.last_name) AS ownerName,
-    l.created_by AS createdById, CONCAT(c.first_name, ' ', c.last_name) AS createdByName,
-    l.lead_type_id AS leadTypeId, lt.value AS leadType,
-    l.status_id AS statusId, st.value AS status, st.code AS statusCode,
-    l.bd_action_id AS bdActionId, ba.value AS bdAction,
-    l.client_response_id AS clientResponseId, cr.value AS clientResponse,
-    l.lead_category_id AS leadCategoryId, lc.value AS leadCategory,
-    l.company_size_id AS companySizeId, cs.value AS companySize,
-    l.city_id AS cityId, ci.value AS city,
-    l.client_name AS clientName, l.company_url AS companyUrl, l.address, COALESCE(l.comments, '') AS comments,
-    l.client_executive AS clientExecutive, l.contact_phone AS contactPhone, l.contact_alt_phone AS contactAltPhone,
-    l.contact_remark AS contactRemark, l.client_emails AS clientEmails, l.industry, COALESCE(l.positions, '') AS positions,
-    l.first_contact_date AS firstContactDate, l.follow_up_date AS followUpDate, l.contract_signed_date AS contractSignedDate,
-    l.record_state AS recordState, l.state_reason AS stateReason, l.last_activity_at AS lastActivityAt,
-    l.created_at AS createdAt, l.updated_at AS updatedAt
+  SELECT l.id, l.owner_id AS "ownerId", CONCAT(o.first_name, ' ', o.last_name) AS "ownerName",
+    l.created_by AS "createdById", CONCAT(c.first_name, ' ', c.last_name) AS "createdByName",
+    l.lead_type_id AS "leadTypeId", lt.value AS "leadType",
+    l.status_id AS "statusId", st.value AS status, st.code AS "statusCode",
+    l.status_reason_id AS "statusReasonId", sr.value AS "statusReason",
+    l.bd_action_id AS "bdActionId", ba.value AS "bdAction",
+    l.client_response_id AS "clientResponseId", cr.value AS "clientResponse",
+    l.lead_category_id AS "leadCategoryId", lc.value AS "leadCategory",
+    l.company_size_id AS "companySizeId", cs.value AS "companySize",
+    l.city_id AS "cityId", ci.value AS city,
+    l.client_name AS "clientName", l.company_url AS "companyUrl", l.address, COALESCE(l.comments, '') AS comments,
+    l.client_executive AS "clientExecutive", l.contact_phone AS "contactPhone", l.contact_alt_phone AS "contactAltPhone",
+    l.contact_remark AS "contactRemark", l.client_emails AS "clientEmails", l.industry, COALESCE(l.positions, '') AS positions,
+    l.first_contact_date AS "firstContactDate", l.follow_up_date AS "followUpDate", l.contract_signed_date AS "contractSignedDate",
+    l.record_state AS "recordState", l.state_reason AS "stateReason", l.last_activity_at AS "lastActivityAt",
+    l.created_at AS "createdAt", l.updated_at AS "updatedAt"
   FROM leads l
   JOIN users o ON o.id = l.owner_id
   JOIN users c ON c.id = l.created_by
   JOIN list_values lt ON lt.id = l.lead_type_id
   JOIN list_values st ON st.id = l.status_id
+  LEFT JOIN list_values sr ON sr.id = l.status_reason_id
   LEFT JOIN list_values ba ON ba.id = l.bd_action_id
   LEFT JOIN list_values cr ON cr.id = l.client_response_id
   LEFT JOIN list_values lc ON lc.id = l.lead_category_id
@@ -64,6 +67,8 @@ export function toLead(row: LeadRow): LeadSummary {
     createdById: Number(row.createdById),
     leadTypeId: Number(row.leadTypeId),
     statusId: Number(row.statusId),
+    statusReasonId: row.statusReasonId === null ? null : Number(row.statusReasonId),
+    statusLabel: statusLabel(row.status, row.statusReason),
     bdActionId: row.bdActionId === null ? null : Number(row.bdActionId),
     clientResponseId: row.clientResponseId === null ? null : Number(row.clientResponseId),
     leadCategoryId: row.leadCategoryId === null ? null : Number(row.leadCategoryId),
@@ -82,7 +87,7 @@ export function leadAuditView(lead: LeadSummary): Record<string, unknown> {
     clientName: lead.clientName, companyUrl: lead.companyUrl, address: lead.address, comments: lead.comments,
     clientExecutive: lead.clientExecutive, contactPhone: lead.contactPhone, contactAltPhone: lead.contactAltPhone,
     contactRemark: lead.contactRemark, clientEmails: lead.clientEmails, industry: lead.industry, positions: lead.positions,
-    leadType: lead.leadType, status: lead.status, bdAction: lead.bdAction, clientResponse: lead.clientResponse,
+    leadType: lead.leadType, status: lead.status, statusReason: lead.statusReason, bdAction: lead.bdAction, clientResponse: lead.clientResponse,
     leadCategory: lead.leadCategory, companySize: lead.companySize, city: lead.city,
     firstContactDate: lead.firstContactDate, followUpDate: lead.followUpDate, contractSignedDate: lead.contractSignedDate,
     owner: lead.ownerName, recordState: lead.recordState, stateReason: lead.stateReason,
@@ -102,12 +107,12 @@ export function canTransferLead(user: UserAccount, lead: LeadSummary) {
 // ---- Queries ----
 
 export async function selectLeads(where: string, params: unknown[], orderBy: string, limit: number, db: Queryable = getDatabasePool()): Promise<LeadSummary[]> {
-  const [rows] = await db.query(`${leadSelect} WHERE ${where} ORDER BY ${orderBy} LIMIT ${Math.max(1, Math.min(limit, 500))}`, params);
+  const { rows } = await db.query(`${leadSelect} WHERE ${where} ORDER BY ${orderBy} LIMIT ${Math.max(1, Math.min(limit, 500))}`, params);
   return (rows as LeadRow[]).map(toLead);
 }
 
 export async function getLead(id: number, db: Queryable = getDatabasePool()): Promise<LeadSummary | null> {
-  const [rows] = await db.query(`${leadSelect} WHERE l.id = ? LIMIT 1`, [id]);
+  const { rows } = await db.query(`${leadSelect} WHERE l.id = ? LIMIT 1`, [id]);
   const row = (rows as LeadRow[])[0];
   return row ? toLead(row) : null;
 }
@@ -119,7 +124,7 @@ const sortColumns: Record<LeadFilters["sort"], string> = {
   first_contact: "l.first_contact_date",
   follow_up: "l.follow_up_date",
   client_name: "l.client_name",
-  owner: "ownerName",
+  owner: '"ownerName"',
   created: "l.created_at",
 };
 
@@ -130,7 +135,7 @@ export async function listLeads(filters: LeadFilters, viewer: UserAccount): Prom
   if (filters.ownerId) { clauses.push("l.owner_id = ?"); params.push(filters.ownerId); }
   if (filters.statusCode) { clauses.push("st.code = ?"); params.push(filters.statusCode); }
   const idFilters: [number | null, string][] = [
-    [filters.statusId, "l.status_id"], [filters.leadTypeId, "l.lead_type_id"], [filters.leadCategoryId, "l.lead_category_id"],
+    [filters.statusId, "l.status_id"], [filters.statusReasonId, "l.status_reason_id"], [filters.leadTypeId, "l.lead_type_id"], [filters.leadCategoryId, "l.lead_category_id"],
     [filters.companySizeId, "l.company_size_id"], [filters.cityId, "l.city_id"], [filters.clientResponseId, "l.client_response_id"],
     [filters.bdActionId, "l.bd_action_id"],
   ];
@@ -149,7 +154,7 @@ export async function listLeads(filters: LeadFilters, viewer: UserAccount): Prom
     const pattern = likePattern(filters.q.toLowerCase());
     const fields = [
       "l.client_name", "l.client_executive", "l.address", "l.comments", "l.industry", "l.positions", "l.contact_phone",
-      "l.contact_alt_phone", "l.contact_remark", "CAST(l.client_emails AS CHAR)", "st.value", "ci.value", "ba.value", "cr.value",
+      "l.contact_alt_phone", "l.contact_remark", "l.client_emails::text", "st.value", "sr.value", "ci.value", "ba.value", "cr.value",
       "lt.value", "CONCAT(o.first_name, ' ', o.last_name)",
     ];
     clauses.push(`(${fields.map((field) => `LOWER(${field}) LIKE ?`).join(" OR ")} OR EXISTS (SELECT 1 FROM lead_activities a WHERE a.lead_id = l.id AND (LOWER(a.summary) LIKE ? OR LOWER(a.body) LIKE ?)))`);
@@ -159,18 +164,18 @@ export async function listLeads(filters: LeadFilters, viewer: UserAccount): Prom
   const direction = filters.direction === "asc" ? "ASC" : "DESC";
   const sortColumn = sortColumns[filters.sort];
   const orderBy = filters.sort === "follow_up"
-    ? `ISNULL(l.follow_up_date), l.follow_up_date ${direction}, l.id DESC`
+    ? `l.follow_up_date ${direction} NULLS LAST, l.id DESC`
     : `${sortColumn} ${direction}, l.id DESC`;
   const offset = (filters.page - 1) * filters.pageSize;
   const db = getDatabasePool();
-  const [countRows] = await db.query(
+  const { rows: countRows } = await db.query(
     `SELECT COUNT(*) AS total FROM leads l JOIN users o ON o.id = l.owner_id JOIN list_values st ON st.id = l.status_id JOIN list_values lt ON lt.id = l.lead_type_id
-     LEFT JOIN list_values ba ON ba.id = l.bd_action_id LEFT JOIN list_values cr ON cr.id = l.client_response_id LEFT JOIN list_values ci ON ci.id = l.city_id
+     LEFT JOIN list_values sr ON sr.id = l.status_reason_id LEFT JOIN list_values ba ON ba.id = l.bd_action_id LEFT JOIN list_values cr ON cr.id = l.client_response_id LEFT JOIN list_values ci ON ci.id = l.city_id
      WHERE ${where}`,
     params,
   );
   const total = Number((countRows as { total: number }[])[0].total);
-  const [rows] = await db.query(`${leadSelect} WHERE ${where} ORDER BY ${orderBy} LIMIT ${filters.pageSize} OFFSET ${offset}`, params);
+  const { rows } = await db.query(`${leadSelect} WHERE ${where} ORDER BY ${orderBy} LIMIT ${filters.pageSize} OFFSET ${offset}`, params);
   return { leads: (rows as LeadRow[]).map(toLead), total, page: filters.page, pageSize: filters.pageSize };
 }
 
@@ -201,9 +206,9 @@ const toActivity = (row: ActivityRow): LeadActivity => {
 };
 
 export async function listActivities(leadId: number, db: Queryable = getDatabasePool()): Promise<LeadActivity[]> {
-  const [rows] = await db.query(
-    `SELECT a.id, a.lead_id AS leadId, a.user_id AS userId, CONCAT(u.first_name, ' ', u.last_name) AS userName, a.activity_type AS type,
-       a.summary, a.body, a.value_code AS valueCode, a.meta, a.occurred_at AS occurredAt, a.created_at AS createdAt
+  const { rows } = await db.query(
+    `SELECT a.id, a.lead_id AS "leadId", a.user_id AS "userId", CONCAT(u.first_name, ' ', u.last_name) AS "userName", a.activity_type AS type,
+       a.summary, a.body, a.value_code AS "valueCode", a.meta, a.occurred_at AS "occurredAt", a.created_at AS "createdAt"
      FROM lead_activities a JOIN users u ON u.id = a.user_id WHERE a.lead_id = ? ORDER BY a.occurred_at DESC, a.id DESC LIMIT 500`,
     [leadId],
   );
@@ -216,11 +221,11 @@ export type ActivityInput = { leadId: number; userId: number; type: ActivityType
 export async function addActivity(db: Queryable, input: ActivityInput): Promise<number> {
   const now = new Date();
   const occurredAt = input.occurredAt ?? now;
-  const [result] = await db.query(
-    `INSERT INTO lead_activities (lead_id, user_id, activity_type, summary, body, value_code, meta, occurred_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  const result = await db.query(
+    `INSERT INTO lead_activities (lead_id, user_id, activity_type, summary, body, value_code, meta, occurred_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
     [input.leadId, input.userId, input.type, input.summary.slice(0, 500), input.body ?? null, input.valueCode ?? null, input.meta ? JSON.stringify(input.meta) : null, toSqlDateTime(occurredAt), toSqlDateTime(now)],
   );
-  await db.query("UPDATE leads SET last_activity_at = GREATEST(last_activity_at, ?) WHERE id = ?", [toSqlDateTime(occurredAt), input.leadId]);
+  await db.query("UPDATE leads SET last_activity_at = GREATEST(last_activity_at, ?::timestamp) WHERE id = ?", [toSqlDateTime(occurredAt), input.leadId]);
   return insertId(result);
 }
 
@@ -240,9 +245,9 @@ export async function logActivity(lead: LeadSummary, actor: UserAccount, entry: 
       actorId: actor.id, action: `lead.${entry.type}_logged`, entityType: "lead", entityId: lead.id,
       after: { type: entry.type, summary: entry.summary || defaults[entry.type], body: entry.body || null }, details: `${actor.name} logged a ${entry.type} on ${lead.clientName}`,
     });
-    const [rows] = await connection.query(
-      `SELECT a.id, a.lead_id AS leadId, a.user_id AS userId, CONCAT(u.first_name, ' ', u.last_name) AS userName, a.activity_type AS type,
-         a.summary, a.body, a.value_code AS valueCode, a.meta, a.occurred_at AS occurredAt, a.created_at AS createdAt
+    const { rows } = await connection.query(
+      `SELECT a.id, a.lead_id AS "leadId", a.user_id AS "userId", CONCAT(u.first_name, ' ', u.last_name) AS "userName", a.activity_type AS type,
+         a.summary, a.body, a.value_code AS "valueCode", a.meta, a.occurred_at AS "occurredAt", a.created_at AS "createdAt"
        FROM lead_activities a JOIN users u ON u.id = a.user_id WHERE a.id = ?`,
       [id],
     );
@@ -262,6 +267,19 @@ async function validateListReferences(db: Queryable, input: Partial<LeadInput>) 
   if (input.cityId !== undefined) await assertListValue(db, "city", input.cityId, { label: "City" });
 }
 
+/**
+ * LEAD-06: a closed status (Lost Lead, Disqualified) must carry a reason from its own list; every other status
+ * stores no reason. Returns the reason id to persist.
+ */
+async function enforceStatusReason(db: Queryable, statusId: number, statusReasonId: number | null | undefined): Promise<number | null> {
+  const status = await getListValue(statusId, db);
+  const listKey = reasonListFor(status?.code);
+  if (!status || !listKey) return null;
+  if (!statusReasonId) throw new HttpError(400, `Choose a reason for the ${status.value} status.`);
+  await assertListValue(db, listKey, statusReasonId, { required: true, label: "Status reason" });
+  return statusReasonId;
+}
+
 /** A first-contact date earlier than yesterday needs Admin approval unless the creator can approve queued leads. */
 export function isHistoricalFirstContact(firstContactDate: string): boolean {
   return firstContactDate < addDaysYmd(todayYmd(), -1);
@@ -270,6 +288,7 @@ export function isHistoricalFirstContact(firstContactDate: string): boolean {
 export async function createLead(input: LeadInput, actor: UserAccount, ownerId: number | null): Promise<LeadSummary> {
   return withTransaction(async (connection) => {
     await validateListReferences(connection, input);
+    const statusReasonId = await enforceStatusReason(connection, input.statusId, input.statusReasonId);
     let owner = actor;
     if (ownerId && ownerId !== actor.id) {
       if (!hasPrivilege(actor, "reassign_leads")) throw new HttpError(403, "Only an administrator can create a lead for someone else.");
@@ -280,13 +299,13 @@ export async function createLead(input: LeadInput, actor: UserAccount, ownerId: 
     const queued = isHistoricalFirstContact(input.firstContactDate) && !hasPrivilege(actor, "review_queued");
     const now = new Date();
     const nowSql = toSqlDateTime(now);
-    const [result] = await connection.query(
-      `INSERT INTO leads (owner_id, created_by, lead_type_id, status_id, bd_action_id, client_response_id, lead_category_id, company_size_id, city_id,
+    const result = await connection.query(
+      `INSERT INTO leads (owner_id, created_by, lead_type_id, status_id, status_reason_id, bd_action_id, client_response_id, lead_category_id, company_size_id, city_id,
          client_name, company_url, address, comments, client_executive, contact_phone, contact_alt_phone, contact_remark, client_emails, industry, positions,
          first_contact_date, follow_up_date, contract_signed_date, record_state, state_reason, state_changed_at, last_activity_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
       [
-        owner.id, actor.id, input.leadTypeId, input.statusId, input.bdActionId, input.clientResponseId, input.leadCategoryId, input.companySizeId, input.cityId,
+        owner.id, actor.id, input.leadTypeId, input.statusId, statusReasonId, input.bdActionId, input.clientResponseId, input.leadCategoryId, input.companySizeId, input.cityId,
         input.clientName, input.companyUrl, input.address, input.comments || null, input.clientExecutive, input.contactPhone, input.contactAltPhone, input.contactRemark,
         JSON.stringify(input.clientEmails), input.industry, input.positions || null,
         input.firstContactDate, input.followUpDate, input.contractSignedDate,
@@ -314,10 +333,16 @@ export async function updateLead(id: number, changes: Partial<LeadInput>, actor:
     const existing = await getLead(id, connection);
     if (!existing) throw new HttpError(404, "Lead not found.");
     await validateListReferences(connection, changes);
+    if (changes.statusId !== undefined || changes.statusReasonId !== undefined) {
+      const statusId = changes.statusId ?? existing.statusId;
+      const statusChanged = statusId !== existing.statusId;
+      const candidate = changes.statusReasonId !== undefined ? changes.statusReasonId : statusChanged ? null : existing.statusReasonId;
+      changes = { ...changes, statusReasonId: await enforceStatusReason(connection, statusId, candidate) };
+    }
     const columnMap: Record<keyof LeadInput, string> = {
       clientName: "client_name", companyUrl: "company_url", address: "address", comments: "comments", clientExecutive: "client_executive",
       contactPhone: "contact_phone", contactAltPhone: "contact_alt_phone", contactRemark: "contact_remark", clientEmails: "client_emails",
-      industry: "industry", positions: "positions", leadTypeId: "lead_type_id", statusId: "status_id", bdActionId: "bd_action_id",
+      industry: "industry", positions: "positions", leadTypeId: "lead_type_id", statusId: "status_id", statusReasonId: "status_reason_id", bdActionId: "bd_action_id",
       clientResponseId: "client_response_id", leadCategoryId: "lead_category_id", companySizeId: "company_size_id", cityId: "city_id",
       firstContactDate: "first_contact_date", followUpDate: "follow_up_date", contractSignedDate: "contract_signed_date",
     };
@@ -341,8 +366,15 @@ export async function updateLead(id: number, changes: Partial<LeadInput>, actor:
 
     if (updated.statusId !== existing.statusId) {
       await addActivity(connection, {
-        leadId: id, userId: actor.id, type: "status_change", summary: `Status changed from ${existing.status} to ${updated.status}`,
-        valueCode: updated.statusCode, meta: { fromStatusId: existing.statusId, toStatusId: updated.statusId, fromCode: existing.statusCode, toCode: updated.statusCode }, occurredAt: now,
+        leadId: id, userId: actor.id, type: "status_change", summary: `Status changed from ${existing.statusLabel} to ${updated.statusLabel}`,
+        valueCode: updated.statusCode,
+        meta: { fromStatusId: existing.statusId, toStatusId: updated.statusId, fromCode: existing.statusCode, toCode: updated.statusCode, fromReason: existing.statusReason, toReason: updated.statusReason },
+        occurredAt: now,
+      });
+    } else if (updated.statusReasonId !== existing.statusReasonId) {
+      await addActivity(connection, {
+        leadId: id, userId: actor.id, type: "status_change", summary: `Status reason updated: ${updated.statusLabel}`,
+        valueCode: updated.statusCode, meta: { statusId: updated.statusId, fromReason: existing.statusReason, toReason: updated.statusReason }, occurredAt: now,
       });
     }
     if (updated.bdActionId !== existing.bdActionId && updated.bdActionId) {
@@ -356,7 +388,7 @@ export async function updateLead(id: number, changes: Partial<LeadInput>, actor:
     if (updated.followUpDate !== existing.followUpDate) {
       await addActivity(connection, { leadId: id, userId: actor.id, type: "follow_up", summary: updated.followUpDate ? `Follow-up scheduled for ${updated.followUpDate}` : "Follow-up date cleared", occurredAt: now });
     }
-    const otherChanges = diff.changed.filter((key) => !["status", "bdAction", "clientResponse", "followUpDate"].includes(key));
+    const otherChanges = diff.changed.filter((key) => !["status", "statusReason", "bdAction", "clientResponse", "followUpDate"].includes(key));
     if (otherChanges.length) {
       await addActivity(connection, { leadId: id, userId: actor.id, type: "edit", summary: `Updated ${otherChanges.join(", ")}`, occurredAt: now });
     }
@@ -375,7 +407,7 @@ export async function transferLead(id: number, newOwnerId: number, reason: strin
     if (!newOwner || !newOwner.active || newOwner.role === "recruiter") throw new HttpError(400, "Leads can only be transferred to an active Sales Manager or Admin.");
     const now = new Date();
     await connection.query("UPDATE leads SET owner_id = ? WHERE id = ?", [newOwnerId, id]);
-    const [taskResult] = await connection.query(
+    const taskResult = await connection.query(
       "UPDATE tasks SET assignee_id = ? WHERE lead_id = ? AND assignee_id = ? AND status = 'open'", [newOwnerId, id, lead.ownerId],
     );
     await addActivity(connection, {

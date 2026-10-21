@@ -40,8 +40,8 @@ async function matchesHash(password: string, storedHash: string): Promise<boolea
 
 /** Returns the account when the email and password match an active user. */
 export async function verifyPassword(email: string, password: string): Promise<UserAccount | null> {
-  const [rows] = await getDatabasePool().query(
-    `SELECT ${userColumns}, u.password_hash AS passwordHash FROM users u WHERE u.email = ? LIMIT 1`,
+  const { rows } = await getDatabasePool().query(
+    `SELECT ${userColumns}, u.password_hash AS "passwordHash" FROM users u WHERE u.email = ? LIMIT 1`,
     [email.trim().toLowerCase()],
   );
   const row = (rows as (UserRow & { passwordHash: string })[])[0];
@@ -66,10 +66,10 @@ export async function createUserSession(userId: number, db: Queryable = getDatab
 
 export async function getSessionUser(token: string): Promise<UserAccount | null> {
   const tokenHash = hashToken(token);
-  const [rows] = await getDatabasePool().query(
-    `SELECT ${userColumns}, s.created_at AS sessionCreatedAt
+  const { rows } = await getDatabasePool().query(
+    `SELECT ${userColumns}, s.created_at AS "sessionCreatedAt"
      FROM user_sessions s JOIN users u ON u.id = s.user_id
-     WHERE s.token_hash = ? AND s.expires_at > UTC_TIMESTAMP() AND u.is_active = TRUE LIMIT 1`,
+     WHERE s.token_hash = ? AND s.expires_at > (NOW() AT TIME ZONE 'UTC') AND u.is_active = TRUE LIMIT 1`,
     [tokenHash],
   );
   const row = (rows as (UserRow & { sessionCreatedAt: string })[])[0];
@@ -121,17 +121,17 @@ export function hasManagementKey(request: Request) {
   return expectedBuffer.length === suppliedBuffer.length && timingSafeEqual(expectedBuffer, suppliedBuffer);
 }
 
-// ---- Sign-in attempts and rate limiting (stored in MySQL so it works across instances and restarts) ----
+// ---- Sign-in attempts and rate limiting (stored in the database so it works across instances and restarts) ----
 
 const attemptWindowMinutes = 15;
 const maxFailuresPerEmail = 10;
 const maxFailuresPerAddress = 50;
 
 export async function isLoginRateLimited(email: string, ipAddress: string): Promise<boolean> {
-  const [rows] = await getDatabasePool().query(
+  const { rows } = await getDatabasePool().query(
     `SELECT
-       (SELECT COUNT(*) FROM login_history WHERE email = ? AND succeeded = FALSE AND created_at > UTC_TIMESTAMP() - INTERVAL ? MINUTE) AS byEmail,
-       (SELECT COUNT(*) FROM login_history WHERE ip_address = ? AND succeeded = FALSE AND created_at > UTC_TIMESTAMP() - INTERVAL ? MINUTE) AS byAddress`,
+       (SELECT COUNT(*) FROM login_history WHERE email = ? AND succeeded = FALSE AND created_at > (NOW() AT TIME ZONE 'UTC') - (?::int * INTERVAL '1 minute')) AS "byEmail",
+       (SELECT COUNT(*) FROM login_history WHERE ip_address = ? AND succeeded = FALSE AND created_at > (NOW() AT TIME ZONE 'UTC') - (?::int * INTERVAL '1 minute')) AS "byAddress"`,
     [email.trim().toLowerCase(), attemptWindowMinutes, ipAddress, attemptWindowMinutes],
   );
   const row = (rows as { byEmail: number; byAddress: number }[])[0];
@@ -149,8 +149,8 @@ export type LoginHistoryEntry = { id: number; userId: number | null; email: stri
 
 export async function listLoginHistory(filter: { userId?: number; limit?: number }): Promise<LoginHistoryEntry[]> {
   const limit = Math.min(Math.max(filter.limit ?? 50, 1), 500);
-  const [rows] = await getDatabasePool().query(
-    `SELECT id, user_id AS userId, email, succeeded, ip_address AS ipAddress, user_agent AS userAgent, created_at AS createdAt
+  const { rows } = await getDatabasePool().query(
+    `SELECT id, user_id AS "userId", email, succeeded, ip_address AS "ipAddress", user_agent AS "userAgent", created_at AS "createdAt"
      FROM login_history ${filter.userId ? "WHERE user_id = ?" : ""} ORDER BY id DESC LIMIT ${limit}`,
     filter.userId ? [filter.userId] : [],
   );
@@ -176,9 +176,9 @@ export async function createPasswordResetToken(userId: number): Promise<string> 
 export async function consumePasswordResetToken(token: string): Promise<number | null> {
   if (!/^[A-Za-z0-9_-]{40,50}$/.test(token)) return null;
   return withTransaction(async (connection) => {
-    const [rows] = await connection.query(
-      `SELECT id, user_id AS userId FROM email_tokens
-       WHERE purpose = 'password_reset' AND token_hash = ? AND consumed_at IS NULL AND expires_at > UTC_TIMESTAMP() LIMIT 1 FOR UPDATE`,
+    const { rows } = await connection.query(
+      `SELECT id, user_id AS "userId" FROM email_tokens
+       WHERE purpose = 'password_reset' AND token_hash = ? AND consumed_at IS NULL AND expires_at > (NOW() AT TIME ZONE 'UTC') LIMIT 1 FOR UPDATE`,
       [hashToken(token)],
     );
     const row = (rows as { id: number; userId: number }[])[0];
@@ -207,9 +207,9 @@ export async function verifyTwoFactorChallenge(challenge: string, code: string):
   if (!/^[A-Za-z0-9_-]{40,50}$/.test(challenge)) return { error: "The sign-in code has expired. Sign in again." };
   if (!/^\d{6}$/.test(code)) return { error: "Enter the 6-digit code from your email." };
   return withTransaction(async (connection) => {
-    const [rows] = await connection.query(
-      `SELECT id, user_id AS userId, token_hash AS tokenHash, attempts FROM email_tokens
-       WHERE purpose = 'two_factor' AND challenge_hash = ? AND consumed_at IS NULL AND expires_at > UTC_TIMESTAMP() LIMIT 1 FOR UPDATE`,
+    const { rows } = await connection.query(
+      `SELECT id, user_id AS "userId", token_hash AS "tokenHash", attempts FROM email_tokens
+       WHERE purpose = 'two_factor' AND challenge_hash = ? AND consumed_at IS NULL AND expires_at > (NOW() AT TIME ZONE 'UTC') LIMIT 1 FOR UPDATE`,
       [hashToken(challenge)],
     );
     const row = (rows as { id: number; userId: number; tokenHash: string; attempts: number }[])[0];

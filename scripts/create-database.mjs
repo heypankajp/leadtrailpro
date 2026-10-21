@@ -1,43 +1,48 @@
-import mysql from "mysql2/promise";
+import { Client } from "pg";
 
 /**
- * Creates or upgrades the salestrackpro schema.
+ * Creates or upgrades the salestrackpro schema on PostgreSQL (14 or newer).
  *
- * Run with the MySQL administrator credentials in .env.setup.local:
+ * Run with the PostgreSQL administrator credentials in .env.setup.local:
  *   npm run db:create
  *
  * The script is idempotent. Each numbered migration runs once and is recorded in
  * schema_migrations, so re-running after a code update applies only what is new.
  */
 
-const databaseName = "salestrackpro";
-const host = process.env.MYSQL_HOST;
-const user = process.env.MYSQL_ADMIN_USER || process.env.MYSQL_USER;
-const password = process.env.MYSQL_ADMIN_PASSWORD || process.env.MYSQL_PASSWORD;
-const port = Number(process.env.MYSQL_PORT || "3306");
+const databaseName = process.env.PGDATABASE || "salestrackpro";
+const maintenanceDatabase = process.env.PGADMIN_DATABASE || "postgres";
+const host = process.env.PGHOST;
+const user = process.env.PGADMIN_USER || process.env.PGUSER;
+const password = process.env.PGADMIN_PASSWORD || process.env.PGPASSWORD;
+const port = Number(process.env.PGPORT || "5432");
 
-const tableOptions = "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+// Instants are stored as UTC text in TIMESTAMP columns (whole seconds), matching src/lib/db.ts.
+const UTC_NOW = "(NOW() AT TIME ZONE 'UTC')";
 
-async function hasTable(connection, table) {
-  const [rows] = await connection.query(
-    "SELECT COUNT(*) AS count FROM information_schema.tables WHERE table_schema = ? AND table_name = ?",
-    [databaseName, table],
-  );
-  return Number(rows[0].count) > 0;
+async function connect(database) {
+  const client = new Client({ host, port, user, password, database, options: "-c TimeZone=UTC" });
+  await client.connect();
+  return client;
 }
 
-async function hasColumn(connection, table, column) {
-  const [rows] = await connection.query(
-    "SELECT COUNT(*) AS count FROM information_schema.columns WHERE table_schema = ? AND table_name = ? AND column_name = ?",
-    [databaseName, table, column],
+async function hasColumn(client, table, column) {
+  const { rowCount } = await client.query(
+    "SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2",
+    [table, column],
   );
-  return Number(rows[0].count) > 0;
+  return rowCount > 0;
 }
 
-async function addColumnIfMissing(connection, table, column, definition) {
-  if (!(await hasColumn(connection, table, column))) {
-    await connection.query(`ALTER TABLE \`${table}\` ADD COLUMN \`${column}\` ${definition}`);
+async function addColumnIfMissing(client, table, column, definition) {
+  if (!(await hasColumn(client, table, column))) {
+    await client.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
   }
+}
+
+/** Tables with an updated_at column get a BEFORE UPDATE trigger that stamps it (MySQL's ON UPDATE CURRENT_TIMESTAMP). */
+async function stampUpdatedAt(client, table) {
+  await client.query(`CREATE OR REPLACE TRIGGER trg_${table}_updated_at BEFORE UPDATE ON ${table} FOR EACH ROW EXECUTE FUNCTION set_updated_at()`);
 }
 
 const listValueSeeds = {
@@ -82,140 +87,127 @@ const migrations = [
   {
     version: 1,
     name: "core schema: users, list values, leads, activities, tasks, attachments, audit, targets, settings",
-    async run(connection) {
-      // Preserve a pre-migration leads table (owner stored as free text) rather than dropping it.
-      if ((await hasTable(connection, "leads")) && !(await hasColumn(connection, "leads", "owner_id"))) {
-        if (await hasTable(connection, "legacy_leads")) await connection.query("DROP TABLE legacy_leads");
-        await connection.query("RENAME TABLE leads TO legacy_leads");
-        console.log("Renamed the previous leads table to legacy_leads. Run `npm run db:seed` for fresh sample data.");
-      }
-
-      await connection.query(`
-        CREATE TABLE IF NOT EXISTS target_templates (
-          id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-          name VARCHAR(80) NOT NULL UNIQUE,
-          stage VARCHAR(30) NOT NULL DEFAULT 'onboarding',
-          daily_leads INT UNSIGNED NOT NULL DEFAULT 0,
-          weekly_leads INT UNSIGNED NOT NULL DEFAULT 0,
-          daily_visits INT UNSIGNED NOT NULL DEFAULT 0,
-          weekly_visits INT UNSIGNED NOT NULL DEFAULT 0,
-          monthly_conversions INT UNSIGNED NOT NULL DEFAULT 0,
-          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        ) ${tableOptions}
+    async run(client) {
+      await client.query(`
+        CREATE OR REPLACE FUNCTION set_updated_at() RETURNS TRIGGER AS $fn$
+        BEGIN
+          NEW.updated_at := (NOW() AT TIME ZONE 'UTC');
+          RETURN NEW;
+        END;
+        $fn$ LANGUAGE plpgsql
       `);
 
-      await connection.query(`
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS target_templates (
+          id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          name VARCHAR(80) NOT NULL UNIQUE,
+          stage VARCHAR(30) NOT NULL DEFAULT 'onboarding',
+          daily_leads INTEGER NOT NULL DEFAULT 0,
+          weekly_leads INTEGER NOT NULL DEFAULT 0,
+          daily_visits INTEGER NOT NULL DEFAULT 0,
+          weekly_visits INTEGER NOT NULL DEFAULT 0,
+          monthly_conversions INTEGER NOT NULL DEFAULT 0,
+          created_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW},
+          updated_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW}
+        )
+      `);
+      await stampUpdatedAt(client, "target_templates");
+
+      await client.query(`
         CREATE TABLE IF NOT EXISTS users (
-          id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+          id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
           first_name VARCHAR(80) NOT NULL,
           last_name VARCHAR(80) NOT NULL,
           email VARCHAR(254) NOT NULL UNIQUE,
           phone VARCHAR(40) NOT NULL DEFAULT '',
           password_hash VARCHAR(180) NOT NULL,
           role VARCHAR(40) NOT NULL,
-          privileges JSON NOT NULL,
+          privileges JSONB NOT NULL,
           stage VARCHAR(30) NOT NULL DEFAULT 'onboarding',
           is_active BOOLEAN NOT NULL DEFAULT TRUE,
-          terminated_at DATETIME NULL,
+          terminated_at TIMESTAMP(0) NULL,
           two_factor_enabled BOOLEAN NOT NULL DEFAULT FALSE,
           auto_logout_enabled BOOLEAN NOT NULL DEFAULT FALSE,
-          target_template_id INT UNSIGNED NULL,
-          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          target_template_id INTEGER NULL,
+          created_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW},
+          updated_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW},
           CONSTRAINT fk_users_target_template FOREIGN KEY (target_template_id) REFERENCES target_templates(id) ON DELETE SET NULL
-        ) ${tableOptions}
+        )
       `);
-      // Upgrade a users table created by the earlier prototype.
-      await addColumnIfMissing(connection, "users", "stage", "VARCHAR(30) NOT NULL DEFAULT 'onboarding'");
-      await addColumnIfMissing(connection, "users", "terminated_at", "DATETIME NULL");
-      await addColumnIfMissing(connection, "users", "two_factor_enabled", "BOOLEAN NOT NULL DEFAULT FALSE");
-      await addColumnIfMissing(connection, "users", "auto_logout_enabled", "BOOLEAN NOT NULL DEFAULT FALSE");
-      if (!(await hasColumn(connection, "users", "target_template_id"))) {
-        await connection.query("ALTER TABLE users ADD COLUMN target_template_id INT UNSIGNED NULL");
-        await connection.query("ALTER TABLE users ADD CONSTRAINT fk_users_target_template FOREIGN KEY (target_template_id) REFERENCES target_templates(id) ON DELETE SET NULL");
-      }
-      await connection.query(`
-        UPDATE users SET role = CASE role
-          WHEN 'Administrator' THEN 'admin'
-          WHEN 'Sales Manager' THEN 'sales_manager'
-          WHEN 'Sales Representative' THEN 'sales_manager'
-          WHEN 'Recruiter' THEN 'recruiter'
-          ELSE role END
-        WHERE role NOT IN ('admin', 'sales_manager', 'recruiter')
-      `);
+      await stampUpdatedAt(client, "users");
 
-      await connection.query(`
+      await client.query(`
         CREATE TABLE IF NOT EXISTS user_sessions (
-          id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-          user_id INT UNSIGNED NOT NULL,
+          id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          user_id INTEGER NOT NULL,
           token_hash CHAR(64) NOT NULL UNIQUE,
-          expires_at DATETIME NOT NULL,
-          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          CONSTRAINT fk_user_sessions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-          INDEX idx_user_sessions_expiry (expires_at)
-        ) ${tableOptions}
+          expires_at TIMESTAMP(0) NOT NULL,
+          created_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW},
+          CONSTRAINT fk_user_sessions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
       `);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_user_sessions_expiry ON user_sessions (expires_at)");
 
-      await connection.query(`
+      await client.query(`
         CREATE TABLE IF NOT EXISTS login_history (
-          id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-          user_id INT UNSIGNED NULL,
+          id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          user_id INTEGER NULL,
           email VARCHAR(254) NOT NULL,
           succeeded BOOLEAN NOT NULL,
           ip_address VARCHAR(64) NOT NULL DEFAULT '',
           user_agent VARCHAR(255) NOT NULL DEFAULT '',
-          created_at DATETIME NOT NULL,
-          INDEX idx_login_history_email_time (email, created_at),
-          INDEX idx_login_history_ip_time (ip_address, created_at),
-          INDEX idx_login_history_user (user_id, created_at)
-        ) ${tableOptions}
+          created_at TIMESTAMP(0) NOT NULL
+        )
       `);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_login_history_email_time ON login_history (email, created_at)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_login_history_ip_time ON login_history (ip_address, created_at)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_login_history_user ON login_history (user_id, created_at)");
 
-      await connection.query(`
+      await client.query(`
         CREATE TABLE IF NOT EXISTS email_tokens (
-          id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-          user_id INT UNSIGNED NOT NULL,
+          id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          user_id INTEGER NOT NULL,
           purpose VARCHAR(30) NOT NULL,
           token_hash CHAR(64) NOT NULL,
           challenge_hash CHAR(64) NULL,
-          attempts INT UNSIGNED NOT NULL DEFAULT 0,
-          expires_at DATETIME NOT NULL,
-          consumed_at DATETIME NULL,
-          created_at DATETIME NOT NULL,
-          CONSTRAINT fk_email_tokens_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-          INDEX idx_email_tokens_lookup (purpose, token_hash),
-          INDEX idx_email_tokens_challenge (challenge_hash)
-        ) ${tableOptions}
+          attempts INTEGER NOT NULL DEFAULT 0,
+          expires_at TIMESTAMP(0) NOT NULL,
+          consumed_at TIMESTAMP(0) NULL,
+          created_at TIMESTAMP(0) NOT NULL,
+          CONSTRAINT fk_email_tokens_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
       `);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_email_tokens_lookup ON email_tokens (purpose, token_hash)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_email_tokens_challenge ON email_tokens (challenge_hash)");
 
-      await connection.query(`
+      await client.query(`
         CREATE TABLE IF NOT EXISTS list_values (
-          id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+          id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
           list_key VARCHAR(40) NOT NULL,
           code VARCHAR(60) NOT NULL,
           value VARCHAR(120) NOT NULL,
-          sort_order INT NOT NULL DEFAULT 0,
+          sort_order INTEGER NOT NULL DEFAULT 0,
           is_active BOOLEAN NOT NULL DEFAULT TRUE,
-          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-          UNIQUE KEY uq_list_values_code (list_key, code),
-          UNIQUE KEY uq_list_values_value (list_key, value)
-        ) ${tableOptions}
+          created_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW},
+          updated_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW},
+          CONSTRAINT uq_list_values_code UNIQUE (list_key, code),
+          CONSTRAINT uq_list_values_value UNIQUE (list_key, value)
+        )
       `);
+      await stampUpdatedAt(client, "list_values");
 
-      await connection.query(`
+      await client.query(`
         CREATE TABLE IF NOT EXISTS leads (
-          id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-          owner_id INT UNSIGNED NOT NULL,
-          created_by INT UNSIGNED NOT NULL,
-          lead_type_id INT UNSIGNED NOT NULL,
-          status_id INT UNSIGNED NOT NULL,
-          bd_action_id INT UNSIGNED NULL,
-          client_response_id INT UNSIGNED NULL,
-          lead_category_id INT UNSIGNED NULL,
-          company_size_id INT UNSIGNED NULL,
-          city_id INT UNSIGNED NULL,
+          id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          owner_id INTEGER NOT NULL,
+          created_by INTEGER NOT NULL,
+          lead_type_id INTEGER NOT NULL,
+          status_id INTEGER NOT NULL,
+          bd_action_id INTEGER NULL,
+          client_response_id INTEGER NULL,
+          lead_category_id INTEGER NULL,
+          company_size_id INTEGER NULL,
+          city_id INTEGER NULL,
           client_name VARCHAR(200) NOT NULL,
           company_url VARCHAR(2048) NOT NULL DEFAULT '',
           address VARCHAR(500) NOT NULL DEFAULT '',
@@ -224,19 +216,19 @@ const migrations = [
           contact_phone VARCHAR(40) NOT NULL DEFAULT '',
           contact_alt_phone VARCHAR(40) NOT NULL DEFAULT '',
           contact_remark VARCHAR(500) NOT NULL DEFAULT '',
-          client_emails JSON NOT NULL,
+          client_emails JSONB NOT NULL,
           industry VARCHAR(120) NOT NULL DEFAULT '',
           positions TEXT NULL,
           first_contact_date DATE NOT NULL,
           follow_up_date DATE NULL,
           contract_signed_date DATE NULL,
-          record_state ENUM('active', 'queued', 'archived') NOT NULL DEFAULT 'active',
+          record_state VARCHAR(10) NOT NULL DEFAULT 'active' CHECK (record_state IN ('active', 'queued', 'archived')),
           state_reason VARCHAR(500) NULL,
-          state_changed_by INT UNSIGNED NULL,
-          state_changed_at DATETIME NULL,
-          last_activity_at DATETIME NOT NULL,
-          created_at DATETIME NOT NULL,
-          updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          state_changed_by INTEGER NULL,
+          state_changed_at TIMESTAMP(0) NULL,
+          last_activity_at TIMESTAMP(0) NOT NULL,
+          created_at TIMESTAMP(0) NOT NULL,
+          updated_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW},
           CONSTRAINT fk_leads_owner FOREIGN KEY (owner_id) REFERENCES users(id),
           CONSTRAINT fk_leads_creator FOREIGN KEY (created_by) REFERENCES users(id),
           CONSTRAINT fk_leads_lead_type FOREIGN KEY (lead_type_id) REFERENCES list_values(id),
@@ -245,106 +237,109 @@ const migrations = [
           CONSTRAINT fk_leads_client_response FOREIGN KEY (client_response_id) REFERENCES list_values(id) ON DELETE SET NULL,
           CONSTRAINT fk_leads_lead_category FOREIGN KEY (lead_category_id) REFERENCES list_values(id) ON DELETE SET NULL,
           CONSTRAINT fk_leads_company_size FOREIGN KEY (company_size_id) REFERENCES list_values(id) ON DELETE SET NULL,
-          CONSTRAINT fk_leads_city FOREIGN KEY (city_id) REFERENCES list_values(id) ON DELETE SET NULL,
-          INDEX idx_leads_state_activity (record_state, last_activity_at),
-          INDEX idx_leads_owner (owner_id, record_state),
-          INDEX idx_leads_status (status_id),
-          INDEX idx_leads_follow_up (follow_up_date),
-          INDEX idx_leads_first_contact (first_contact_date),
-          INDEX idx_leads_created (created_at)
-        ) ${tableOptions}
+          CONSTRAINT fk_leads_city FOREIGN KEY (city_id) REFERENCES list_values(id) ON DELETE SET NULL
+        )
       `);
+      await stampUpdatedAt(client, "leads");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_state_activity ON leads (record_state, last_activity_at)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_owner ON leads (owner_id, record_state)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_status ON leads (status_id)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_follow_up ON leads (follow_up_date)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_first_contact ON leads (first_contact_date)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_created ON leads (created_at)");
 
-      await connection.query(`
+      await client.query(`
         CREATE TABLE IF NOT EXISTS lead_activities (
-          id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-          lead_id INT UNSIGNED NOT NULL,
-          user_id INT UNSIGNED NOT NULL,
+          id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          lead_id INTEGER NOT NULL,
+          user_id INTEGER NOT NULL,
           activity_type VARCHAR(30) NOT NULL,
           summary VARCHAR(500) NOT NULL,
           body TEXT NULL,
           value_code VARCHAR(60) NULL,
-          meta JSON NULL,
-          occurred_at DATETIME NOT NULL,
-          created_at DATETIME NOT NULL,
+          meta JSONB NULL,
+          occurred_at TIMESTAMP(0) NOT NULL,
+          created_at TIMESTAMP(0) NOT NULL,
           CONSTRAINT fk_lead_activities_lead FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE,
-          CONSTRAINT fk_lead_activities_user FOREIGN KEY (user_id) REFERENCES users(id),
-          INDEX idx_lead_activities_lead_time (lead_id, occurred_at),
-          INDEX idx_lead_activities_user_type_time (user_id, activity_type, occurred_at),
-          INDEX idx_lead_activities_type_time (activity_type, occurred_at)
-        ) ${tableOptions}
+          CONSTRAINT fk_lead_activities_user FOREIGN KEY (user_id) REFERENCES users(id)
+        )
       `);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_lead_activities_lead_time ON lead_activities (lead_id, occurred_at)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_lead_activities_user_type_time ON lead_activities (user_id, activity_type, occurred_at)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_lead_activities_type_time ON lead_activities (activity_type, occurred_at)");
 
-      await connection.query(`
+      await client.query(`
         CREATE TABLE IF NOT EXISTS tasks (
-          id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-          lead_id INT UNSIGNED NULL,
+          id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          lead_id INTEGER NULL,
           title VARCHAR(200) NOT NULL,
           description TEXT NULL,
-          assignee_id INT UNSIGNED NOT NULL,
-          creator_id INT UNSIGNED NOT NULL,
-          due_at DATETIME NULL,
+          assignee_id INTEGER NOT NULL,
+          creator_id INTEGER NOT NULL,
+          due_at TIMESTAMP(0) NULL,
           priority VARCHAR(12) NOT NULL DEFAULT 'normal',
           status VARCHAR(12) NOT NULL DEFAULT 'open',
-          checklist JSON NOT NULL,
-          completed_at DATETIME NULL,
-          created_at DATETIME NOT NULL,
-          updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          checklist JSONB NOT NULL,
+          completed_at TIMESTAMP(0) NULL,
+          created_at TIMESTAMP(0) NOT NULL,
+          updated_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW},
           CONSTRAINT fk_tasks_lead FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE,
           CONSTRAINT fk_tasks_assignee FOREIGN KEY (assignee_id) REFERENCES users(id),
-          CONSTRAINT fk_tasks_creator FOREIGN KEY (creator_id) REFERENCES users(id),
-          INDEX idx_tasks_assignee_status_due (assignee_id, status, due_at),
-          INDEX idx_tasks_lead (lead_id),
-          INDEX idx_tasks_created (creator_id, created_at)
-        ) ${tableOptions}
+          CONSTRAINT fk_tasks_creator FOREIGN KEY (creator_id) REFERENCES users(id)
+        )
       `);
+      await stampUpdatedAt(client, "tasks");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_tasks_assignee_status_due ON tasks (assignee_id, status, due_at)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_tasks_lead ON tasks (lead_id)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks (creator_id, created_at)");
 
-      await connection.query(`
+      await client.query(`
         CREATE TABLE IF NOT EXISTS lead_attachments (
-          id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-          lead_id INT UNSIGNED NOT NULL,
-          uploaded_by INT UNSIGNED NOT NULL,
+          id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          lead_id INTEGER NOT NULL,
+          uploaded_by INTEGER NOT NULL,
           category VARCHAR(20) NOT NULL,
           label VARCHAR(120) NOT NULL,
           file_name VARCHAR(255) NOT NULL,
           mime_type VARCHAR(120) NOT NULL,
-          size_bytes BIGINT UNSIGNED NOT NULL,
+          size_bytes BIGINT NOT NULL,
           storage_key VARCHAR(255) NOT NULL,
-          version INT UNSIGNED NOT NULL DEFAULT 1,
-          replaces_id BIGINT UNSIGNED NULL,
-          deleted_at DATETIME NULL,
-          deleted_by INT UNSIGNED NULL,
-          created_at DATETIME NOT NULL,
+          version INTEGER NOT NULL DEFAULT 1,
+          replaces_id BIGINT NULL,
+          deleted_at TIMESTAMP(0) NULL,
+          deleted_by INTEGER NULL,
+          created_at TIMESTAMP(0) NOT NULL,
           CONSTRAINT fk_lead_attachments_lead FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE,
-          CONSTRAINT fk_lead_attachments_user FOREIGN KEY (uploaded_by) REFERENCES users(id),
-          INDEX idx_lead_attachments_lead (lead_id, category, deleted_at)
-        ) ${tableOptions}
+          CONSTRAINT fk_lead_attachments_user FOREIGN KEY (uploaded_by) REFERENCES users(id)
+        )
       `);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_lead_attachments_lead ON lead_attachments (lead_id, category, deleted_at)");
 
-      await connection.query(`
+      await client.query(`
         CREATE TABLE IF NOT EXISTS audit_log (
-          id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-          actor_id INT UNSIGNED NULL,
+          id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          actor_id INTEGER NULL,
           action VARCHAR(60) NOT NULL,
           entity_type VARCHAR(40) NOT NULL,
-          entity_id BIGINT UNSIGNED NULL,
-          before_json JSON NULL,
-          after_json JSON NULL,
+          entity_id BIGINT NULL,
+          before_json JSONB NULL,
+          after_json JSONB NULL,
           details VARCHAR(500) NULL,
-          created_at DATETIME NOT NULL,
-          INDEX idx_audit_entity (entity_type, entity_id, created_at),
-          INDEX idx_audit_actor_time (actor_id, created_at),
-          INDEX idx_audit_time (created_at)
-        ) ${tableOptions}
+          created_at TIMESTAMP(0) NOT NULL
+        )
       `);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_log (entity_type, entity_id, created_at)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_audit_actor_time ON audit_log (actor_id, created_at)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_audit_time ON audit_log (created_at)");
 
-      await connection.query(`
+      await client.query(`
         CREATE TABLE IF NOT EXISTS app_settings (
           setting_key VARCHAR(60) NOT NULL PRIMARY KEY,
-          value_json JSON NOT NULL,
-          updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        ) ${tableOptions}
+          value_json JSONB NOT NULL,
+          updated_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW}
+        )
       `);
+      await stampUpdatedAt(client, "app_settings");
 
       // Reference data.
       for (const [listKey, values] of Object.entries(listValueSeeds)) {
@@ -355,25 +350,25 @@ const migrations = [
           if (seen.has(code)) continue;
           seen.add(code);
           order += 1;
-          await connection.query(
-            "INSERT IGNORE INTO list_values (list_key, code, value, sort_order) VALUES (?, ?, ?, ?)",
+          await client.query(
+            "INSERT INTO list_values (list_key, code, value, sort_order) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
             [listKey, code, value, order],
           );
         }
       }
       for (const [name, stage, dailyLeads, weeklyLeads, dailyVisits, weeklyVisits, monthlyConversions] of targetTemplateSeeds) {
-        await connection.query(
-          `INSERT IGNORE INTO target_templates (name, stage, daily_leads, weekly_leads, daily_visits, weekly_visits, monthly_conversions)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        await client.query(
+          `INSERT INTO target_templates (name, stage, daily_leads, weekly_leads, daily_visits, weekly_visits, monthly_conversions)
+           VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING`,
           [name, stage, dailyLeads, weeklyLeads, dailyVisits, weeklyVisits, monthlyConversions],
         );
       }
-      await connection.query(
-        "INSERT IGNORE INTO app_settings (setting_key, value_json) VALUES (?, ?)",
+      await client.query(
+        "INSERT INTO app_settings (setting_key, value_json) VALUES ($1, $2) ON CONFLICT DO NOTHING",
         ["role_labels", JSON.stringify({ admin: "Admin", sales_manager: "Sales Manager", recruiter: "Recruiter" })],
       );
-      await connection.query(
-        "INSERT IGNORE INTO app_settings (setting_key, value_json) VALUES (?, ?)",
+      await client.query(
+        "INSERT INTO app_settings (setting_key, value_json) VALUES ($1, $2) ON CONFLICT DO NOTHING",
         ["reminders", JSON.stringify({ inactivityDays: 7 })],
       );
     },
@@ -381,10 +376,10 @@ const migrations = [
   {
     version: 2,
     name: "per-account auto sign-out time (AUTH-07) and business calendar holidays",
-    async run(connection) {
-      await addColumnIfMissing(connection, "users", "auto_logout_time", "CHAR(5) NOT NULL DEFAULT '23:00'");
-      await connection.query(
-        "INSERT IGNORE INTO app_settings (setting_key, value_json) VALUES (?, ?)",
+    async run(client) {
+      await addColumnIfMissing(client, "users", "auto_logout_time", "CHAR(5) NOT NULL DEFAULT '23:00'");
+      await client.query(
+        "INSERT INTO app_settings (setting_key, value_json) VALUES ($1, $2) ON CONFLICT DO NOTHING",
         ["business_calendar", JSON.stringify({ holidays: [] })],
       );
     },
@@ -392,57 +387,156 @@ const migrations = [
   {
     version: 3,
     name: "gmail connections (MAIL-01): per-user Gmail link with an encrypted refresh token",
-    async run(connection) {
-      await connection.query(`
+    async run(client) {
+      await client.query(`
         CREATE TABLE IF NOT EXISTS gmail_connections (
-          user_id INT UNSIGNED NOT NULL PRIMARY KEY,
+          user_id INTEGER NOT NULL PRIMARY KEY,
           google_email VARCHAR(254) NOT NULL,
           refresh_token_encrypted TEXT NOT NULL,
-          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          created_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW},
+          updated_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW},
           CONSTRAINT fk_gmail_connections_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-        ) ${tableOptions}
+        )
       `);
+      await stampUpdatedAt(client, "gmail_connections");
+    },
+  },
+  {
+    version: 4,
+    name: "lead status reasons (LEAD-06): Lost Lead and Disqualified statuses with their reason lists",
+    async run(client) {
+      await addColumnIfMissing(client, "leads", "status_reason_id", "INTEGER NULL REFERENCES list_values(id) ON DELETE SET NULL");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_status_reason ON leads (status_reason_id)");
+      const seeds = [
+        ["status", "lost", "Lost Lead", 5],
+        ["status", "disqualified", "Disqualified", 6],
+        ["disqualified_reason", "not_interested", "Not Interested", 1],
+        ["disqualified_reason", "bad_timing_not_right_now", "Bad Timing / Not Right Now", 2],
+        ["disqualified_reason", "no_longer_interested", "No Longer Interested", 3],
+        ["disqualified_reason", "cannot_contact", "Cannot Contact", 4],
+        ["disqualified_reason", "does_not_meet_criteria", "Does Not Meet Criteria", 5],
+        ["lost_reason", "pricing", "Pricing", 1],
+      ];
+      for (const [listKey, code, value, sortOrder] of seeds) {
+        await client.query(
+          "INSERT INTO list_values (list_key, code, value, sort_order) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+          [listKey, code, value, sortOrder],
+        );
+      }
+    },
+  },
+  {
+    version: 5,
+    name: "sales trips (TRIP-*): business types, trips, and their company results",
+    async run(client) {
+      const businessTypes = [["manufacturing", "Manufacturing"], ["warehouse_distribution", "Warehouse / Distribution"], ["bakery_food_manufacturing", "Bakery / Food Manufacturing"], ["any", "Any"]];
+      for (const [index, [code, value]] of businessTypes.entries()) {
+        await client.query(
+          "INSERT INTO list_values (list_key, code, value, sort_order) VALUES ('business_type', $1, $2, $3) ON CONFLICT DO NOTHING",
+          [code, value, index + 1],
+        );
+      }
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS sales_trips (
+          id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          owner_id INTEGER NOT NULL,
+          title VARCHAR(120) NOT NULL,
+          address VARCHAR(500) NOT NULL,
+          latitude DOUBLE PRECISION NULL,
+          longitude DOUBLE PRECISION NULL,
+          radius_type VARCHAR(10) NOT NULL CHECK (radius_type IN ('km', 'minutes')),
+          radius_value SMALLINT NOT NULL,
+          business_type_id INTEGER NULL,
+          max_results SMALLINT NOT NULL,
+          provider VARCHAR(40) NOT NULL DEFAULT '',
+          last_run_at TIMESTAMP(0) NULL,
+          result_count INTEGER NOT NULL DEFAULT 0,
+          created_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW},
+          updated_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW},
+          CONSTRAINT fk_sales_trips_owner FOREIGN KEY (owner_id) REFERENCES users(id),
+          CONSTRAINT fk_sales_trips_business_type FOREIGN KEY (business_type_id) REFERENCES list_values(id) ON DELETE SET NULL
+        )
+      `);
+      await stampUpdatedAt(client, "sales_trips");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_sales_trips_owner ON sales_trips (owner_id, created_at)");
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS sales_trip_results (
+          id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          trip_id INTEGER NOT NULL,
+          sequence SMALLINT NOT NULL,
+          company_name VARCHAR(200) NOT NULL,
+          address VARCHAR(500) NOT NULL DEFAULT '',
+          latitude DOUBLE PRECISION NULL,
+          longitude DOUBLE PRECISION NULL,
+          distance_km NUMERIC(7,2) NULL,
+          drive_minutes SMALLINT NULL,
+          website VARCHAR(2048) NOT NULL DEFAULT '',
+          phone VARCHAR(40) NOT NULL DEFAULT '',
+          provider_place_id VARCHAR(120) NOT NULL DEFAULT '',
+          job_count SMALLINT NULL,
+          jobs JSONB NULL,
+          jobs_fetched_at TIMESTAMP(0) NULL,
+          matched_lead_id INTEGER NULL,
+          action_code VARCHAR(40) NOT NULL DEFAULT 'new',
+          action_label VARCHAR(160) NOT NULL DEFAULT 'New / Not in CRM',
+          shortlisted BOOLEAN NOT NULL DEFAULT FALSE,
+          planned_visit_date DATE NULL,
+          created_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW},
+          CONSTRAINT fk_sales_trip_results_trip FOREIGN KEY (trip_id) REFERENCES sales_trips(id) ON DELETE CASCADE,
+          CONSTRAINT fk_sales_trip_results_lead FOREIGN KEY (matched_lead_id) REFERENCES leads(id) ON DELETE SET NULL
+        )
+      `);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_sales_trip_results_trip ON sales_trip_results (trip_id, sequence)");
     },
   },
 ];
 
-if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port > 65535) {
-  console.error("Configure MYSQL_HOST, MYSQL_PORT, MYSQL_USER, and MYSQL_PASSWORD in .env.setup.local.");
+if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port > 65535 || !/^[a-z_][a-z0-9_]*$/.test(databaseName)) {
+  console.error("Configure PGHOST, PGPORT, PGUSER, and PGPASSWORD in .env.setup.local (PGDATABASE optional, lowercase letters, digits, and underscores).");
   process.exitCode = 1;
 } else {
-  let connection;
+  let client;
   try {
-    connection = await mysql.createConnection({ host, port, user, password });
-    await connection.query(`CREATE DATABASE IF NOT EXISTS \`${databaseName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
-    await connection.end();
-    connection = await mysql.createConnection({ host, port, user, password, database: databaseName, multipleStatements: false });
-    await connection.query("SET time_zone = '+00:00'");
-    await connection.query(`
+    client = await connect(maintenanceDatabase);
+    const { rowCount } = await client.query("SELECT 1 FROM pg_database WHERE datname = $1", [databaseName]);
+    if (rowCount === 0) {
+      await client.query(`CREATE DATABASE ${client.escapeIdentifier(databaseName)} ENCODING 'UTF8'`);
+      console.log(`Created database ${databaseName}.`);
+    }
+    await client.end();
+    client = await connect(databaseName);
+    await client.query(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
-        version INT UNSIGNED NOT NULL PRIMARY KEY,
+        version INTEGER NOT NULL PRIMARY KEY,
         name VARCHAR(200) NOT NULL,
-        applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-      ) ${tableOptions}
+        applied_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW}
+      )
     `);
-    const [applied] = await connection.query("SELECT version FROM schema_migrations");
+    const { rows: applied } = await client.query("SELECT version FROM schema_migrations");
     const appliedVersions = new Set(applied.map((row) => Number(row.version)));
     let appliedCount = 0;
     for (const migration of migrations) {
       if (appliedVersions.has(migration.version)) continue;
-      await migration.run(connection);
-      await connection.query("INSERT INTO schema_migrations (version, name) VALUES (?, ?)", [migration.version, migration.name]);
+      await client.query("BEGIN");
+      try {
+        await migration.run(client);
+        await client.query("INSERT INTO schema_migrations (version, name) VALUES ($1, $2)", [migration.version, migration.name]);
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => undefined);
+        throw error;
+      }
       appliedCount += 1;
       console.log(`Applied migration ${migration.version}: ${migration.name}`);
     }
     console.log(appliedCount === 0
-      ? "The salestrackpro schema is already up to date."
-      : "The salestrackpro schema is ready. Next: `npm run db:user:create`, then start the app and create the first administrator. Optional: `npm run db:seed` for sample data.");
+      ? `The ${databaseName} schema is already up to date.`
+      : `The ${databaseName} schema is ready. Next: \`npm run db:user:create\`, then start the app and create the first administrator. Optional: \`npm run db:seed\` for sample data.`);
   } catch (error) {
-    console.error("Could not initialize the salestrackpro database. Check MySQL availability and database privileges.");
+    console.error(`Could not initialize the ${databaseName} database. Check PostgreSQL availability and database privileges.`);
     console.error(error instanceof Error ? error.message : "Unknown database error.");
     process.exitCode = 1;
   } finally {
-    await connection?.end();
+    await client?.end().catch(() => undefined);
   }
 }

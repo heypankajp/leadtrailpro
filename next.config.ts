@@ -3,9 +3,9 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   /* config options here */
   output: "standalone",
-  // Keep the MySQL driver as a plain Node.js package (like pg/mongodb in Next's default list)
-  // so the standalone output ships it and scripts/*.mjs can import it from the production image.
-  serverExternalPackages: ["mysql2"],
+  // Keep the PostgreSQL driver a plain Node.js package (it is also in Next's default list) so the
+  // standalone output ships it and scripts/*.mjs can import it from the production image.
+  serverExternalPackages: ["pg", "exceljs"],
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {

@@ -20,8 +20,8 @@ async function activityCounts(db: Queryable, userIds: number[] | null, range: Da
     userClause = `AND user_id IN (${userIds.map(() => "?").join(",")})`;
     params.push(...userIds);
   }
-  const [rows] = await db.query(
-    `SELECT user_id AS userId, activity_type AS type, COUNT(*) AS count FROM lead_activities
+  const { rows } = await db.query(
+    `SELECT user_id AS "userId", activity_type AS type, COUNT(*) AS count FROM lead_activities
      WHERE activity_type IN ('call', 'email', 'visit', 'note') AND occurred_at >= ? AND occurred_at < ? ${userClause}
      GROUP BY user_id, activity_type`,
     params,
@@ -39,7 +39,7 @@ async function activityCounts(db: Queryable, userIds: number[] | null, range: Da
 }
 
 async function countBy(db: Queryable, sql: string, params: unknown[]): Promise<Map<number, number>> {
-  const [rows] = await db.query(sql, params);
+  const { rows } = await db.query(sql, params);
   const map = new Map<number, number>();
   for (const row of rows as { userId: number; count: number }[]) map.set(Number(row.userId), Number(row.count));
   return map;
@@ -82,13 +82,13 @@ export async function performanceReport(period: ReportPeriod, viewer: UserAccoun
   const endSql = toSqlDateTime(range.end);
 
   const activities = await activityCounts(db, ids, range);
-  const leadsCreated = await countBy(db, `SELECT created_by AS userId, COUNT(*) AS count FROM leads WHERE created_at >= ? AND created_at < ? AND created_by IN (${inList(ids)}) GROUP BY created_by`, [startSql, endSql, ...ids]);
-  const leadsUpdated = await countBy(db, `SELECT actor_id AS userId, COUNT(*) AS count FROM audit_log WHERE action = 'lead.updated' AND created_at >= ? AND created_at < ? AND actor_id IN (${inList(ids)}) GROUP BY actor_id`, [startSql, endSql, ...ids]);
-  const conversions = await countBy(db, `SELECT user_id AS userId, COUNT(*) AS count FROM lead_activities WHERE activity_type = 'status_change' AND value_code = 'client' AND occurred_at >= ? AND occurred_at < ? AND user_id IN (${inList(ids)}) GROUP BY user_id`, [startSql, endSql, ...ids]);
-  const tasksCreated = await countBy(db, `SELECT creator_id AS userId, COUNT(*) AS count FROM tasks WHERE created_at >= ? AND created_at < ? AND creator_id IN (${inList(ids)}) GROUP BY creator_id`, [startSql, endSql, ...ids]);
-  const tasksCompleted = await countBy(db, `SELECT assignee_id AS userId, COUNT(*) AS count FROM tasks WHERE status = 'done' AND completed_at >= ? AND completed_at < ? AND assignee_id IN (${inList(ids)}) GROUP BY assignee_id`, [startSql, endSql, ...ids]);
-  const files = await countBy(db, `SELECT uploaded_by AS userId, COUNT(*) AS count FROM lead_attachments WHERE created_at >= ? AND created_at < ? AND uploaded_by IN (${inList(ids)}) GROUP BY uploaded_by`, [startSql, endSql, ...ids]);
-  const logins = await countBy(db, `SELECT user_id AS userId, COUNT(*) AS count FROM login_history WHERE succeeded = TRUE AND created_at >= ? AND created_at < ? AND user_id IN (${inList(ids)}) GROUP BY user_id`, [startSql, endSql, ...ids]);
+  const leadsCreated = await countBy(db, `SELECT created_by AS "userId", COUNT(*) AS count FROM leads WHERE created_at >= ? AND created_at < ? AND created_by IN (${inList(ids)}) GROUP BY created_by`, [startSql, endSql, ...ids]);
+  const leadsUpdated = await countBy(db, `SELECT actor_id AS "userId", COUNT(*) AS count FROM audit_log WHERE action = 'lead.updated' AND created_at >= ? AND created_at < ? AND actor_id IN (${inList(ids)}) GROUP BY actor_id`, [startSql, endSql, ...ids]);
+  const conversions = await countBy(db, `SELECT user_id AS "userId", COUNT(*) AS count FROM lead_activities WHERE activity_type = 'status_change' AND value_code = 'client' AND occurred_at >= ? AND occurred_at < ? AND user_id IN (${inList(ids)}) GROUP BY user_id`, [startSql, endSql, ...ids]);
+  const tasksCreated = await countBy(db, `SELECT creator_id AS "userId", COUNT(*) AS count FROM tasks WHERE created_at >= ? AND created_at < ? AND creator_id IN (${inList(ids)}) GROUP BY creator_id`, [startSql, endSql, ...ids]);
+  const tasksCompleted = await countBy(db, `SELECT assignee_id AS "userId", COUNT(*) AS count FROM tasks WHERE status = 'done' AND completed_at >= ? AND completed_at < ? AND assignee_id IN (${inList(ids)}) GROUP BY assignee_id`, [startSql, endSql, ...ids]);
+  const files = await countBy(db, `SELECT uploaded_by AS "userId", COUNT(*) AS count FROM lead_attachments WHERE created_at >= ? AND created_at < ? AND uploaded_by IN (${inList(ids)}) GROUP BY uploaded_by`, [startSql, endSql, ...ids]);
+  const logins = await countBy(db, `SELECT user_id AS "userId", COUNT(*) AS count FROM login_history WHERE succeeded = TRUE AND created_at >= ? AND created_at < ? AND user_id IN (${inList(ids)}) GROUP BY user_id`, [startSql, endSql, ...ids]);
 
   const rows: PerformanceRow[] = [];
   for (const user of users) {
@@ -111,11 +111,11 @@ export async function performanceReport(period: ReportPeriod, viewer: UserAccoun
   rows.sort((a, b) => b.leadsCreated - a.leadsCreated || a.name.localeCompare(b.name));
 
   // Daily series bucketed in the business timezone.
-  const [activityRows] = await db.query(
-    `SELECT occurred_at AS occurredAt, activity_type AS type FROM lead_activities WHERE activity_type IN ('call', 'email', 'visit') AND occurred_at >= ? AND occurred_at < ? AND user_id IN (${inList(ids)})`,
+  const { rows: activityRows } = await db.query(
+    `SELECT occurred_at AS "occurredAt", activity_type AS type FROM lead_activities WHERE activity_type IN ('call', 'email', 'visit') AND occurred_at >= ? AND occurred_at < ? AND user_id IN (${inList(ids)})`,
     [startSql, endSql, ...ids],
   );
-  const [leadRows] = await db.query(`SELECT created_at AS createdAt FROM leads WHERE created_at >= ? AND created_at < ? AND created_by IN (${inList(ids)})`, [startSql, endSql, ...ids]);
+  const { rows: leadRows } = await db.query(`SELECT created_at AS "createdAt" FROM leads WHERE created_at >= ? AND created_at < ? AND created_by IN (${inList(ids)})`, [startSql, endSql, ...ids]);
   const buckets = new Map<string, { date: string; calls: number; emails: number; visits: number; leads: number }>();
   for (let cursor = range.startYmd; cursor < range.endExclusiveYmd; cursor = addDaysYmd(cursor, 1)) buckets.set(cursor, { date: cursor, calls: 0, emails: 0, visits: 0, leads: 0 });
   const dayOf = (value: string) => { const parts = zonedParts(new Date(fromSqlDateTime(value) ?? value)); return formatYmd(parts.year, parts.month, parts.day); };
@@ -143,8 +143,8 @@ export async function drilldown(period: ReportPeriod, viewer: UserAccount, userI
     return { tasks: (await listTasks({ assigneeId: userId, limit: 200 }, db)).filter((task) => task.createdAt >= range.start.toISOString() && task.createdAt < range.end.toISOString()) };
   }
   const typeClause = metric === "conversions" ? "a.activity_type = 'status_change' AND a.value_code = 'client'" : `a.activity_type = '${{ calls: "call", emails: "email", visits: "visit", notes: "note" }[metric]}'`;
-  const [rows] = await db.query(
-    `SELECT a.id, a.lead_id AS leadId, l.client_name AS leadName, a.summary, a.body, a.occurred_at AS occurredAt
+  const { rows } = await db.query(
+    `SELECT a.id, a.lead_id AS "leadId", l.client_name AS "leadName", a.summary, a.body, a.occurred_at AS "occurredAt"
      FROM lead_activities a JOIN leads l ON l.id = a.lead_id
      WHERE ${typeClause} AND a.user_id = ? AND a.occurred_at >= ? AND a.occurred_at < ? ORDER BY a.occurred_at DESC LIMIT 300`,
     [userId, startSql, endSql],
@@ -180,8 +180,8 @@ export async function buildDashboard(viewer: UserAccount, scope: "mine" | "team"
   const template = await resolveTargetTemplate(viewer, db);
   const monthRange = periodRange("month_to_date", undefined, undefined, holidays);
   const weekStart = startOfWeekYmd(today);
-  const [weekLeads] = await db.query("SELECT COUNT(*) AS count FROM leads WHERE created_by = ? AND created_at >= ? AND created_at < ?", [viewer.id, toSqlDateTime(thisWeek.start), toSqlDateTime(thisWeek.end)]);
-  const [monthConversions] = await db.query("SELECT COUNT(*) AS count FROM lead_activities WHERE user_id = ? AND activity_type = 'status_change' AND value_code = 'client' AND occurred_at >= ? AND occurred_at < ?", [viewer.id, toSqlDateTime(monthRange.start), toSqlDateTime(monthRange.end)]);
+  const { rows: weekLeads } = await db.query("SELECT COUNT(*) AS count FROM leads WHERE created_by = ? AND created_at >= ? AND created_at < ?", [viewer.id, toSqlDateTime(thisWeek.start), toSqlDateTime(thisWeek.end)]);
+  const { rows: monthConversions } = await db.query("SELECT COUNT(*) AS count FROM lead_activities WHERE user_id = ? AND activity_type = 'status_change' AND value_code = 'client' AND occurred_at >= ? AND occurred_at < ?", [viewer.id, toSqlDateTime(monthRange.start), toSqlDateTime(monthRange.end)]);
   const ownCounts = teamWide ? await activityCounts(db, [viewer.id], thisWeek) : thisCounts;
   const weekVisits = ownCounts.get(viewer.id)?.visits ?? 0;
   const targets: TargetProgress = {
@@ -194,7 +194,7 @@ export async function buildDashboard(viewer: UserAccount, scope: "mine" | "team"
   targets.percent = progressPercent([targets.leads, targets.visits, targets.conversions]);
 
   const inactiveSince = toSqlDateTime(new Date(Date.now() - settings.reminders.inactivityDays * 86_400_000));
-  const inactiveLeads = await selectLeads(`l.record_state = 'active' AND l.last_activity_at < ? ${ownerClause}`, [inactiveSince, ...ownerParams], "l.last_activity_at ASC", 20, db);
+  const inactiveLeads = await selectLeads(`l.record_state = 'active' AND st.code NOT IN ('lost', 'disqualified') AND l.last_activity_at < ? ${ownerClause}`, [inactiveSince, ...ownerParams], "l.last_activity_at ASC", 20, db);
   const openTasks = await listTasks({ assigneeId: teamWide ? undefined : viewer.id, status: "open", limit: 200 }, db);
   const nowIso = new Date().toISOString();
   const recentLeads = await selectLeads(`l.record_state = 'active' ${ownerClause}`, ownerParams, "l.last_activity_at DESC", 8, db);

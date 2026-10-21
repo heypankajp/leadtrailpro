@@ -112,6 +112,23 @@ describe("Leads", () => {
     await page.toast("Status updated");
   });
 
+  uiTest("a closed status asks for its reason and shows it with the status", async () => {
+    await page.setValue(await page.wait(By.css('select[aria-label="Update lead status"]')), "Disqualified");
+    await page.dialogTitle(`Mark ${lead.name} as Disqualified`);
+    await page.fill("Status reason", "Bad Timing / Not Right Now");
+    await page.clickButton("Set status");
+    await page.wait(By.css('select[aria-label="Status reason"]'));
+    assert.equal(await page.selectedText(await page.wait(By.css('select[aria-label="Status reason"]'))), "Bad Timing / Not Right Now");
+    assert.equal(await page.selectedText(await page.wait(By.css('select[aria-label="Update lead status"]'))), "Disqualified");
+    await page.tab("Timeline");
+    await page.wait(By.xpath('//article[contains(@class,"timeline-entry")]//strong[normalize-space()="Status changed from Warm to Disqualified – Bad Timing / Not Right Now"]'));
+    await page.tab("Overview");
+    // Back to Warm for the list checks that follow; the reason select disappears once the status is open again.
+    await page.setValue(await page.wait(By.css('select[aria-label="Update lead status"]')), "Warm");
+    await page.driver.wait(async () => (await page.driver.findElements(By.css('select[aria-label="Status reason"]'))).length === 0, 15000, "Reason select still shown");
+    assert.equal(await page.selectedText(await page.wait(By.css('select[aria-label="Update lead status"]'))), "Warm");
+  });
+
   uiTest("finds the lead under Warm leads and by global search", async () => {
     await page.closeDialog();
     await page.nav("Warm leads");

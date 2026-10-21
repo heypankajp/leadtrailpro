@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ value }, { status: 201 });
   } catch (error) {
     const code = (error as { code?: string }).code;
-    if (code === "ER_DUP_ENTRY") return jsonError(409, "That value already exists in this list.");
+    if (code === "23505") return jsonError(409, "That value already exists in this list.");
     return handleRouteError(error, "Create list value");
   }
 }

@@ -11,6 +11,7 @@ import { suggestFollowUp } from "@/lib/natural-dates";
 import { useAsyncData } from "@/lib/useAsyncData";
 import { documentLabels, previewableMimeTypes, type LeadAttachment } from "@/features/attachments/model";
 import LeadEmails from "@/features/gmail/LeadEmails";
+import { reasonListFor, type ListKey, type ListValue } from "@/features/list-values/model";
 import { useApp } from "@/features/shell/AppContext";
 import { Avatar, Dialog, EmptyState, ErrorText, Field, KeyValue, Loading, PromptDialog, StatusPill, Tabs } from "@/features/shell/components";
 import { createTask, updateTask } from "@/features/tasks/client";
@@ -46,6 +47,7 @@ export default function LeadDetailDialog({ leadId, onClose }: { leadId: number; 
   const [editing, setEditing] = useState(false);
   const [dialog, setDialog] = useState<
     | { kind: "transfer-pick" } | { kind: "transfer-reason"; user: UserSummary } | { kind: "archive" } | { kind: "restore" } | { kind: "review"; approve: boolean } | { kind: "task"; task?: Task }
+    | { kind: "status-reason"; statusId: number; statusName: string; listKey: ListKey }
     | null
   >(null);
 
@@ -67,7 +69,11 @@ export default function LeadDetailDialog({ leadId, onClose }: { leadId: number; 
   const documents = detail.attachments.filter((file) => file.category === "document");
   const profiles = detail.attachments.filter((file) => file.category === "profile");
 
+  // LEAD-06: Lost Lead and Disqualified ask for a reason before the status changes; other statuses apply at once.
   const changeStatus = async (statusId: number) => {
+    const target = reference.listValues.status.find((status) => status.id === statusId);
+    const listKey = reasonListFor(target?.code);
+    if (target && listKey) { setDialog({ kind: "status-reason", statusId, statusName: target.value, listKey }); return; }
     try {
       await updateLead(lead.id, { statusId });
       await refresh("Status updated");
@@ -75,6 +81,7 @@ export default function LeadDetailDialog({ leadId, onClose }: { leadId: number; 
       notify(errorMessage(caught), "error");
     }
   };
+  const reasonKey = reasonListFor(lead.statusCode);
 
   const quickUpdate = async (changes: Parameters<typeof updateLead>[1], message: string) => {
     try {
@@ -118,14 +125,21 @@ export default function LeadDetailDialog({ leadId, onClose }: { leadId: number; 
         <div className="detail-summary">
           <Avatar name={lead.clientName} seed={lead.id} />
           <div>
-            {canEdit && lead.recordState !== "archived" ? (
-              <label className={`status-pill status-${lead.statusCode} status-select-pill`}>
-                <i />
-                <select aria-label="Update lead status" value={lead.statusId} onChange={(event) => void changeStatus(Number(event.target.value))}>
-                  {reference.listValues.status.map((status) => <option key={status.id} value={status.id}>{status.value}</option>)}
+            <div className="status-row">
+              {canEdit && lead.recordState !== "archived" ? (
+                <label className={`status-pill status-${lead.statusCode} status-select-pill`}>
+                  <i />
+                  <select aria-label="Update lead status" value={lead.statusId} onChange={(event) => void changeStatus(Number(event.target.value))}>
+                    {reference.listValues.status.map((status) => <option key={status.id} value={status.id}>{status.value}</option>)}
+                  </select>
+                </label>
+              ) : <StatusPill status={lead.statusLabel} code={lead.statusCode} />}
+              {reasonKey && canEdit && lead.recordState !== "archived" && (
+                <select className="inline-select" aria-label="Status reason" value={lead.statusReasonId ?? ""} onChange={(event) => void quickUpdate({ statusReasonId: Number(event.target.value) }, "Status reason updated")}>
+                  {reference.listValues[reasonKey].map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
                 </select>
-              </label>
-            ) : <StatusPill status={lead.status} code={lead.statusCode} />}
+              )}
+            </div>
             <p>{lead.leadType}{lead.industry ? ` · ${lead.industry}` : ""}{lead.city ? ` · ${lead.city}` : ""}</p>
           </div>
           <div className="detail-owner"><small>OWNER</small><strong>{lead.ownerName}</strong></div>
@@ -210,6 +224,15 @@ export default function LeadDetailDialog({ leadId, onClose }: { leadId: number; 
       {dialog?.kind === "review" && (
         <PromptDialog title={dialog.approve ? `Approve ${lead.clientName}` : `Reject ${lead.clientName}`} eyebrow="QUEUED LEAD" label={dialog.approve ? "Comment (optional)" : "Reason"} required={!dialog.approve} danger={!dialog.approve} confirmLabel={dialog.approve ? "Approve" : "Reject"} onClose={() => setDialog(null)} onConfirm={async (comment) => { await reviewLead(lead.id, dialog.approve, comment); setDialog(null); await refresh(dialog.approve ? "Lead approved" : "Lead rejected"); }} />
       )}
+      {dialog?.kind === "status-reason" && (
+        <StatusReasonDialog
+          leadName={lead.clientName}
+          statusName={dialog.statusName}
+          options={reference.listValues[dialog.listKey]}
+          onClose={() => setDialog(null)}
+          onConfirm={async (statusReasonId) => { await updateLead(lead.id, { statusId: dialog.statusId, statusReasonId }); setDialog(null); await refresh("Status updated"); }}
+        />
+      )}
       {dialog?.kind === "task" && (
         <TaskFormDialog task={dialog.task} leadId={lead.id} leadName={lead.clientName} defaultAssigneeId={lead.ownerId} onClose={() => setDialog(null)} onSaved={() => { setDialog(null); void refresh(dialog.task ? "Task updated" : "Task created"); }} />
       )}
@@ -217,9 +240,41 @@ export default function LeadDetailDialog({ leadId, onClose }: { leadId: number; 
   );
 }
 
+/** Asks for the Status Reason that Lost Lead and Disqualified require (LEAD-06). */
+function StatusReasonDialog({ leadName, statusName, options, onConfirm, onClose }: { leadName: string; statusName: string; options: ListValue[]; onConfirm: (statusReasonId: number) => Promise<void>; onClose: () => void }) {
+  const [reasonId, setReasonId] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!reasonId) { setError("Choose a reason."); return; }
+    setBusy(true);
+    setError("");
+    try { await onConfirm(Number(reasonId)); } catch (caught) { setError(errorMessage(caught)); setBusy(false); }
+  };
+  return (
+    <Dialog title={`Mark ${leadName} as ${statusName}`} eyebrow="LEAD STATUS" onClose={onClose} size="narrow">
+      <form className="stack-form" onSubmit={submit}>
+        <p className="dialog-description">The reason is shown with the status everywhere as &ldquo;{statusName} &ndash; reason&rdquo;.</p>
+        <Field label="Status reason" required>
+          <select value={reasonId} onChange={(event) => setReasonId(event.target.value)} autoFocus>
+            <option value="">Choose a reason</option>
+            {options.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
+          </select>
+        </Field>
+        <ErrorText message={error} />
+        <div className="modal-actions">
+          <button type="button" className="button button-outline" onClick={onClose}>Cancel</button>
+          <button type="submit" className="button button-primary" disabled={busy}>{busy ? "Saving..." : "Set status"}</button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
 function OverviewTab({ detail, canEdit, onQuickUpdate, onScheduleFollowUp }: {
   detail: LeadDetail; canEdit: boolean;
-  onQuickUpdate: (changes: { bdActionId?: number | null; clientResponseId?: number | null }, message: string) => Promise<void>;
+  onQuickUpdate: (changes: { bdActionId?: number | null; clientResponseId?: number | null; statusReasonId?: number | null }, message: string) => Promise<void>;
   onScheduleFollowUp: (date: string, time: string, note: string) => Promise<void>;
 }) {
   const { reference, can } = useApp();

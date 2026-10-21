@@ -18,14 +18,15 @@ export function handleRouteError(error: unknown, context: string) {
   // Let Next.js keep its own signals (for example the prerender bailout thrown by cookies()).
   unstable_rethrow(error);
   if (error instanceof HttpError) return jsonError(error.status, error.message);
+  // PostgreSQL SQLSTATE codes: unique_violation, foreign_key_violation, check_violation, and the data exceptions.
   const code = (error as { code?: string }).code;
-  if (code === "ER_DUP_ENTRY") return jsonError(409, "A record with the same unique value already exists.");
-  if (code === "ER_NO_REFERENCED_ROW_2" || code === "ER_NO_REFERENCED_ROW") return jsonError(400, "A referenced record does not exist.");
-  if (code === "ER_DATA_TOO_LONG" || code === "ER_TRUNCATED_WRONG_VALUE" || code === "ER_TRUNCATED_WRONG_VALUE_FOR_FIELD" || code === "WARN_DATA_TRUNCATED") {
+  if (code === "23505") return jsonError(409, "A record with the same unique value already exists.");
+  if (code === "23503") return jsonError(400, "A referenced record does not exist.");
+  if (code === "23514" || code === "22001" || code === "22P02" || code === "22007" || code === "22008" || code === "22003") {
     return jsonError(400, "One of the values is too long or in the wrong format.");
   }
   console.error(`${context} failed.`, error instanceof Error ? `${error.name}: ${error.message}` : "Unknown error");
-  return jsonError(503, "The database request failed. Verify MySQL is running and the MYSQL_* settings in .env.local.");
+  return jsonError(503, "The database request failed. Verify PostgreSQL is running and the PG* settings in .env.local.");
 }
 
 export async function readJsonBody(request: Request): Promise<Record<string, unknown> | null> {

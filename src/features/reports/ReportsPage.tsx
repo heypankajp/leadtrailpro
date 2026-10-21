@@ -68,7 +68,8 @@ export default function ReportsPage() {
     <>
       <div className="page-heading">
         <div><div className="eyebrow">{teamWide ? "TEAM PERFORMANCE" : "YOUR PERFORMANCE"}</div><h1>Reports & dashboard</h1><p>{report ? `${formatDate(report.range.startYmd)} to ${formatDate(report.range.endExclusiveYmd === report.range.startYmd ? report.range.startYmd : addDays(report.range.endExclusiveYmd, -1))}` : "Activity, leads, conversions, and target progress."}</p></div>
-        <button className="button button-outline" onClick={exportCsv} disabled={!report}><Download size={16} /> Export CSV</button>
+        <a className={`button button-outline ${report ? "" : "is-disabled"}`} href={report ? `/api/reports/export?period=${period}${teamWide && userId ? `&userId=${userId}` : ""}` : undefined} download><Download size={16} /> Export Excel</a>
+        <button className="button button-outline" onClick={exportCsv} disabled={!report}><Download size={16} /> CSV</button>
       </div>
       <div className="report-toolbar">
         <div className="report-periods">

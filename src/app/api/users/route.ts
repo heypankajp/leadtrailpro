@@ -46,7 +46,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ user }, { status: 201 });
   } catch (error) {
     const code = (error as { code?: string }).code;
-    if (code === "ER_DUP_ENTRY") return jsonError(409, "A user with this email address already exists.");
+    if (code === "23505") return jsonError(409, "A user with this email address already exists.");
     return handleRouteError(error, "Create user");
   }
 }

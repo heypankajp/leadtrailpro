@@ -1,5 +1,5 @@
 #!/bin/sh
-# Runs the Selenium end-to-end suite in Docker: a fresh in-memory MySQL, the
+# Runs the Selenium end-to-end suite in Docker: a fresh in-memory PostgreSQL, the
 # production build of the app, a Chromium grid, and the test runner.
 #
 #   scripts/e2e.sh                               # whole suite

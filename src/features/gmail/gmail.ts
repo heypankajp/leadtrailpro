@@ -4,7 +4,6 @@
  * messages whose participants include one of the lead's client email addresses.
  */
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-import type { RowDataPacket } from "mysql2/promise";
 import { getDatabasePool } from "@/lib/db";
 import { appBaseUrl } from "@/lib/http";
 import { recordAudit } from "@/features/audit/repository";
@@ -96,14 +95,14 @@ export async function saveConnection(userId: number, googleEmail: string, refres
   if (!config) throw new Error("Gmail is not configured.");
   await getDatabasePool().query(
     `INSERT INTO gmail_connections (user_id, google_email, refresh_token_encrypted) VALUES (?, ?, ?)
-     ON DUPLICATE KEY UPDATE google_email = VALUES(google_email), refresh_token_encrypted = VALUES(refresh_token_encrypted)`,
+     ON CONFLICT (user_id) DO UPDATE SET google_email = EXCLUDED.google_email, refresh_token_encrypted = EXCLUDED.refresh_token_encrypted`,
     [userId, googleEmail, encryptToken(refreshToken, config.tokenKey)],
   );
   await recordAudit(getDatabasePool(), { actorId: userId, action: "gmail.connected", entityType: "user", entityId: userId, after: { googleEmail }, details: `Connected Gmail account ${googleEmail}` });
 }
 
 export async function getConnectionEmail(userId: number) {
-  const [rows] = await getDatabasePool().query<RowDataPacket[]>("SELECT google_email FROM gmail_connections WHERE user_id = ?", [userId]);
+  const { rows } = await getDatabasePool().query("SELECT google_email FROM gmail_connections WHERE user_id = ?", [userId]);
   return rows[0]?.google_email as string | undefined;
 }
 
@@ -178,7 +177,7 @@ async function mailboxEmails(googleEmail: string, refreshToken: string, addresse
 export async function recentLeadEmails(addresses: string[], scope: { userId: number } | "all") {
   const config = googleConfig();
   if (!config || addresses.length === 0) return { emails: [] as LeadEmail[], failures: 0 };
-  const [rows] = await getDatabasePool().query<RowDataPacket[]>(
+  const { rows } = await getDatabasePool().query(
     `SELECT google_email, refresh_token_encrypted FROM gmail_connections ${scope === "all" ? "" : "WHERE user_id = ?"}`,
     scope === "all" ? [] : [scope.userId],
   );

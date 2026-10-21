@@ -29,6 +29,7 @@ export const userPrivileges = [
   { id: "add_notes", label: "Add interaction notes" },
   { id: "log_activities", label: "Log calls, emails and visits" },
   { id: "manage_tasks", label: "Create and update tasks" },
+  { id: "plan_trips", label: "Plan sales trips" },
   { id: "upload_files", label: "Upload documents and profiles" },
   { id: "delete_files", label: "Remove files" },
   { id: "view_reports", label: "View own reports" },
@@ -47,7 +48,7 @@ export const rolePrivileges: Record<SystemRole, UserPrivilege[]> = {
   admin: allPrivileges,
   sales_manager: [
     "view_leads", "create_leads", "edit_leads", "transfer_leads", "add_notes", "log_activities",
-    "manage_tasks", "upload_files", "view_reports",
+    "manage_tasks", "plan_trips", "upload_files", "view_reports",
   ],
   recruiter: ["view_leads", "add_notes"],
 };

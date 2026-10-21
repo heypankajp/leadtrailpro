@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| Source | `Sales_Tracker_App_BRD_SRS.docx`, version 1.0, dated October 13, 2026. An updated BRD/SRS (`docs/Sales_Tracker_App_BRD_SRS_Updated.pdf`) was added on October 19, 2026 and has not yet been reconciled with this PRD |
-| PRD version | 1.0 — October 17, 2026; reviewed October 18, 2026 (no requirement changes; packaging and verification notes added) |
+| Source | `Sales_Tracker_App_BRD_SRS.docx`, version 1.0, dated October 13, 2026. An updated BRD/SRS (`docs/Sales_Tracker_App_BRD_SRS_Updated.pdf`) was added on October 19, 2026 and has not yet been reconciled with this PRD. The change note `SalesTrackPro_Sales_Trip_Planner_Requirement_Change.docx` (received October 21, 2026; the file stays local and untracked) is incorporated as §3.22 and LEAD-06/07 |
+| PRD version | 1.1 — October 21, 2026: Sales Trip Planner (§3.22, TRIP-01..11), lead status reasons (LEAD-06/07), reference lists (§5), open questions 8–13. (1.0: October 17, 2026; reviewed October 18, 2026) |
 | Companion | `SPEC.md` (technical specification and screen designs) |
 | Status legend | **Implemented** — in the current codebase · **Partial** — some of the requirement is built · **Planned** — not started, depends on an external service or a later phase |
 
@@ -27,15 +27,15 @@ SalesTrackPro is a web (and later mobile) sales-management application for a sta
 
 ### 1.3 Technology direction (BRD §1)
 
-React frontend, Node.js backend, responsive web experience, Android and iPhone support, Google Workspace/Gmail integration. The current implementation is a Next.js 16 application (React 19 on the client, Node.js route handlers on the server) backed by MySQL, packaged with Docker for development and production, and verified by lint, type checks, a production build, and a Selenium browser suite (SPEC §2.3 and §12). Native mobile apps are out of scope for the current phase; the web UI is responsive.
+React frontend, Node.js backend, responsive web experience, Android and iPhone support, Google Workspace/Gmail integration. The current implementation is a Next.js 16 application (React 19 on the client, Node.js route handlers on the server) backed by PostgreSQL, packaged with Docker for development and production, and verified by lint, type checks, a production build, and a Selenium browser suite (SPEC §2.3 and §12). Native mobile apps are out of scope for the current phase; the web UI is responsive.
 
 ### 1.4 Phasing
 
 | Phase | Content | Status |
 |---|---|---|
-| Phase 1 — Core | Roles, authentication, leads with the full field set, ownership, queued leads, search/filter/archive, interaction timeline, tasks, documents and profiles, action center, targets, reports, user administration, list of values, audit | Implemented (see per-requirement status) |
+| Phase 1 — Core | Roles, authentication, leads with the full field set and status reasons, ownership, queued leads, search/filter/archive, interaction timeline, tasks, documents and profiles, action center, targets, reports, user administration, list of values, audit | Implemented (see per-requirement status) |
 | Phase 2 — Internal features | Collaboration threads and mentions, in-app notifications, rich-text notes, device authorization | Planned |
-| Phase 3 — Integrations | Google sign-in, Gmail linking and AI summaries, voice-to-text, OCR, job-board and review data, route optimization, push/email notifications | Planned; a first cut of Gmail linking (per-user read-only mailbox link, lead Emails tab) is built and waits on a Google Cloud OAuth client |
+| Phase 3 — Integrations | Google sign-in, Gmail linking and AI summaries, voice-to-text, OCR, job-board and review data, route optimization, live map, company, and job-listing providers for the Sales Trip Planner (TRIP-*; the planner itself is built and runs on sample data until keys are set), push/email notifications | Planned; a first cut of Gmail linking (per-user read-only mailbox link, lead Emails tab) is built and waits on a Google Cloud OAuth client |
 
 ---
 
@@ -88,7 +88,7 @@ React frontend, Node.js backend, responsive web experience, Android and iPhone s
 | ID | Requirement | Acceptance criteria | Status |
 |---|---|---|---|
 | NAV-01 | Persistent left navigation on desktop/tablet; collapsible drawer on mobile with the same information architecture. | — | Implemented |
-| NAV-02 | Items: Action Center/Home, My Leads, All Leads, Cold, Warm, Hot, Client, Queued Leads, Archive, Lead Generation, Tasks, Road Visit Planner, Dashboard/Reports, Targets/Target Templates, Admin/User Management, List of Values, Device Authorization. | Admin-only items are hidden from users without the privilege. | Implemented (Device Authorization opens a placeholder) |
+| NAV-02 | Items: Action Center/Home, My Leads, All Leads, Cold, Warm, Hot, Client, Queued Leads, Archive, Lead Generation, Tasks, Road Visit Planner, Dashboard/Reports, Targets/Target Templates, Admin/User Management, List of Values, Device Authorization. | Admin-only items are hidden from users without the privilege. The Sales Trip Planner (§3.22) has its own item under Tools for users with the plan_trips privilege (Admins and Sales Managers by default). | Implemented (Device Authorization opens a placeholder) |
 | NAV-03 | Lead views sort by most recent activity first unless another sort is chosen. | — | Implemented |
 | NAV-04 | Archive has its own search and filters. | — | Implemented |
 
@@ -104,7 +104,7 @@ React frontend, Node.js backend, responsive web experience, Android and iPhone s
 | 4 | Client Name ★ | Text, 200 | |
 | 5 | BD Action | Dropdown | Appendix B |
 | 6 | Client Response | Dropdown | Appendix B |
-| 7 | Status ★ | Dropdown | Cold / Warm / Hot / Client |
+| 7 | Status ★ | Dropdown | Cold / Warm / Hot / Client / Lost Lead / Disqualified (LEAD-06) |
 | 8 | Address | Text, 500 | Street/location address |
 | 9 | Comments | Text | |
 | 10 | City | Dropdown | Appendix B, Admin-maintained |
@@ -122,11 +122,14 @@ React frontend, Node.js backend, responsive web experience, Android and iPhone s
 | 22 | Company Size | Dropdown | Large / Medium / Small |
 | 23 | Documents | Files | General lead documents (see 3.13) |
 | 24 | Resumes / Profiles Shared | Files | Dedicated multiple-file area (see 3.13) |
+| 25 | Status Reason | Dropdown | Required when Status is Lost Lead (Admin-maintained reasons) or Disqualified (fixed reasons); cleared for every other status (LEAD-06) |
 
 **LEAD-02** (Implemented) Company website URL is also stored (used by lead generation and shown on the lead).
 **LEAD-03** (Implemented) Dates are entered and displayed in the user's locale; the BRD's MM/DD/YYYY is a display preference, storage is ISO.
 **LEAD-04** (Implemented) Validation errors name the field and the rule (length, format, missing).
 **LEAD-05** (Implemented) Dropdown values that have been deactivated remain valid on existing leads but cannot be chosen for new entries.
+**LEAD-06** (Implemented; change note of October 21, 2026, §8) Status is standardised and gains two closed values, Lost Lead and Disqualified, each carrying a Status Reason. Disqualified reasons are fixed: Not Interested; Bad Timing / Not Right Now; No Longer Interested; Cannot Contact; Does Not Meet Criteria. Lost Lead reasons are Admin-maintained (for example Pricing). A reason is required whenever the status is Lost Lead or Disqualified and is blank otherwise. Status and reason display together as "Status – Reason" (for example "Disqualified – Not Interested", "Lost Lead – Pricing") throughout the CRM and in the Sales Trip Planner (TRIP-07). Lost Lead and Disqualified join the core statuses that cannot be deactivated (LOV-04). As built: changing a lead to Lost Lead or Disqualified from the lead header or the edit form asks for the reason; the reason can be changed in place afterwards; the timeline records "Status changed from Warm to Disqualified – Not Interested"; the lead stays active (no automatic archive) and is left out of the Action Center's needs-attention list; Disqualified reasons can be renamed but not added to or deactivated.
+**LEAD-07** (Implemented) Lead lists and the Archive filter by status and, for Lost Lead and Disqualified, by reason; the keyword search also matches the reason text (extends SRCH-02). Navigation keeps the four pipeline views; closed leads are found through the status filter (open question 11 records the defaults chosen).
 
 ### 3.5 Lead ownership, transfer, and reassignment (BRD §7)
 
@@ -267,7 +270,7 @@ React frontend, Node.js backend, responsive web experience, Android and iPhone s
 | RPT-03 | Periods: Today; Yesterday (business-day logic); This Week; Last Week; Month to Date; Last Month; Year to Date. | "Yesterday" skips weekends and the holidays in the business calendar. | Implemented |
 | RPT-04 | Drill-down from charts/cards to the exact leads/activities behind each number; open the entire lead from there. | — | Implemented |
 | RPT-05 | Tool engagement report for all Sales Managers and for an individual: logins, usage time where measurable, leads created/updated/converted, interactions, tasks created/completed, voice notes, documents attached, other feature usage; filters by date range, person, role/stage, and target template; graphical presentation with drill-down to supporting records. | Counts for logins, leads, updates, conversions, interactions, tasks, files are in the report with drill-down; usage time and voice notes are not measured; filters by stage and template are not yet in the UI. | Partial |
-| RPT-06 | Reports exportable to PDF/Excel. | CSV export implemented; PDF planned. | Partial |
+| RPT-06 | Reports exportable to PDF/Excel. | Excel (.xlsx) and CSV export implemented; PDF planned. | Partial |
 
 ### 3.18 Admin user management (BRD §20)
 
@@ -288,10 +291,10 @@ React frontend, Node.js backend, responsive web experience, Android and iPhone s
 
 | ID | Requirement | Acceptance criteria | Status |
 |---|---|---|---|
-| LOV-01 | Admin maintains the values of all configurable dropdowns. | Lead type, status, BD action, client response, lead category, company size, city. | Implemented |
+| LOV-01 | Admin maintains the values of all configurable dropdowns. | Lead type, status, BD action, client response, lead category, company size, city, Lost Lead reason, business type. Disqualified reasons are fixed (rename only). | Implemented |
 | LOV-02 | Add, activate/deactivate, reorder, and edit metadata. | — | Implemented |
 | LOV-03 | Rename a value; existing records display the new value; audit keeps the original. | Rename updates the single stored value; the audit entry records old and new names. | Implemented |
-| LOV-04 | Deleting a value in use is handled as deactivate/retire. | There is no delete; deactivation keeps the value on existing leads. The four core statuses cannot be deactivated. | Implemented |
+| LOV-04 | Deleting a value in use is handled as deactivate/retire. | There is no delete; deactivation keeps the value on existing leads. The six core statuses and the Disqualified reasons cannot be deactivated. | Implemented |
 | LOV-05 | Changes are audit logged. | — | Implemented |
 
 ### 3.20 Notifications (BRD §22)
@@ -314,6 +317,24 @@ React frontend, Node.js backend, responsive web experience, Android and iPhone s
 | AUD-04 | Notes display author and date/time, newest first. | — | Implemented |
 | AUD-05 | Soft-deleted content remains represented in audit history. | Files: yes. Messages: planned. | Partial |
 | AUD-06 | Admins can view the audit history of a lead on the lead itself. | "Audit" tab on the lead for users with the audit privilege. | Implemented (extension) |
+
+### 3.22 Sales Trip Planner (change note of October 21, 2026)
+
+The change note amends a "Sales Trip Planner" requirement that the BRD/SRS does not contain under that name; the nearest BRD items are the similar-company search in §16 (LGEN-02, LGEN-03) and the road visit planner in §17 (PLAN-*). Until the client supplies the original planner specification, the change note plus those sections are treated as the whole requirement (open question 8). Section 8 of the change note alters the lead record itself and is recorded as LEAD-06 and LEAD-07. Design: SPEC §10.8 and screen A16. As built on October 21, 2026: the planner runs end to end on sample company data (`TRIPS_PROVIDER=stub`, the default in the Docker development stack); live data needs the Google Maps adapter with `MAPS_API_KEY` and a licensed job aggregator behind `JOBS_API_URL`/`JOBS_API_KEY` (open questions 9 and 10).
+
+| ID | Requirement | Acceptance criteria | Status |
+|---|---|---|---|
+| TRIP-01 | A Sales Manager defines a sales trip by Trip Title, Address (starting or target address/neighbourhood), Radius Type (kilometres or driving minutes), Radius, Business Type, and Number of Results. | Business Type is an Admin-maintained list seeded with Manufacturing, Warehouse / Distribution, Bakery / Food Manufacturing, Any. Number of Results is a whole number, maximum 50. | Implemented |
+| TRIP-02 | The search returns at most the requested number of companies; when fewer match, all matches are returned. | — | Implemented |
+| TRIP-03 | Results are listed with the columns Company, Company Address, Distance, Hiring, Action, in that order. | Distance is measured from the trip address in the chosen unit. | Implemented |
+| TRIP-04 | The company name links to the company's official website and opens in a new tab; when no website is identified the name is plain text. | — | Implemented |
+| TRIP-05 | Company Address shows the full business address and is included in Excel exports and printed reports. | — | Implemented |
+| TRIP-06 | Hiring shows the number of active job listings found for the company ("8 Jobs"); when greater than zero it opens an in-app dialog listing Job Title, Job Portal / Source, Location, Date Posted, Employment Type (when available), and a View Job link to the original posting. | Sources are supported job portals such as Indeed, subject to NFR-08 (open question 10). | Implemented against the provider contract; a licensed job source is still to be chosen (open question 10) |
+| TRIP-07 | Action is computed by matching the company against existing leads and clients on company name, address, website/domain, and phone number. Values: Cold Lead, Warm Lead, Hot Lead, Client, Lost Lead – [Reason], Disqualified – Not Interested, Disqualified – Bad Timing / Not Right Now, Disqualified – No Longer Interested, Disqualified – Cannot Contact, Disqualified – Does Not Meet Criteria, New / Not in CRM. | Depends on LEAD-06. Matching rules and precedence are open question 12. | Implemented |
+| TRIP-08 | The list can be filtered by Action, including combined status/reason values. | — | Implemented |
+| TRIP-09 | The list can be sorted ascending or descending by any applicable column. | — | Implemented |
+| TRIP-10 | Companies can be shortlisted from the results. | — | Implemented |
+| TRIP-11 | The list can be exported to Excel and printed as a field-visit report, both including Company Name and Company Address, with a scope of All Results, Filtered Results, Shortlisted Companies, or Planned Visits. | Planned Visits are shortlisted companies placed on a road visit plan (PLAN-01). | Implemented; a planned visit is a date set on a shortlisted company until the road visit planner (PLAN-01) exists |
 
 ---
 
@@ -343,7 +364,10 @@ All lists are Admin-maintainable. Seeded values:
 - **Lead Type:** Road Trip, Cold Call, Cold Email
 - **BD Action:** First Call, First Email, First Meeting, Left Brochure, HR Contact Information Received, Introduction Email Sent, Email Followups, Followup Call, Waiting For Profiles from Recruitment, Shared Profiles, Followup on Profiles, Engagement / Ans Questions, In Person Meeting Scheduled, Virtual/Phone Meeting Scheduled, Contract Sent, Contract Clarification (BRD spelling "Contract Clerification"), Contract Followup, Contract Signed, New Position, Plan a Visit
 - **Client Response:** Approach Later, Engaged, Interested, Connected with HR, Not Interested, Do not use Agency, No Response, In Person Meeting Requested, Phone Call Requested, Left Voicemail, Got HR email, Not Hiring
-- **Status:** Cold, Warm, Hot, Client (core; renamable, not deactivatable)
+- **Status:** Cold, Warm, Hot, Client, Lost Lead, Disqualified (core; renamable, not deactivatable)
+- **Disqualified Reason** (fixed, LEAD-06): Not Interested, Bad Timing / Not Right Now, No Longer Interested, Cannot Contact, Does Not Meet Criteria
+- **Lost Lead Reason** (Admin-maintained, LEAD-06): seeded with Pricing
+- **Business Type** (Admin-maintained, TRIP-01): Manufacturing, Warehouse / Distribution, Bakery / Food Manufacturing, Any
 - **Lead Category:** Skilled, Non Skilled, Both
 - **Company Size:** Large, Medium, Small
 - **Sales Manager Stage:** Onboarding, Training, Full Productive (fixed)
@@ -377,6 +401,12 @@ All lists are Admin-maintainable. Seeded values:
 5. **Business calendar.** Resolved: Admins keep the public-holiday list under Settings → Business calendar. Weekends and listed holidays are non-working days for "yesterday" in reports, target scaling, and natural-language dates.
 6. **Native mobile.** Android/iPhone support is met by the responsive web app for now; native apps (camera capture, push) are Phase 3.
 7. **Usage time.** "Application usage/time where measurable" requires client-side activity tracking that is not yet defined.
+8. **Sales Trip Planner baseline.** The change note of October 21, 2026 says it amends an existing Sales Trip Planner requirement and asks that previously approved requirements be preserved, but neither BRD/SRS version contains a feature of that name. §3.22 treats the change note plus BRD §16/§17 as the whole requirement until the client provides the original planner specification.
+9. **Company search and distance provider.** Searching companies by address and radius needs a geocoding and places provider (for example Google Places, which needs billing and limits how long results may be cached), and the driving-minutes radius needs a routing or isochrone service on top. Business types such as "Bakery / Food Manufacturing" do not map to a single provider category and need keyword rules. Provider, budget, and terms are undecided. Status: a Google Maps adapter (Geocoding, Places Text Search, Place Details, Distance Matrix) is written behind the provider interface and used when `MAPS_API_KEY` is set; it has not been exercised against a real key.
+10. **Job listings source.** Indeed offers no public job-search API and its terms forbid scraping. BRD §25 already treats Indeed as one configurable channel rather than a dependency, so TRIP-06 needs a licensed aggregator (Adzuna, SerpApi Google Jobs, JSearch, or similar) chosen and budgeted. Status: the app calls a small JSON contract (SPEC §10.8) that any licensed source can be wrapped in; nothing is wired to Indeed.
+11. **Lost and Disqualified leads.** Defaults built on October 21, 2026, pending the client's confirmation: the lead stays active (not archived) and keeps its owner; there is no dedicated navigation view (use the status filter); conversions still count only changes to Client; closed leads are excluded from the needs-attention reminder; Lost Lead reasons are an Admin list seeded with Pricing. Any of these can change without schema work. Related: the existing Client Response values Not Interested, Do not use Agency, and Not Hiring overlap with the Disqualified reasons; in the client's current tracker those responses are recorded with the Status still Cold, so a mapping rule for existing data is needed.
+12. **Action matching rules.** Precedence when several leads match a discovered company, whether archived leads count, and how loose company-name matching may be. Lead addresses are free text and not geocoded today. SPEC §10.8 proposes defaults.
+13. **Legacy data import.** The client's current system of record is a spreadsheet tracker (kept outside the repository because it holds real contact data) with one row per interaction. Its lead type values are "Office" (87% of rows) and "Road_Trip", not Road Trip / Cold Call / Cold Email; its BD actions are two numbered stage sequences (road trip and office); its statuses are exactly Cold / Warm / Hot / Client. Decisions pending: what "Office" maps to, whether the numbered sequences return, and whether the import maps negative responses to Disqualified. SPEC §10.9 describes the import.
 
 ---
 
@@ -388,7 +418,7 @@ All lists are Admin-maintainable. Seeded values:
 | §3 Authentication | AUTH-01..11 | Mostly implemented; Google sign-in and devices planned |
 | §4 Action Center | AC-01..07 | Implemented |
 | §5 Navigation | NAV-01..04 | Implemented |
-| §6 Lead record | LEAD-01..05 | Implemented |
+| §6 Lead record | LEAD-01..07 | Implemented (LEAD-06..07 from the change note §8, defaults in open question 11) |
 | §7 Ownership | OWN-01..06 | Implemented |
 | §8 Queued leads | QUE-01..03 | Implemented |
 | §9 Search/filter/archive | SRCH-01..07 | Implemented |
@@ -400,6 +430,8 @@ All lists are Admin-maintainable. Seeded values:
 | §15 Gmail | MAIL-01..09 | Partial (recent messages via connected Gmail; threads, send, summaries planned) |
 | §16 Lead generation | LGEN-01..05 | Planned (preview) |
 | §17 Road planner | PLAN-01..04 | Planned (preview); visits feed reports |
+| Change note Oct 21, 2026 §1–7, §9 (Sales Trip Planner) | TRIP-01..11 | Implemented on sample data; live providers need keys (§3.22) |
+| Change note Oct 21, 2026 §8 (lead status) | LEAD-06..07 | Implemented |
 | §18 Targets | TGT-01..06 | Implemented |
 | §19 Dashboards/reports | RPT-01..06 | Implemented; usage time and PDF export pending |
 | §20 User management | USR-01..10 | Implemented except devices |
@@ -407,6 +439,6 @@ All lists are Admin-maintainable. Seeded values:
 | §22 Notifications | NTF-01..05 | Planned |
 | §23 Audit | AUD-01..06 | Implemented for built features |
 | §24 Non-functional | NFR-01..09 | See table |
-| Appendix A Wireframes | See SPEC.md §9 | Screens A1–A5, A7, A10, A11, A13–A15 implemented; A6, A8, A9, A12 planned/preview |
+| Appendix A Wireframes | See SPEC.md §9 | Screens A1–A5, A7, A10, A11, A13–A15 implemented; A6, A8, A9, A12 planned/preview; A16 (Sales Trip Planner) implemented |
 | Appendix B Lists | §5 above | Seeded |
 | Appendix C Rules | BR-01..12 | Implemented except BR-03, BR-08 |

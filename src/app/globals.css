@@ -214,6 +214,10 @@ h1 { margin: 9px 0 5px; color: #242941; font-size: 25px; font-weight: 690; lette
 .status-warm { color: #cf9448; background: #fff7e8; }
 .status-cold { color: #6482bd; background: #eef4ff; }
 .status-client { color: #3e9a79; background: #eaf8f1; }
+.status-lost { color: #6b7280; background: #f1f2f5; }
+.status-disqualified { color: #a3455a; background: #fbeef1; }
+.status-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.status-row .inline-select { max-width: 260px; }
 .status-select-pill { gap: 5px; padding-right: 6px; }
 .status-select-pill select { max-width: 112px; padding: 0; appearance: none; border: 0; outline: 0; color: inherit; background: transparent; font-size: 9px; font-weight: 600; cursor: pointer; }
 .status-select-pill select option { color: #4b5065; background: #fff; }
@@ -1058,3 +1062,40 @@ h1 { margin: 9px 0 5px; color: #242941; font-size: 25px; font-weight: 690; lette
 .email-head strong { flex: 1; min-width: 0; color: #2f3449; font-size: 11px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .email-head small, .email-entry > small { color: #8a90a2; font-size: 9px; overflow-wrap: anywhere; }
 .email-body { max-height: 160px; overflow-y: auto; margin: 2px 0 0; padding: 8px; border-radius: 5px; color: #50566c; background: #f8f9fc; font-size: 10px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+
+/* ---- Sales trip planner (TRIP-*) ---- */
+.trip-form .modal-actions { justify-content: flex-start; }
+.trip-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
+.trip-scope-note { font-size: 11px; color: #6b7280; margin-left: auto; }
+.trip-heading .heading-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start; }
+.back-link { display: inline-flex; align-items: center; gap: 4px; margin-bottom: 6px; }
+.sort-button { display: inline-flex; align-items: center; gap: 4px; background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; letter-spacing: inherit; text-transform: inherit; }
+.sort-button.is-active { color: #586be3; }
+.trip-table td small.muted-cell { display: block; margin-top: 2px; }
+.trip-table .company-link { color: inherit; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
+.trip-table .company-link:hover { color: #586be3; }
+.trip-table .address-cell { white-space: normal; max-width: 320px; display: inline-block; }
+.trip-table .open-lead { display: block; margin-top: 4px; font-size: 10px; }
+.trip-table .hiring-link { font-weight: 600; }
+.row-shortlisted { background: #f7f9ff; }
+.trip-open span { display: inline-flex; }
+.button.is-disabled { pointer-events: none; opacity: 0.5; }
+.trip-print-header, .print-only { display: none; }
+
+@media print {
+  body { background: #fff; }
+  .sidebar, .topbar, .app-footer, .mobile-scrim, .toast-message, .modal-backdrop, .print-hide, .trip-heading, .trip-toolbar, .integration-note { display: none !important; }
+  .app-shell, .main-area, .main-content { display: block; width: auto; margin: 0; padding: 0; }
+  .trip-print-header { display: block; margin: 0 0 12px; }
+  .trip-print-header h1 { font-size: 18px; margin: 0 0 4px; }
+  .trip-print-header p { font-size: 11px; color: #333; margin: 0; }
+  .print-only { display: inline; }
+  .panel { border: 0; box-shadow: none; padding: 0; }
+  .table-scroll { overflow: visible; }
+  .lead-table { width: 100%; font-size: 10px; }
+  .lead-table th, .lead-table td { border-bottom: 1px solid #ccc; padding: 4px 6px; }
+  .status-pill { border: 1px solid #999; background: none !important; color: #000 !important; }
+  .row-shortlisted { background: none; }
+  a { color: #000; text-decoration: none; }
+}

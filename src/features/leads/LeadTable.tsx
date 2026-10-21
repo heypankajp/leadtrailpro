@@ -50,7 +50,7 @@ export default function LeadTable({ leads, selected, today, view, canSelect, can
                     <span><strong>{lead.clientName}</strong><small>{lead.clientExecutive || "No contact yet"}{lead.city ? ` · ${lead.city}` : ""}</small></span>
                   </button>
                 </td>
-                <td><StatusPill status={lead.status} code={lead.statusCode} /></td>
+                <td><StatusPill status={lead.statusLabel} code={lead.statusCode} /></td>
                 <td><span className="action-cell">{lead.bdAction ?? "—"}</span><small className="activity-time">{relativeTime(lead.lastActivityAt)}</small></td>
                 <td>
                   {view === "archive"

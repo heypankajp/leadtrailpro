@@ -17,8 +17,8 @@ export async function POST(request: Request) {
     }
     const user = await getUserByEmail(body.email);
     if (user && user.active) {
-      const [rows] = await getDatabasePool().query(
-        "SELECT COUNT(*) AS count FROM email_tokens WHERE user_id = ? AND purpose = 'password_reset' AND created_at > UTC_TIMESTAMP() - INTERVAL 15 MINUTE",
+      const { rows } = await getDatabasePool().query(
+        "SELECT COUNT(*) AS count FROM email_tokens WHERE user_id = ? AND purpose = 'password_reset' AND created_at > (NOW() AT TIME ZONE 'UTC') - INTERVAL '15 minutes'",
         [user.id],
       );
       if (Number((rows as { count: number }[])[0].count) < 3) {

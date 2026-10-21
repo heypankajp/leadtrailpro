@@ -28,7 +28,7 @@ export async function GET(_request: Request, context: RouteContext) {
 }
 
 async function otherActiveAdmins(excludeId: number): Promise<number> {
-  const [rows] = await getDatabasePool().query("SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND is_active = TRUE AND id <> ?", [excludeId]);
+  const { rows } = await getDatabasePool().query("SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND is_active = TRUE AND id <> ?", [excludeId]);
   return Number((rows as { count: number }[])[0].count);
 }
 
@@ -52,7 +52,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     return NextResponse.json({ user });
   } catch (error) {
     const code = (error as { code?: string }).code;
-    if (code === "ER_DUP_ENTRY") return jsonError(409, "A user with this email address already exists.");
+    if (code === "23505") return jsonError(409, "A user with this email address already exists.");
     return handleRouteError(error, "Update user");
   }
 }

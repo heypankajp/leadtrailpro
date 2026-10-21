@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
-  AlertCircle, Activity, BriefcaseBusiness, Building2, Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, Clock3, FileText, Flame, KeyRound,
+  AlertCircle, Activity, BriefcaseBusiness, Building2, Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, Clock3, Compass, FileText, Flame, KeyRound,
   LayoutDashboard, ListTodo, LogOut, Map, Menu, PanelLeftClose, PanelLeftOpen, Search, Settings2, ShieldCheck, SlidersHorizontal, Target, TrendingUp, UsersRound,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -19,6 +19,8 @@ import PlannerPage from "@/features/preview/PlannerPage";
 import ReportsPage from "@/features/reports/ReportsPage";
 import { fetchTasks } from "@/features/tasks/client";
 import TasksPage from "@/features/tasks/TasksPage";
+import TripResultsPage from "@/features/trips/TripResultsPage";
+import TripsPage from "@/features/trips/TripsPage";
 import type { SystemRole, UserAccount, UserPrivilege } from "@/features/users/model";
 import { hasPrivilege } from "@/features/users/model";
 import { AppContext, useHashRoute, type AppContextValue, type ToastTone } from "./AppContext";
@@ -46,6 +48,7 @@ const navigation: { title: string; items: NavItem[] }[] = [
     items: [
       { id: "lead-generation", label: "Lead generation", icon: Building2, privilege: "create_leads", preview: true },
       { id: "tasks", label: "Tasks & reminders", icon: ListTodo, count: "tasks" },
+      { id: "trips", label: "Sales trip planner", icon: Compass, privilege: "plan_trips" },
       { id: "planner", label: "Road visit planner", icon: Map, privilege: "create_leads", preview: true },
     ],
   },
@@ -64,7 +67,7 @@ const navigation: { title: string; items: NavItem[] }[] = [
 
 const pageTitles: Record<string, string> = {
   home: "Action center", leads: "My leads", "all-leads": "All leads", cold: "Cold leads", warm: "Warm leads", hot: "Hot leads", client: "Clients",
-  queued: "Queued leads", archive: "Archive", lead: "Lead", "lead-generation": "Lead generation", tasks: "Tasks & reminders", planner: "Road visit planner",
+  queued: "Queued leads", archive: "Archive", lead: "Lead", "lead-generation": "Lead generation", tasks: "Tasks & reminders", trips: "Sales trip planner", planner: "Road visit planner",
   reports: "Reports & dashboard", targets: "Targets & templates", admin: "User management", values: "List of values", devices: "Device authorization", settings: "Settings",
 };
 
@@ -183,6 +186,7 @@ export default function AppShell({ user, setUser, signOut }: { user: UserAccount
     if (view === "reports") return can("view_reports") ? <ReportsPage /> : <NoAccess />;
     if (adminTabs.includes(view as AdminTab)) return <AdminPage tab={view as AdminTab} />;
     if (view === "lead-generation") return <LeadGenerationPage />;
+    if (view === "trips") return can("plan_trips") ? (route.param && /^\d+$/.test(route.param) ? <TripResultsPage key={route.param} tripId={Number(route.param)} /> : <TripsPage />) : <NoAccess />;
     if (view === "planner") return <PlannerPage />;
     return <ActionCenter />;
   };

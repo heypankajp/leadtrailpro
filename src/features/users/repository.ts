@@ -28,9 +28,9 @@ export type UserRow = {
 };
 
 export const userColumns = `
-  u.id, u.first_name AS firstName, u.last_name AS lastName, u.email, u.phone, u.role, u.privileges, u.stage,
-  u.is_active AS active, u.terminated_at AS terminatedAt, u.two_factor_enabled AS twoFactorEnabled,
-  u.auto_logout_enabled AS autoLogoutEnabled, u.auto_logout_time AS autoLogoutTime, u.target_template_id AS targetTemplateId, u.created_at AS createdAt
+  u.id, u.first_name AS "firstName", u.last_name AS "lastName", u.email, u.phone, u.role, u.privileges, u.stage,
+  u.is_active AS active, u.terminated_at AS "terminatedAt", u.two_factor_enabled AS "twoFactorEnabled",
+  u.auto_logout_enabled AS "autoLogoutEnabled", u.auto_logout_time AS "autoLogoutTime", u.target_template_id AS "targetTemplateId", u.created_at AS "createdAt"
 `;
 
 function parsePrivileges(value: string[] | string): UserPrivilege[] {
@@ -73,7 +73,7 @@ export async function hashPassword(password: string): Promise<string> {
 }
 
 export async function listUsers(options: { includeInactive?: boolean } = {}, db: Queryable = getDatabasePool()): Promise<UserAccount[]> {
-  const [rows] = await db.query(
+  const { rows } = await db.query(
     `SELECT ${userColumns} FROM users u ${options.includeInactive ? "" : "WHERE u.is_active = TRUE"} ORDER BY u.first_name, u.last_name`,
   );
   return (rows as UserRow[]).map(toUser);
@@ -81,7 +81,7 @@ export async function listUsers(options: { includeInactive?: boolean } = {}, db:
 
 /** Active users who can own leads or be assigned tasks. */
 export async function listDirectory(db: Queryable = getDatabasePool()): Promise<UserSummary[]> {
-  const [rows] = await db.query(
+  const { rows } = await db.query(
     `SELECT u.id, CONCAT(u.first_name, ' ', u.last_name) AS name, u.role, u.is_active AS active
      FROM users u WHERE u.is_active = TRUE ORDER BY u.first_name, u.last_name`,
   );
@@ -94,18 +94,18 @@ export async function listDirectory(db: Queryable = getDatabasePool()): Promise<
 }
 
 export async function countUsers(db: Queryable = getDatabasePool()): Promise<number> {
-  const [rows] = await db.query("SELECT COUNT(*) AS count FROM users");
+  const { rows } = await db.query("SELECT COUNT(*) AS count FROM users");
   return Number((rows as { count: number }[])[0].count);
 }
 
 export async function getUser(id: number, db: Queryable = getDatabasePool()): Promise<UserAccount | null> {
-  const [rows] = await db.query(`SELECT ${userColumns} FROM users u WHERE u.id = ? LIMIT 1`, [id]);
+  const { rows } = await db.query(`SELECT ${userColumns} FROM users u WHERE u.id = ? LIMIT 1`, [id]);
   const row = (rows as UserRow[])[0];
   return row ? toUser(row) : null;
 }
 
 export async function getUserByEmail(email: string, db: Queryable = getDatabasePool()): Promise<UserAccount | null> {
-  const [rows] = await db.query(`SELECT ${userColumns} FROM users u WHERE u.email = ? LIMIT 1`, [email.trim().toLowerCase()]);
+  const { rows } = await db.query(`SELECT ${userColumns} FROM users u WHERE u.email = ? LIMIT 1`, [email.trim().toLowerCase()]);
   const row = (rows as UserRow[])[0];
   return row ? toUser(row) : null;
 }
@@ -113,9 +113,9 @@ export async function getUserByEmail(email: string, db: Queryable = getDatabaseP
 export async function createUser(input: CreateUserInput, actorId: number | null): Promise<UserAccount> {
   const passwordHash = await hashPassword(input.password);
   return withTransaction(async (connection) => {
-    const [result] = await connection.query(
+    const result = await connection.query(
       `INSERT INTO users (first_name, last_name, email, phone, password_hash, role, privileges, stage, two_factor_enabled, auto_logout_enabled, auto_logout_time, target_template_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
       [
         input.firstName, input.lastName, input.email, input.phone, passwordHash, input.role,
         JSON.stringify(input.extraPrivileges), input.stage, input.twoFactorEnabled, input.autoLogoutEnabled, input.autoLogoutTime, input.targetTemplateId,
@@ -183,7 +183,7 @@ export async function updateUser(id: number, input: UpdateUserInput, actorId: nu
 export async function setUserPassword(id: number, password: string, actorId: number, options: { keepSessionTokenHash?: string; reason: string }) {
   const passwordHash = await hashPassword(password);
   await withTransaction(async (connection) => {
-    const [result] = await connection.query("UPDATE users SET password_hash = ? WHERE id = ?", [passwordHash, id]);
+    const result = await connection.query("UPDATE users SET password_hash = ? WHERE id = ?", [passwordHash, id]);
     if (affectedRows(result) === 0) throw new HttpError(404, "User not found.");
     if (options.keepSessionTokenHash) {
       await connection.query("DELETE FROM user_sessions WHERE user_id = ? AND token_hash <> ?", [id, options.keepSessionTokenHash]);
@@ -211,7 +211,7 @@ export async function terminateUser(id: number, reassignToUserId: number, actorI
     const now = new Date();
     const nowSql = toSqlDateTime(now);
 
-    const [leadRows] = await connection.query("SELECT id, client_name AS clientName FROM leads WHERE owner_id = ?", [id]);
+    const { rows: leadRows } = await connection.query(`SELECT id, client_name AS "clientName" FROM leads WHERE owner_id = ?`, [id]);
     const leads = leadRows as { id: number; clientName: string }[];
     for (const lead of leads) {
       await connection.query("UPDATE leads SET owner_id = ?, last_activity_at = ? WHERE id = ?", [reassignToUserId, nowSql, lead.id]);
@@ -225,7 +225,7 @@ export async function terminateUser(id: number, reassignToUserId: number, actorI
         details: `Reassigned on termination of ${user.name}${reason ? `: ${reason}` : ""}`,
       }, now);
     }
-    const [taskResult] = await connection.query(
+    const taskResult = await connection.query(
       "UPDATE tasks SET assignee_id = ? WHERE assignee_id = ? AND status = 'open'", [reassignToUserId, id],
     );
     await connection.query("UPDATE users SET is_active = FALSE, terminated_at = ? WHERE id = ?", [nowSql, id]);

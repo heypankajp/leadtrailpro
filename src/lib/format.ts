@@ -77,7 +77,7 @@ export function avatarTone(seed: number | string): (typeof tones)[number] {
 }
 
 export function statusClass(code: string | null | undefined): string {
-  return code && ["cold", "warm", "hot", "client"].includes(code) ? `status-${code}` : "status-opportunity";
+  return code && ["cold", "warm", "hot", "client", "lost", "disqualified"].includes(code) ? `status-${code}` : "status-opportunity";
 }
 
 export function fileSize(bytes: number): string {

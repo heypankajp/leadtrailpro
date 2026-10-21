@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { Plus, Save, ShieldCheck } from "lucide-react";
 import { errorMessage } from "@/lib/api";
+import { reasonListFor } from "@/features/list-values/model";
 import { useApp } from "@/features/shell/AppContext";
 import { Dialog, ErrorText, Field } from "@/features/shell/components";
 import { createLead, updateLead } from "./client";
@@ -12,7 +13,7 @@ type Props = { lead?: LeadSummary; onClose: () => void; onSaved: (lead: LeadSumm
 
 type FormState = {
   clientName: string; companyUrl: string; address: string; comments: string; clientExecutive: string; contactPhone: string; contactAltPhone: string; contactRemark: string;
-  clientEmails: string; industry: string; positions: string; leadTypeId: string; statusId: string; bdActionId: string; clientResponseId: string; leadCategoryId: string;
+  clientEmails: string; industry: string; positions: string; leadTypeId: string; statusId: string; statusReasonId: string; bdActionId: string; clientResponseId: string; leadCategoryId: string;
   companySizeId: string; cityId: string; firstContactDate: string; followUpDate: string; contractSignedDate: string; ownerId: string;
 };
 
@@ -24,12 +25,12 @@ export default function LeadFormDialog({ lead, onClose, onSaved }: Props) {
   const [form, setForm] = useState<FormState>(() => lead ? {
     clientName: lead.clientName, companyUrl: lead.companyUrl, address: lead.address, comments: lead.comments, clientExecutive: lead.clientExecutive, contactPhone: lead.contactPhone,
     contactAltPhone: lead.contactAltPhone, contactRemark: lead.contactRemark, clientEmails: lead.clientEmails.join(", "), industry: lead.industry, positions: lead.positions,
-    leadTypeId: String(lead.leadTypeId), statusId: String(lead.statusId), bdActionId: lead.bdActionId ? String(lead.bdActionId) : "", clientResponseId: lead.clientResponseId ? String(lead.clientResponseId) : "",
+    leadTypeId: String(lead.leadTypeId), statusId: String(lead.statusId), statusReasonId: lead.statusReasonId ? String(lead.statusReasonId) : "", bdActionId: lead.bdActionId ? String(lead.bdActionId) : "", clientResponseId: lead.clientResponseId ? String(lead.clientResponseId) : "",
     leadCategoryId: lead.leadCategoryId ? String(lead.leadCategoryId) : "", companySizeId: lead.companySizeId ? String(lead.companySizeId) : "", cityId: lead.cityId ? String(lead.cityId) : "",
     firstContactDate: lead.firstContactDate, followUpDate: lead.followUpDate ?? "", contractSignedDate: lead.contractSignedDate ?? "", ownerId: String(lead.ownerId),
   } : {
     clientName: "", companyUrl: "", address: "", comments: "", clientExecutive: "", contactPhone: "", contactAltPhone: "", contactRemark: "", clientEmails: "", industry: "", positions: "",
-    leadTypeId: values.lead_type[0] ? String(values.lead_type[0].id) : "", statusId: defaultStatus ? String(defaultStatus.id) : "", bdActionId: "", clientResponseId: "", leadCategoryId: "",
+    leadTypeId: values.lead_type[0] ? String(values.lead_type[0].id) : "", statusId: defaultStatus ? String(defaultStatus.id) : "", statusReasonId: "", bdActionId: "", clientResponseId: "", leadCategoryId: "",
     companySizeId: "", cityId: "", firstContactDate: reference.today, followUpDate: "", contractSignedDate: "", ownerId: String(user.id),
   });
   const [error, setError] = useState("");
@@ -40,6 +41,8 @@ export default function LeadFormDialog({ lead, onClose, onSaved }: Props) {
   const yesterday = (() => { const [y, m, d] = reference.today.split("-").map(Number); const date = new Date(Date.UTC(y, m - 1, d - 1)); return date.toISOString().slice(0, 10); })();
   const historical = Boolean(form.firstContactDate && form.firstContactDate < yesterday);
   const owners = reference.users.filter((item) => item.role !== "recruiter");
+  // LEAD-06: Lost Lead and Disqualified need a reason from their own list; other statuses clear it.
+  const reasonKey = reasonListFor(values.status.find((item) => String(item.id) === form.statusId)?.code);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -48,7 +51,7 @@ export default function LeadFormDialog({ lead, onClose, onSaved }: Props) {
     const input: LeadInput = {
       clientName: form.clientName, companyUrl: form.companyUrl, address: form.address, comments: form.comments, clientExecutive: form.clientExecutive, contactPhone: form.contactPhone,
       contactAltPhone: form.contactAltPhone, contactRemark: form.contactRemark, clientEmails: form.clientEmails.split(/[,;\s]+/).filter(Boolean), industry: form.industry, positions: form.positions,
-      leadTypeId: Number(form.leadTypeId), statusId: Number(form.statusId), bdActionId: idOrNull(form.bdActionId), clientResponseId: idOrNull(form.clientResponseId),
+      leadTypeId: Number(form.leadTypeId), statusId: Number(form.statusId), statusReasonId: reasonKey ? idOrNull(form.statusReasonId) : null, bdActionId: idOrNull(form.bdActionId), clientResponseId: idOrNull(form.clientResponseId),
       leadCategoryId: idOrNull(form.leadCategoryId), companySizeId: idOrNull(form.companySizeId), cityId: idOrNull(form.cityId),
       firstContactDate: form.firstContactDate, followUpDate: form.followUpDate || null, contractSignedDate: form.contractSignedDate || null,
     };
@@ -73,7 +76,19 @@ export default function LeadFormDialog({ lead, onClose, onSaved }: Props) {
       <form className="lead-form" onSubmit={submit}>
         <Field label="Client name" required wide><input value={form.clientName} onChange={set("clientName")} required maxLength={200} placeholder="Company or client name" autoFocus /></Field>
         <Field label="Lead type" required>{select("leadTypeId", values.lead_type, "")}</Field>
-        <Field label="Status" required>{select("statusId", values.status, "")}</Field>
+        <Field label="Status" required>
+          <select value={form.statusId} onChange={(event) => setForm((current) => ({ ...current, statusId: event.target.value, statusReasonId: "" }))}>
+            {values.status.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
+          </select>
+        </Field>
+        {reasonKey && (
+          <Field label="Status reason" required hint="Shown with the status everywhere as \u201cStatus \u2013 Reason\u201d.">
+            <select value={form.statusReasonId} onChange={set("statusReasonId")} required>
+              <option value="">Choose a reason</option>
+              {values[reasonKey].map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
+            </select>
+          </Field>
+        )}
         <Field label="First contact date" required hint={historical ? (can("review_queued") ? "Historical date: saved directly because you can approve queued leads." : "Earlier than yesterday: the lead will be queued for Admin approval.") : undefined}>
           <input type="date" value={form.firstContactDate} onChange={set("firstContactDate")} required />
         </Field>

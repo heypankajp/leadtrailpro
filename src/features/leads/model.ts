@@ -22,6 +22,7 @@ export type LeadInput = {
   positions: string;
   leadTypeId: number;
   statusId: number;
+  statusReasonId: number | null;
   bdActionId: number | null;
   clientResponseId: number | null;
   leadCategoryId: number | null;
@@ -41,6 +42,9 @@ export type LeadSummary = LeadInput & {
   leadType: string;
   status: string;
   statusCode: string;
+  statusReason: string | null;
+  /** "Status – Reason" for closed statuses, otherwise the status (LEAD-06). */
+  statusLabel: string;
   bdAction: string | null;
   clientResponse: string | null;
   leadCategory: string | null;
@@ -105,6 +109,7 @@ export type LeadFilters = {
   mine: boolean;
   statusCode: string | null;
   statusId: number | null;
+  statusReasonId: number | null;
   leadTypeId: number | null;
   leadCategoryId: number | null;
   companySizeId: number | null;
@@ -193,6 +198,7 @@ export function parseLeadInput(value: unknown): ParsedLeadInput {
     positions: text(body.positions, 5000, "Positions", errors),
     leadTypeId: requiredId(body.leadTypeId, "Lead type", errors),
     statusId: requiredId(body.statusId, "Status", errors),
+    statusReasonId: optionalId(body.statusReasonId, "Status reason", errors),
     bdActionId: optionalId(body.bdActionId, "BD action", errors),
     clientResponseId: optionalId(body.clientResponseId, "Client response", errors),
     leadCategoryId: optionalId(body.leadCategoryId, "Lead category", errors),
@@ -229,6 +235,7 @@ export function parseLeadPatch(value: unknown): { changes: Partial<LeadInput>; e
   if (has("positions")) changes.positions = text(body.positions, 5000, "Positions", errors);
   if (has("leadTypeId")) changes.leadTypeId = requiredId(body.leadTypeId, "Lead type", errors);
   if (has("statusId")) changes.statusId = requiredId(body.statusId, "Status", errors);
+  if (has("statusReasonId")) changes.statusReasonId = optionalId(body.statusReasonId, "Status reason", errors);
   if (has("bdActionId")) changes.bdActionId = optionalId(body.bdActionId, "BD action", errors);
   if (has("clientResponseId")) changes.clientResponseId = optionalId(body.clientResponseId, "Client response", errors);
   if (has("leadCategoryId")) changes.leadCategoryId = optionalId(body.leadCategoryId, "Lead category", errors);
@@ -262,6 +269,7 @@ export function parseLeadFilters(params: URLSearchParams): LeadFilters {
     mine: params.get("mine") === "1" || params.get("mine") === "true",
     statusCode: params.get("statusCode")?.trim().slice(0, 60) || null,
     statusId: id("statusId"),
+    statusReasonId: id("statusReasonId"),
     leadTypeId: id("leadTypeId"),
     leadCategoryId: id("leadCategoryId"),
     companySizeId: id("companySizeId"),

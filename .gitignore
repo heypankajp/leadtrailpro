@@ -26,6 +26,10 @@
 # end-to-end test artifacts (screenshots of failures)
 /tests/e2e/output
 
+# client source documents kept locally only (requirement change notes, the legacy lead tracker with real contact data)
+/docs/*.docx
+/docs/*.xlsx
+
 # misc
 .DS_Store
 *.pem

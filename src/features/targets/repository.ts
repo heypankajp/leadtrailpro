@@ -5,7 +5,7 @@ import type { TargetTemplate, TargetTemplateInput } from "./model";
 
 type Row = { id: number; name: string; stage: string; dailyLeads: number; weeklyLeads: number; dailyVisits: number; weeklyVisits: number; monthlyConversions: number };
 
-const columns = "id, name, stage, daily_leads AS dailyLeads, weekly_leads AS weeklyLeads, daily_visits AS dailyVisits, weekly_visits AS weeklyVisits, monthly_conversions AS monthlyConversions";
+const columns = `id, name, stage, daily_leads AS "dailyLeads", weekly_leads AS "weeklyLeads", daily_visits AS "dailyVisits", weekly_visits AS "weeklyVisits", monthly_conversions AS "monthlyConversions"`;
 
 const toTemplate = (row: Row): TargetTemplate => ({
   id: Number(row.id),
@@ -19,12 +19,12 @@ const toTemplate = (row: Row): TargetTemplate => ({
 });
 
 export async function listTargetTemplates(db: Queryable = getDatabasePool()): Promise<TargetTemplate[]> {
-  const [rows] = await db.query(`SELECT ${columns} FROM target_templates ORDER BY FIELD(stage, 'onboarding', 'training', 'full_productive'), name`);
+  const { rows } = await db.query(`SELECT ${columns} FROM target_templates ORDER BY CASE stage WHEN 'onboarding' THEN 1 WHEN 'training' THEN 2 ELSE 3 END, name`);
   return (rows as Row[]).map(toTemplate);
 }
 
 export async function getTargetTemplate(id: number, db: Queryable = getDatabasePool()): Promise<TargetTemplate | null> {
-  const [rows] = await db.query(`SELECT ${columns} FROM target_templates WHERE id = ?`, [id]);
+  const { rows } = await db.query(`SELECT ${columns} FROM target_templates WHERE id = ?`, [id]);
   const row = (rows as Row[])[0];
   return row ? toTemplate(row) : null;
 }
@@ -35,15 +35,15 @@ export async function resolveTargetTemplate(user: { targetTemplateId: number | n
     const assigned = await getTargetTemplate(user.targetTemplateId, db);
     if (assigned) return assigned;
   }
-  const [rows] = await db.query(`SELECT ${columns} FROM target_templates WHERE stage = ? ORDER BY id LIMIT 1`, [user.stage]);
+  const { rows } = await db.query(`SELECT ${columns} FROM target_templates WHERE stage = ? ORDER BY id LIMIT 1`, [user.stage]);
   const row = (rows as Row[])[0];
   return row ? toTemplate(row) : null;
 }
 
 export async function createTargetTemplate(input: TargetTemplateInput, actorId: number): Promise<TargetTemplate> {
   return withTransaction(async (connection) => {
-    const [result] = await connection.query(
-      `INSERT INTO target_templates (name, stage, daily_leads, weekly_leads, daily_visits, weekly_visits, monthly_conversions) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    const result = await connection.query(
+      `INSERT INTO target_templates (name, stage, daily_leads, weekly_leads, daily_visits, weekly_visits, monthly_conversions) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
       [input.name, input.stage, input.dailyLeads, input.weeklyLeads, input.dailyVisits, input.weeklyVisits, input.monthlyConversions],
     );
     const created = (await getTargetTemplate(insertId(result), connection))!;

@@ -15,11 +15,12 @@
     "test:e2e": "node --test --test-concurrency=1 --test-timeout=120000 tests/e2e/*.test.mjs"
   },
   "dependencies": {
+    "exceljs": "^4.4.0",
     "lucide-react": "^1.57.0",
     "mammoth": "^1.13.0",
-    "mysql2": "^3.24.6",
     "next": "16.4.0",
     "nodemailer": "^7.0.13",
+    "pg": "^8.23.1",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },
@@ -27,6 +28,7 @@
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^20",
     "@types/nodemailer": "^8.0.2",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

@@ -20,7 +20,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     return NextResponse.json({ template });
   } catch (error) {
     const code = (error as { code?: string }).code;
-    if (code === "ER_DUP_ENTRY") return jsonError(409, "A template with that name already exists.");
+    if (code === "23505") return jsonError(409, "A template with that name already exists.");
     return handleRouteError(error, "Update target template");
   }
 }

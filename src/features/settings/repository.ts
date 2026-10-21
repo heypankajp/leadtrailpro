@@ -25,7 +25,7 @@ function normalizeHolidays(value: unknown): { holidays: Holiday[]; error: string
 }
 
 async function readSetting<T>(db: Queryable, key: string, fallback: T): Promise<T> {
-  const [rows] = await db.query("SELECT value_json AS value FROM app_settings WHERE setting_key = ?", [key]);
+  const { rows } = await db.query("SELECT value_json AS value FROM app_settings WHERE setting_key = ?", [key]);
   const row = (rows as { value: string | T }[])[0];
   if (!row) return fallback;
   if (typeof row.value === "string") {
@@ -63,7 +63,7 @@ export async function updateSettings(changes: { roleLabels?: Partial<Record<Syst
         next[role] = label.trim();
       }
       await connection.query(
-        "INSERT INTO app_settings (setting_key, value_json) VALUES ('role_labels', ?) ON DUPLICATE KEY UPDATE value_json = VALUES(value_json)",
+        "INSERT INTO app_settings (setting_key, value_json) VALUES ('role_labels', ?) ON CONFLICT (setting_key) DO UPDATE SET value_json = EXCLUDED.value_json",
         [JSON.stringify(next)],
       );
       await recordAudit(connection, { actorId, action: "setting.updated", entityType: "setting", before: current.roleLabels, after: next, details: "Updated role display names" });
@@ -73,7 +73,7 @@ export async function updateSettings(changes: { roleLabels?: Partial<Record<Syst
       if (!Number.isInteger(days) || days < 1 || days > 90) throw new HttpError(400, "Inactivity reminder days must be between 1 and 90.");
       const next = { inactivityDays: days };
       await connection.query(
-        "INSERT INTO app_settings (setting_key, value_json) VALUES ('reminders', ?) ON DUPLICATE KEY UPDATE value_json = VALUES(value_json)",
+        "INSERT INTO app_settings (setting_key, value_json) VALUES ('reminders', ?) ON CONFLICT (setting_key) DO UPDATE SET value_json = EXCLUDED.value_json",
         [JSON.stringify(next)],
       );
       await recordAudit(connection, { actorId, action: "setting.updated", entityType: "setting", before: current.reminders, after: next, details: "Updated reminder settings" });
@@ -82,7 +82,7 @@ export async function updateSettings(changes: { roleLabels?: Partial<Record<Syst
       const { holidays, error } = normalizeHolidays(changes.holidays);
       if (error) throw new HttpError(400, error);
       await connection.query(
-        "INSERT INTO app_settings (setting_key, value_json) VALUES ('business_calendar', ?) ON DUPLICATE KEY UPDATE value_json = VALUES(value_json)",
+        "INSERT INTO app_settings (setting_key, value_json) VALUES ('business_calendar', ?) ON CONFLICT (setting_key) DO UPDATE SET value_json = EXCLUDED.value_json",
         [JSON.stringify({ holidays })],
       );
       const changed = JSON.stringify(current.holidays) !== JSON.stringify(holidays);

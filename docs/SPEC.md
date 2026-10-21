@@ -2,8 +2,10 @@
 
 | | |
 |---|---|
-| Source | `Sales_Tracker_App_BRD_SRS.docx` v1.0 (October 13, 2026) and the current codebase |
-| SPEC version | 1.1 — October 18, 2026 (1.0: October 17, 2026) |
+| Source | `Sales_Tracker_App_BRD_SRS.docx` v1.0 (October 13, 2026), the change note `SalesTrackPro_Sales_Trip_Planner_Requirement_Change.docx` (October 21, 2026, local and untracked), and the current codebase |
+| SPEC version | 1.3 — October 21, 2026 (1.2: October 21, 2026; 1.1: October 18, 2026; 1.0: October 17, 2026) |
+| Changes in 1.3 | Sales Trip Planner built (TRIP-01..11: migration 5, provider interface with stub and Google adapters, lead matching, trips API §6.9, screen A16, Excel export) and report Excel export (RPT-06). Lead status reasons implemented (LEAD-06/07: migration 4, `status_reason_id`, reason lists, status prompt, filters). PostgreSQL replaces MySQL: `pg` driver and `?`→`$n` query layer (§1, §2), PG* settings and `postgres:17` containers (§2), identity columns, JSONB, TIMESTAMP(0) UTC and the updated_at trigger (§3), SQLSTATE error mapping (§6) |
+| Changes in 1.2 | Sales Trip Planner design and screen A16 (§2.1, §8, §9, §10.8), lead status reasons (§3.5, §3.6, §3.13, §6.4, §7.1), legacy tracker import (§10.9) — from the change note of October 21, 2026 (PRD §3.22, LEAD-06/07) |
 | Changes in 1.1 | Docker packaging (§2.3), Selenium end-to-end suite (§12), Secure-cookie rule for plain-http deployments (§4, §11), `mysql2` kept external in the standalone build (§1) |
 | Companion | `PRD.md` — requirement IDs referenced here (AUTH-01, LEAD-01, …) |
 | Scope | As-built design of Phase 1, the BRD screen designs (Appendix A), and the intended design of Phase 2/3 features |
@@ -22,7 +24,7 @@ Next.js 16 (App Router) — route handlers under src/app/api/**            Node.
    ├─ scripts/           schema migrations, app DB user, sample data, Docker entrypoint, e2e runner
    └─ tests/e2e/         Selenium browser suite (node:test)
    │
-   ├─ MySQL 5.7+/8.x  (restricted app account: SELECT/INSERT/UPDATE/DELETE only)
+   ├─ PostgreSQL 14+  (restricted app role: SELECT/INSERT/UPDATE/DELETE only)
    ├─ Local file storage for attachments (ATTACHMENT_DIR)
    └─ SMTP (nodemailer) for reset links and two-factor codes
 ```
@@ -32,12 +34,13 @@ Next.js 16 (App Router) — route handlers under src/app/api/**            Node.
 - Feature folders: `model.ts` (shared types, validation, pure helpers; importable by the client), `repository.ts` (server-only SQL and business rules), `client.ts` (browser fetch wrappers), React components.
 - All route handlers: validate origin for state changes → load the session user → check privilege → parse body → call repository → map errors with `handleRouteError` (which rethrows Next.js internal signals first).
 - Every mutation runs in one transaction with its audit entry and timeline entry.
-- All instants are stored in UTC (`DATETIME`); calendar fields are `DATE`; the business timezone (default `America/Toronto`) is applied only when turning instants into business days.
-- JSON columns hold lists (client emails, privileges, checklist) and audit snapshots.
+- All instants are stored in UTC as `TIMESTAMP(0)` text (`src/lib/db.ts` converts to and from ISO 8601); calendar fields are `DATE`; the business timezone (default `America/Toronto`) is applied only when turning instants into business days.
+- JSONB columns hold lists (client emails, privileges, checklist) and audit snapshots.
+- Repositories write SQL with `?` placeholders; `src/lib/db.ts` rewrites them to `$1 … $n`, returns `{ rows, rowCount }`, and inserts use `RETURNING id`. camelCase column aliases are double-quoted because PostgreSQL folds unquoted identifiers to lower case.
 
-**Stack:** Next.js 16.4 (Turbopack), React 19.3, TypeScript 5, Tailwind v4 (preflight only; styling is hand-written CSS in `src/app/globals.css`), mysql2, nodemailer, lucide-react icons, mammoth (Word preview). Dev dependency for tests: selenium-webdriver 4.51.
+**Stack:** Next.js 16.4 (Turbopack), React 19.3, TypeScript 5, Tailwind v4 (preflight only; styling is hand-written CSS in `src/app/globals.css`), pg, exceljs, nodemailer, lucide-react icons, mammoth (Word preview). Dev dependency for tests: selenium-webdriver 4.51.
 
-**Build output:** `next.config.ts` sets `output: "standalone"` (traced server + `node_modules` under `.next/standalone`) and lists `mysql2` in `serverExternalPackages` so the driver stays a plain Node package; the production image therefore also runs `scripts/*.mjs`. Cache Components and partial prefetching are enabled; the single page `/` prerenders as a static shell and every API route is dynamic.
+**Build output:** `next.config.ts` sets `output: "standalone"` (traced server + `node_modules` under `.next/standalone`) and lists `pg` in `serverExternalPackages` so the driver stays a plain Node package; the production image therefore also runs `scripts/*.mjs`. Cache Components and partial prefetching are enabled; the single page `/` prerenders as a static shell and every API route is dynamic.
 
 ---
 
@@ -47,7 +50,7 @@ Next.js 16 (App Router) — route handlers under src/app/api/**            Node.
 
 | Variable | Required | Purpose |
 |---|---|---|
-| `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD` | yes | Runtime database account (written by `npm run db:user:create`) |
+| `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` | yes | Runtime database role (written by `npm run db:user:create`); the database defaults to `salestrackpro` |
 | `USER_MANAGEMENT_KEY` | first run | Bootstrap key for the first administrator (AUTH-01) |
 | `APP_URL` | behind a proxy | Public origin; used for the same-origin check and reset links. An `http://` value turns off the Secure cookie flag (plain-http deployments, the e2e stack) |
 | `TRUSTED_ORIGINS` | optional | Extra allowed origins, comma separated |
@@ -55,16 +58,19 @@ Next.js 16 (App Router) — route handlers under src/app/api/**            Node.
 | `ATTACHMENT_DIR` | optional | Attachment root, default `./storage/attachments` |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | for email | Mailer; absent → email features report "not configured" |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GMAIL_TOKEN_KEY`, `GOOGLE_REDIRECT_URI` | for Gmail | OAuth client for Gmail linking (MAIL-01); the token key encrypts stored refresh tokens; redirect defaults to `APP_URL/api/gmail/callback`. Absent → the Emails tab reports "not configured" |
+| `MAPS_API_KEY` | for TRIP-* with live data | Google Geocoding, Places, and Distance Matrix calls (§10.8). Absent (and no stub) → the Sales Trip Planner reports "not configured" |
+| `JOBS_API_URL`, `JOBS_API_KEY` | for TRIP-06 with live data | Licensed job-listing aggregator behind the JSON contract in §10.8. Absent → the Hiring column is blank |
+| `TRIPS_PROVIDER` | development, tests | `stub` serves the in-repo sample companies (the Docker dev stack and the end-to-end suite set it); empty selects the Google adapter |
 
-`.env.setup.local` (administrator credentials, optional `MYSQL_APP_USER` and `MYSQL_APP_USER_HOST`) is used only by the setup scripts and never by the app. In Docker the `setup` service passes the same variables as environment and does not need the file.
+`.env.setup.local` (administrator credentials as `PGHOST`/`PGPORT`/`PGUSER`/`PGPASSWORD`, optional `PGAPPUSER` and `PGDATABASE`) is used only by the setup scripts and never by the app. In Docker the `setup` service passes the same variables as environment and does not need the file. Trip-planner keys (`MAPS_API_KEY`, `JOBS_API_URL`, `JOBS_API_KEY`) are written as blank placeholders.
 
 ### 2.2 Scripts
 
 | Command | Script | Behaviour |
 |---|---|---|
-| `npm run db:create` | `scripts/create-database.mjs` | Creates the database, then applies numbered migrations recorded in `schema_migrations`. Migration 1 creates all tables, upgrades a prototype `users` table in place (adds columns, remaps roles), renames a prototype `leads` table to `legacy_leads`, and seeds list values, target templates, and settings. Idempotent. |
-| `npm run db:user:create` | `scripts/create-app-user.mjs` | Creates `salestrackpro_app` with DML-only grants, writes `.env.local` (mode 0600) including commented SMTP/APP_URL placeholders. The account host defaults to `MYSQL_HOST`; `MYSQL_APP_USER_HOST=%` allows connections from other hosts or containers. Re-running rotates the password and bootstrap key. |
-| `npm run db:seed` | `scripts/seed-sample-data.mjs` | Requires an administrator. Creates demo users (two Sales Managers, one Recruiter, password `SalesTrackPro-demo-2026`), ten leads across states, activities, tasks. No-op when leads exist. |
+| `npm run db:create` | `scripts/create-database.mjs` | Connects to the maintenance database `postgres`, creates `salestrackpro` when missing, then applies numbered migrations recorded in `schema_migrations`, each in its own transaction. Migration 1 creates all tables, the `set_updated_at` trigger function, and seeds list values, target templates, and settings. Idempotent. |
+| `npm run db:user:create` | `scripts/create-app-user.mjs` | Creates the `salestrackpro_app` role with LOGIN, CONNECT, USAGE on `public`, and SELECT/INSERT/UPDATE/DELETE on all current and future tables plus USAGE on sequences (identity columns), then writes `.env.local` (mode 0600). Re-running rotates the password and bootstrap key and keeps every other line already in the file. |
+| `npm run db:seed` | `scripts/seed-sample-data.mjs` | Requires an administrator. Creates demo users (two Sales Managers, one Recruiter, password `SalesTrackPro-demo-2026`), eleven leads across states and statuses (including one Lost Lead – Pricing and one archived Disqualified – Not Interested), activities, tasks. No-op when leads exist. |
 | `npm run dev` / `build` / `start` | Next.js | Development server / production build / production server |
 | `npm run lint` / `typecheck` | ESLint (next/core-web-vitals + typescript + react-hooks) / `tsc --noEmit` | |
 | `npm run test:e2e` | `tests/e2e/*.test.mjs` | Selenium suite via `node --test` (sequential, 120 s per test). Targets `E2E_BASE_URL` (default `http://app-test:3000`) and `E2E_SELENIUM_URL` (default `http://selenium:4444`). |
@@ -77,15 +83,15 @@ Next.js 16 (App Router) — route handlers under src/app/api/**            Node.
 
 | Service (`compose.yaml`) | Image | Role |
 |---|---|---|
-| `db` | `mysql:8.4` | Development database, volume `mysql_data`, published on `127.0.0.1:${DB_PORT:-3307}`, root password `${MYSQL_ROOT_PASSWORD:-salestrackpro}` |
+| `db` | `postgres:17-alpine` | Development database, volume `postgres_data`, published on `127.0.0.1:${DB_PORT:-5433}`, superuser `postgres` with password `${POSTGRES_PASSWORD:-salestrackpro}`; the healthcheck uses `pg_isready -h 127.0.0.1` so it only passes once first-run initialisation is complete |
 | `app` | `salestrackpro-dev` (target `dev`) | Dev server on `${APP_PORT:-3000}`; volumes `node_modules` and `next_cache` shadow the host directories |
-| `setup` (profile `setup`) | `salestrackpro-dev` | One shot: `create-database.mjs` + `create-app-user.mjs` as root with `MYSQL_APP_USER_HOST=%`; writes `.env.local` with `MYSQL_HOST=db` into the bind mount |
-| `db-test` (profile `test`) | `mysql:8.4` | Throwaway database on tmpfs, root password `test`, not published |
+| `setup` (profile `setup`) | `salestrackpro-dev` | One shot: `create-database.mjs` + `create-app-user.mjs` as `postgres`; writes `.env.local` with `PGHOST=db` into the bind mount |
+| `db-test` (profile `test`) | `postgres:17-alpine` | Throwaway database on tmpfs, password `test`, not published |
 | `app-test` (profile `test`) | `salestrackpro` (target `runner`) | Applies migrations then serves the production build; `APP_URL=http://app-test:3000`, `USER_MANAGEMENT_KEY=e2e-user-management-key`; healthcheck on `/api/auth/session` |
 | `selenium` (profile `test`) | `selenium/standalone-chromium:4` | Chromium grid, 2 GB shm, 1600×1200 screen, noVNC on `127.0.0.1:7900` |
 | `e2e` (profile `test`) | `salestrackpro-dev` | Runs `npm run test:e2e` once `app-test` is healthy |
 
-`compose.prod.yaml` overrides `app` with the `runner` target, `env_file: .env.local`, an `attachments` volume at `/app/storage/attachments`, `restart: unless-stopped`, and removes the database port; it requires `MYSQL_ROOT_PASSWORD` in `.env`.
+`compose.prod.yaml` overrides `app` with the `runner` target, `env_file: .env.local`, an `attachments` volume at `/app/storage/attachments`, `restart: unless-stopped`, and removes the database port; it requires `POSTGRES_PASSWORD` in `.env`.
 
 ---
 
@@ -93,7 +99,7 @@ Next.js 16 (App Router) — route handlers under src/app/api/**            Node.
 
 ER summary: `users` own `leads`; `leads` have many `lead_activities`, `tasks`, `lead_attachments`; `list_values` are referenced by seven lead columns; `target_templates` are referenced by `users`; `audit_log` references everything loosely by `(entity_type, entity_id)`.
 
-All tables: InnoDB, utf8mb4, `utf8mb4_unicode_ci`.
+All tables live in the `public` schema of the `salestrackpro` database. Ids are `GENERATED ALWAYS AS IDENTITY`; instants are `TIMESTAMP(0)` holding UTC; JSON is `JSONB`; every table with `updated_at` has a `BEFORE UPDATE` trigger calling `set_updated_at()`. Comparisons are case-sensitive (unlike MySQL's collation), so emails are lower-cased before storage and lookup, and keyword search applies `LOWER()`.
 
 ### 3.1 `users`
 
@@ -105,10 +111,10 @@ All tables: InnoDB, utf8mb4, `utf8mb4_unicode_ci`.
 | phone | VARCHAR(40) | |
 | password_hash | VARCHAR(180) | `scrypt$<salt hex>$<key hex>` (16-byte salt, 64-byte key) |
 | role | VARCHAR(40) | `admin` · `sales_manager` · `recruiter` (ROLE-01) |
-| privileges | JSON | **extra** privileges beyond the role defaults (ROLE-03) |
+| privileges | JSONB | **extra** privileges beyond the role defaults (ROLE-03) |
 | stage | VARCHAR(30) | `onboarding` · `training` · `full_productive` (TGT-04) |
 | is_active | BOOLEAN | false after termination |
-| terminated_at | DATETIME NULL | |
+| terminated_at | TIMESTAMP(0) NULL | |
 | two_factor_enabled, auto_logout_enabled | BOOLEAN | AUTH-06, AUTH-07 |
 | auto_logout_time | CHAR(5) DEFAULT '23:00' | AUTH-07: daily sign-out time `HH:MM` in the business timezone (migration 2) |
 | target_template_id | INT UNSIGNED NULL FK → target_templates (SET NULL) | explicit assignment; otherwise stage default |
@@ -116,7 +122,7 @@ All tables: InnoDB, utf8mb4, `utf8mb4_unicode_ci`.
 
 ### 3.2 `user_sessions`
 
-id BIGINT PK · user_id FK (CASCADE) · token_hash CHAR(64) UNIQUE (SHA-256 of the cookie token) · expires_at DATETIME (8 h) · created_at. Index on expires_at.
+id BIGINT PK · user_id FK (CASCADE) · token_hash CHAR(64) UNIQUE (SHA-256 of the cookie token) · expires_at TIMESTAMP(0) (8 h) · created_at. Index on expires_at.
 
 ### 3.3 `login_history` (AUTH-09, AUTH-11)
 
@@ -128,7 +134,7 @@ id · user_id FK · purpose `password_reset` | `two_factor` · token_hash CHAR(6
 
 ### 3.5 `list_values` (LOV-*)
 
-id · list_key VARCHAR(40) (`lead_type`, `status`, `bd_action`, `client_response`, `lead_category`, `company_size`, `city`) · code VARCHAR(60) (stable slug; `cold/warm/hot/client` are relied on by code) · value VARCHAR(120) (display, renamable) · sort_order INT · is_active BOOLEAN · timestamps. Unique (list_key, code) and (list_key, value).
+id · list_key VARCHAR(40) (`lead_type`, `status`, `bd_action`, `client_response`, `lead_category`, `company_size`, `city`, `lost_reason`, `disqualified_reason` (migration 4), `business_type` (migration 5)) · code VARCHAR(60) (stable slug; `cold/warm/hot/client/lost/disqualified` are relied on by code) · value VARCHAR(120) (display, renamable) · sort_order INT · is_active BOOLEAN · timestamps. Unique (list_key, code) and (list_key, value). The five `disqualified_reason` rows are seeded and cannot be deactivated or added to; `lost_reason` is an ordinary Admin list seeded with "Pricing".
 
 ### 3.6 `leads` (LEAD-01)
 
@@ -139,6 +145,7 @@ id · list_key VARCHAR(40) (`lead_type`, `status`, `bd_action`, `client_response
 | created_by | FK users | |
 | lead_type_id | FK list_values | 1 |
 | status_id | FK list_values | 7 |
+| status_reason_id | FK list_values NULL (SET NULL), indexed (migration 4) | 25 (LEAD-06): a `lost_reason` row when the status code is `lost`, a `disqualified_reason` row when it is `disqualified`, NULL otherwise; enforced in the repository |
 | bd_action_id, client_response_id, lead_category_id, company_size_id, city_id | FK list_values NULL (SET NULL) | 5, 6, 21, 22, 10 |
 | client_name | VARCHAR(200) | 4 |
 | company_url | VARCHAR(2048) | LEAD-02 |
@@ -147,29 +154,29 @@ id · list_key VARCHAR(40) (`lead_type`, `status`, `bd_action`, `client_response
 | client_executive | VARCHAR(160) | 12 |
 | contact_phone, contact_alt_phone | VARCHAR(40) | 13, 14 |
 | contact_remark | VARCHAR(500) | 15 |
-| client_emails | JSON (string array) | 16 |
+| client_emails | JSONB (string array) | 16 |
 | industry | VARCHAR(120) | 17 |
 | positions | TEXT NULL | 18 |
 | first_contact_date | DATE | 3 |
 | follow_up_date | DATE NULL | 11 |
 | contract_signed_date | DATE NULL | 19 |
-| record_state | ENUM active/queued/archived | QUE-*, SRCH-05 |
+| record_state | VARCHAR(10) CHECK active/queued/archived | QUE-*, SRCH-05 |
 | state_reason | VARCHAR(500) NULL | archive reason or "Rejected: …" |
 | state_changed_by, state_changed_at | | |
-| last_activity_at | DATETIME | NAV-03 sort key; bumped by every timeline entry |
+| last_activity_at | TIMESTAMP(0) | NAV-03 sort key; bumped by every timeline entry |
 | created_at, updated_at | | |
 
 Indexes: (record_state, last_activity_at), (owner_id, record_state), status_id, follow_up_date, first_contact_date, created_at.
 
 ### 3.7 `lead_activities` (NOTE-01, NOTE-06, AC-02)
 
-id BIGINT · lead_id FK (CASCADE) · user_id FK · activity_type VARCHAR(30) · summary VARCHAR(500) · body TEXT NULL (note text) · value_code VARCHAR(60) NULL (e.g. status code `client` for conversions, BD action code) · meta JSON NULL · occurred_at DATETIME (user-supplied, not in the future) · created_at.
+id BIGINT · lead_id FK (CASCADE) · user_id FK · activity_type VARCHAR(30) · summary VARCHAR(500) · body TEXT NULL (note text) · value_code VARCHAR(60) NULL (e.g. status code `client` for conversions, BD action code) · meta JSONB NULL · occurred_at TIMESTAMP(0) (user-supplied, not in the future) · created_at.
 
 Activity types: `created`, `call`, `email`, `visit`, `note`, `status_change`, `bd_action`, `client_response`, `follow_up`, `transfer`, `state_change`, `task`, `file`, `edit`. The first five are user-logged; the rest are system-generated.
 
 ### 3.8 `tasks` (TASK-02)
 
-id BIGINT · lead_id NULL FK (CASCADE) · title VARCHAR(200) · description TEXT · assignee_id FK · creator_id FK · due_at DATETIME NULL · priority low/normal/medium/high · status open/done · checklist JSON `[{text, done}]` · completed_at · created_at, updated_at. Indexes on (assignee_id, status, due_at), lead_id, (creator_id, created_at).
+id BIGINT · lead_id NULL FK (CASCADE) · title VARCHAR(200) · description TEXT · assignee_id FK · creator_id FK · due_at TIMESTAMP(0) NULL · priority low/normal/medium/high · status open/done · checklist JSONB `[{text, done}]` · completed_at · created_at, updated_at. Indexes on (assignee_id, status, due_at), lead_id, (creator_id, created_at).
 
 ### 3.9 `lead_attachments` (FILE-*)
 
@@ -177,7 +184,7 @@ id BIGINT · lead_id FK (CASCADE) · uploaded_by FK · category `document` | `pr
 
 ### 3.10 `audit_log` (AUD-*)
 
-id BIGINT · actor_id NULL · action VARCHAR(60) · entity_type VARCHAR(40) (`lead`, `user`, `task`, `attachment`, `list_value`, `target_template`, `setting`, `session`) · entity_id NULL · before_json, after_json JSON NULL (only changed keys for updates) · details VARCHAR(500) · created_at. Indexes on (entity_type, entity_id, created_at), (actor_id, created_at), created_at.
+id BIGINT · actor_id NULL · action VARCHAR(60) · entity_type VARCHAR(40) (`lead`, `user`, `task`, `attachment`, `list_value`, `target_template`, `setting`, `session`) · entity_id NULL · before_json, after_json JSONB NULL (only changed keys for updates) · details VARCHAR(500) · created_at. Indexes on (entity_type, entity_id, created_at), (actor_id, created_at), created_at.
 
 Action catalogue: `user.created/updated/password_changed/terminated/target_assigned`, `lead.created/queued/updated/transferred/reassigned/approved/rejected/archived/restored/call_logged/email_logged/visit_logged/note_logged`, `task.created/updated/completed`, `attachment.uploaded/replaced/deleted`, `list_value.created/renamed/updated/reordered`, `target_template.created/updated`, `setting.updated`, `seed.sample_data`.
 
@@ -191,11 +198,17 @@ setting_key PK · value_json. Keys: `role_labels` `{admin, sales_manager, recrui
 
 ### 3.13 `schema_migrations`
 
-version PK · name · applied_at. Versions: 1 core schema; 2 `users.auto_logout_time` and the `business_calendar` setting; 3 `gmail_connections`.
+version PK · name · applied_at. Versions: 1 core schema; 2 `users.auto_logout_time` and the `business_calendar` setting; 3 `gmail_connections`; 4 status reasons (LEAD-06: `leads.status_reason_id`, the `lost_reason` and `disqualified_reason` lists, the `lost` and `disqualified` status rows); 5 sales trips (`business_type` list, `sales_trips`, `sales_trip_results`, §3.15).
 
 ### 3.14 `gmail_connections` (MAIL-01)
 
 user_id PK FK → users (CASCADE) · google_email VARCHAR(254) · refresh_token_encrypted TEXT (AES-256-GCM under SHA-256(`GMAIL_TOKEN_KEY`), stored as `iv.tag.ciphertext` base64) · created_at · updated_at. One link per user; reconnecting replaces it.
+
+### 3.15 `sales_trips` and `sales_trip_results` (TRIP-*, migration 5)
+
+`sales_trips`: id · owner_id FK users · title VARCHAR(120) · address VARCHAR(500) · latitude, longitude DOUBLE PRECISION NULL (geocoded origin) · radius_type `km` | `minutes` (CHECK) · radius_value SMALLINT · business_type_id FK list_values NULL (SET NULL) · max_results SMALLINT (≤ 50) · provider VARCHAR(40) (`stub` or `google`) · last_run_at · result_count · timestamps (updated_at trigger). Index (owner_id, created_at).
+
+`sales_trip_results`: id · trip_id FK (CASCADE) · sequence · company_name VARCHAR(200) · address VARCHAR(500) · latitude, longitude · distance_km NUMERIC(7,2) NULL · drive_minutes SMALLINT NULL · website VARCHAR(2048) · phone VARCHAR(40) · provider_place_id VARCHAR(120) · job_count SMALLINT NULL (NULL = no job source) · jobs JSONB NULL (the dialog rows) · jobs_fetched_at · matched_lead_id FK leads NULL (SET NULL) · action_code VARCHAR(40) (`new` or a status code) · action_label VARCHAR(160) · shortlisted BOOLEAN · planned_visit_date DATE NULL · created_at. Index (trip_id, sequence). Results are a snapshot taken when the trip is created or re-run.
 
 ---
 
@@ -208,7 +221,7 @@ user_id PK FK → users (CASCADE) · google_email VARCHAR(254) · refresh_token_
 | Auto sign-out (AUTH-07) | On every request, if the account has `auto_logout_enabled` and the session was created before the latest occurrence of the account's `auto_logout_time` (default 23:00) in the business timezone, the session is deleted and the request is treated as signed out. |
 | Two-factor (AUTH-06) | Password OK + `two_factor_enabled` → create `email_tokens` row (purpose `two_factor`, hash of a 6-digit code, hash of a random challenge), set cookie `salestrackpro_2fa` (10 min), email the code, respond `{requiresTwoFactor:true}`. `POST /api/auth/two-factor` matches cookie + code, max 5 attempts, then creates the session and clears the challenge cookie. Requires SMTP; sign-in explains when it is missing. |
 | Password reset (AUTH-05) | `POST /api/auth/forgot-password` always returns 200 when SMTP exists (503 "not configured" otherwise); creates a 30-minute token (max 3 per 15 min per user) and emails `${APP_URL}/?reset=<token>`. The SPA reads `?reset=`, shows the reset form, and calls `POST /api/auth/reset-password`, which consumes the token and revokes all sessions. Admins can trigger the same email per user (invitation). |
-| Rate limiting (AUTH-11) | `login_history` counts failures in the last 15 minutes: ≥10 per email or ≥50 per address → 429. Works across instances and restarts. |
+| Rate limiting (AUTH-11) | `login_history` counts failures in the last 15 minutes (`NOW() AT TIME ZONE 'UTC'` minus an interval): ≥10 per email or ≥50 per address → 429. Works across instances and restarts. |
 | CSRF | Every state-changing request must carry an `Origin` equal to the request origin, `APP_URL`, `TRUSTED_ORIGINS`, or the `X-Forwarded-Proto/Host` pair. Cookies are SameSite=Lax. |
 | Bootstrap | While the `users` table is empty, `POST /api/users` with header `X-User-Management-Key` creates the first account as `admin`. The key is refused once any user exists. |
 
@@ -231,6 +244,7 @@ user_id PK FK → users (CASCADE) · google_email VARCHAR(254) · refresh_token_
 | add_notes | ✓ | ✓ | ✓ | NOTE-02 |
 | log_activities | ✓ | ✓ | | Calls, emails, visits |
 | manage_tasks | ✓ | ✓ | | Create; update own/assigned tasks |
+| plan_trips | ✓ | ✓ | | Sales Trip Planner: create and re-run trips, shortlist, plan visits, listings, export (TRIP-*) |
 | upload_files | ✓ | ✓ | | |
 | delete_files | ✓ | | | Soft delete; see deleted files (FILE-08) |
 | view_reports | ✓ | ✓ | | Own report |
@@ -255,7 +269,7 @@ Effective privileges = role defaults ∪ `users.privileges` (extras). Extras are
 
 ## 6. API specification
 
-All endpoints return JSON; errors are `{ "error": string }` with status 400 (validation), 401 (not signed in), 403 (forbidden/origin), 404, 409 (duplicate), 429 (rate limit), 503 (database or mailer unavailable). State-changing methods require the `Origin` header (§4).
+All endpoints return JSON; errors are `{ "error": string }` with status 400 (validation; also PostgreSQL foreign-key, check, and data exceptions 23503/23514/22xxx), 401 (not signed in), 403 (forbidden/origin), 404, 409 (duplicate, unique_violation 23505), 429 (rate limit), 503 (database or mailer unavailable). State-changing methods require the `Origin` header (§4).
 
 ### 6.1 Authentication
 
@@ -307,6 +321,8 @@ All endpoints return JSON; errors are `{ "error": string }` with status 400 (val
 | `GET /api/attachments/{id}` | view_leads | file bytes; `inline` for PDF/image/text, `attachment` otherwise or with `?download=1`; `nosniff`, CSP sandbox |
 | `DELETE /api/attachments/{id}` | delete_files | soft delete |
 
+LEAD-06/07: `LeadInput.statusReasonId` is required when the status code is `lost` or `disqualified` (400 "Choose a reason for the … status" otherwise) and is stored as NULL for every other status, even when sent; `GET /api/leads` filters by `statusReasonId`; every lead summary carries `statusReason` and `statusLabel` ("Status – Reason"). `POST /api/list-values` refuses the fixed `disqualified_reason` list. Sales Trip endpoints: §6.9.
+
 ### 6.5 Tasks
 
 | Method & path | Auth | Request → response |
@@ -343,6 +359,23 @@ All endpoints return JSON; errors are `{ "error": string }` with status 400 (val
 | `GET /api/gmail/callback` | session | verifies `state`, exchanges the code, stores the encrypted refresh token and the Google email, audit `gmail.connected`; redirects to `/?gmail=connected\|denied\|failed`, which the shell shows as a toast |
 | `GET /api/leads/{id}/emails` | view_leads | `{ emails (newest 25 across mailboxes), failures }` for the lead's `client_emails`; the viewer's mailbox, or every connected mailbox for view_team_reports. Each mailbox is queried live (`from:/to:/cc:` search, ten messages per mailbox); a mailbox whose token no longer works counts as a failure instead of breaking the response |
 
+### 6.9 Sales trips (TRIP-*)
+
+All need `plan_trips`. A trip is visible to its owner and to anyone with `view_team_reports`.
+
+| Method & path | Request → response |
+|---|---|
+| `GET /api/trips` | `{ trips (own, or all for team reporters, newest first), provider: { configured, name, jobsConfigured, message } }` |
+| `POST /api/trips` | `{ title, address, radiusType: km\|minutes, radius, businessTypeId?, maxResults ≤ 50 }` → geocodes, searches, matches leads, stores the snapshot → `{ trip, results }` (201). 400 when the address cannot be located, 502 when the provider fails, 503 when no provider is configured |
+| `GET /api/trips/{id}` | `{ trip, results }` |
+| `POST /api/trips/{id}/run` | Re-runs the search with the trip's criteria; results, shortlist, and planned visits start over (owner or `reassign_leads`) |
+| `PATCH /api/trips/{id}/results/{resultId}` | `{ shortlisted?, plannedVisitDate? (YYYY-MM-DD or null) }` → `{ result }`. Planning a visit shortlists the company; removing it from the shortlist clears the visit |
+| `GET /api/trips/{id}/results/{resultId}/jobs` | `{ result, jobs }`, refreshed from the job source when missing or older than a day |
+| `GET /api/trips/{id}/export?scope=all\|filtered\|shortlisted\|planned&action=` | `.xlsx` with a Companies sheet (Company, Company Address, Distance, Hiring, Action, Website, Phone, Shortlisted, Planned visit) and a Trip sheet |
+| `GET /api/reports/export?period=&userId=` | `.xlsx` of the performance report (RPT-06): Performance, Daily, and Report sheets |
+
+Audit actions: `trip.created`, `trip.run`, `trip.shortlisted`, `trip.visit_planned` (entity type `sales_trip`).
+
 ---
 
 ## 7. Domain logic
@@ -358,6 +391,7 @@ queued ──reject──► archived (state_reason "Rejected: <comment>")
 
 - "Yesterday" = today in the business timezone minus one day (QUE-01).
 - Every state change writes a `state_change` activity and an audit entry with the reason.
+- LEAD-06: `lost` and `disqualified` are closed statuses that keep the lead `active` (PRD open question 11 records the defaults). Setting either requires `status_reason_id` from the matching list (`enforceStatusReason` in the leads repository); changing to any other status clears it; a change of reason alone writes a `status_change` entry "Status reason updated: …". The `status_change` summary uses the combined label ("Status changed from Warm to Disqualified – Not Interested") while `value_code` stays the status code, so conversion counting (§7.2) is unchanged. The dashboard's needs-attention list skips closed leads; the `cold/warm/hot/client` navigation views are unchanged.
 
 ### 7.2 Timeline and last activity
 
@@ -407,7 +441,7 @@ Client use: `features/tasks/NaturalDateField` shows "Understood “…” as <da
 
 - `src/app/page.tsx` renders `App`: checks `/api/auth/session`; shows `AuthScreen` (login, 2FA code, forgot, reset, first-time setup) or `AppShell`.
 - `AppShell` loads `/api/reference` once, provides `AppContext` (`user`, `reference`, `notify`, `navigate`, `openLead`, `openNewLead`, `can`, `roleLabel`, `dataVersion/bumpData`), renders the sidebar (items filtered by privilege, counts for queued leads and open tasks), topbar (global lead search, profile menu), the current view, the lead detail dialog, the new-lead dialog, and toasts.
-- Routing: URL hash `#/<view>[/<param>][?query]` (`useHashRoute`). Views: `home`, `leads`, `all-leads`, `cold`, `warm`, `hot`, `client`, `queued`, `archive`, `lead/<id>`, `tasks[/<id>]`, `reports`, `targets`, `admin`, `values`, `settings`, `devices`, `lead-generation`, `planner`. Lead lists are keyed by view + query so navigation resets filters.
+- Routing: URL hash `#/<view>[/<param>][?query]` (`useHashRoute`). Views: `home`, `leads`, `all-leads`, `cold`, `warm`, `hot`, `client`, `queued`, `archive`, `lead/<id>`, `tasks[/<id>]`, `reports`, `targets`, `admin`, `values`, `settings`, `devices`, `lead-generation`, `planner`, `trips`, `trips/<id>` (Sales Trip Planner). Lead lists are keyed by view + query so navigation resets filters.
 - Data loading: `useAsyncData(fetcher, refreshKey)` — memoized fetcher, derived `loading`, `reload()`, no synchronous state writes inside effects (satisfies the React Compiler lint rules). After any mutation, `bumpData()` refreshes lists and counts.
 - Permissions in the UI mirror the server: buttons and navigation items render only when `can(privilege)`; the server remains authoritative.
 
@@ -418,12 +452,13 @@ Client use: `features/tasks/NaturalDateField` shows "Understood “…” as <da
 | `features/auth` | `AuthScreen`, `ChangePasswordDialog` |
 | `features/dashboard` | `ActionCenter` |
 | `features/gmail` | `LeadEmails` (Emails tab: configuration note, connect/disconnect, recent messages), `client.ts`, server `gmail.ts` (OAuth exchange, token encryption, Gmail search) |
-| `features/leads` | `LeadListPage` (toolbar, filters panel, bulk bar, pagination), `LeadTable`, `LeadFormDialog` (all fields), `LeadDetailDialog` (Overview, Timeline, Emails, Documents, Profiles shared, Tasks, Audit tabs; transfer, archive/restore, approve/reject, schedule follow-up, quick BD action/response/status updates) |
+| `features/leads` | `LeadListPage` (toolbar with status and reason filters, filters panel, bulk bar, pagination), `LeadTable`, `LeadFormDialog` (all fields; reason select for closed statuses), `LeadDetailDialog` (Overview, Timeline, Emails, Documents, Profiles shared, Tasks, Audit tabs; transfer, archive/restore, approve/reject, schedule follow-up, quick BD action/response/status updates, `StatusReasonDialog` for Lost Lead and Disqualified, inline reason select) |
 | `features/tasks` | `TasksPage` (Overdue / Today / Upcoming / Done columns, mine/team), `TaskFormDialog` (lead search, assignee, typed or picked due date, priority, checklist), `NaturalDateField` (TASK-03 preview) |
-| `features/reports` | `ReportsPage` (period chips, user filter, stat tiles, daily stacked bars, performance table with drill-down dialog, CSV export) |
+| `features/reports` | `ReportsPage` (period chips, user filter, stat tiles, daily stacked bars, performance table with drill-down dialog, Excel export link via `/api/reports/export` and CSV export) |
 | `features/admin` | `AdminPage` router, `UsersPanel` (+ `UserFormDialog`, password dialog, terminate dialog, login history), `ListValuesPanel`, `TargetsPanel`, `SettingsPanel` (role names, reminder days, business-calendar holidays), device placeholder |
 | `features/users` | `UserDirectoryDialog` (person picker) |
 | `features/preview` | `LeadGenerationPage`, `PlannerPage` (labelled previews) |
+| `features/trips` | `TripsPage` (new-trip form with the six criteria of TRIP-01, list of trips), `TripResultsPage` (sortable columns, Action filter, Show selector for all / shortlisted / planned visits, shortlist checkboxes, planned-visit dates, job-listings dialog, Excel export link, print), `matching.ts` (TRIP-07 rules), `providers/` (`types`, `stub`, `google`, selector) |
 | `features/shell` | `App`, `AppShell`, `AppContext`, shared `Dialog`, `Tabs`, `Field`, `Pagination`, `PromptDialog`, `Avatar`, `StatusPill`, `EmptyState` |
 
 ### 8.3 Styling
@@ -582,7 +617,7 @@ As built: a sample route with the lunch stop is shown; date selection, adding co
 | Name       Leads Calls Emails Visits Conv Target% [Drill Down]      |
 | [Tool Engagement] [Lead Generation Report] [Export PDF/Excel]       |
 ```
-As built: seven period chips, person filter, stat tiles, daily stacked bars, table with Leads, Updated, Calls, Emails, Visits, Notes, Conv., Tasks, Done, Files, Logins, Target %; numbers drill down; CSV export. Lead-generation report and PDF export planned.
+As built: seven period chips, person filter, stat tiles, daily stacked bars, table with Leads, Updated, Calls, Emails, Visits, Notes, Conv., Tasks, Done, Files, Logins, Target %; numbers drill down; Excel (.xlsx) and CSV export. Lead-generation report and PDF export planned.
 
 ### A11. Admin User Management — implemented (device column planned)
 
@@ -638,6 +673,29 @@ As built: two views. Archive lists archived and rejected leads with their own se
 ```
 As built: templates table (name, stage, daily/weekly leads, daily/weekly visits, monthly conversions, assigned people), New/Edit dialog, and an assign form that applies a template to one or more people.
 
+### A16. Sales Trip Planner — implemented (change note of October 21, 2026; TRIP-01..11, §10.8)
+
+```
++-----------------------------------------------------------------------------+
+| SALES TRIP PLANNER                                          [+ New trip]    |
+| Trip Title [______________]  Address [________________________________]     |
+| Radius [__]  (o) km  ( ) driving minutes   Business Type [Any           v]  |
+| Number of Results [25] (max 50)                                  [Search]   |
+|-----------------------------------------------------------------------------|
+| Filter: Action [All v]   Scope: (o) All ( ) Filtered ( ) Shortlisted        |
+|                                 ( ) Planned visits   [Export Excel] [Print] |
+| □ | Company ↕          | Company Address ↕            | Dist ↕ | Hiring ↕ | Action ↕    |
+| □ | ABC Manufacturing  | 123 Example Rd, Mississauga  | 1.2 km | 8 Jobs   | Hot Lead    |
+| ☑ | XYZ Foods          | 456 Sample St, Mississauga   | 2.4 km | 4 Jobs   | Warm Lead   |
+| □ | Best Distribution  | 789 Industrial Rd, Mississ.  | 3.1 km | 2 Jobs   | Disqualified – Not Interested |
+| [Add shortlisted to road visit on Date [__/__/____]]                        |
++-----------------------------------------------------------------------------+
+| JOB LISTINGS – XYZ Foods (dialog)                                           |
+| Title | Portal / Source | Location | Date Posted | Type | [View Job]        |
++-----------------------------------------------------------------------------+
+```
+As built: the form lives on the trips page with the list of planned trips below it; the results page has the Action filter, a Show selector (all / shortlisted / planned visits) that also sets the export and print scope, sortable headers, shortlist checkboxes, a planned-visit date per shortlisted company, "N Jobs" buttons opening the listings dialog, website links in a new tab, an "Open lead" link on matched rows, Run again, Export Excel, and Print (a print stylesheet renders the field-visit report with the trip header).
+
 ---
 
 ## 10. Designs for planned features
@@ -657,7 +715,7 @@ Target design: per-user mailbox authorization (Gmail API `readonly` + `send` sco
 A `lead_generation_results` table (user_id, company, url, radius_km, payload JSON, created_at). Providers behind an interface: job sources (Indeed API or careers-page scraping where permitted), review sources (Google Places), company data, and an LLM for the approach and introduction email. Results convert to leads via the existing `POST /api/leads`.
 
 ### 10.5 Road visit planner (PLAN-*)
-`road_visits` (user_id, date) and `road_visit_stops` (visit_id, lead_id or company, address, sequence, planned_at). Optimization through a routing API (Google Routes or OSRM) with a fixed 30-minute break near 13:30. Completed stops log a `visit` activity, which already feeds targets and reports.
+`road_visits` (user_id, date) and `road_visit_stops` (visit_id, lead_id or company, address, sequence, planned_at, sales_trip_result_id NULL); until then a planned visit is the `planned_visit_date` on a shortlisted trip result (§3.15). Optimization through a routing API (Google Routes or OSRM) with a fixed 30-minute break near 13:30. Completed stops log a `visit` activity, which already feeds targets and reports. Stops can be created from shortlisted Sales Trip results (§10.8); those are what the change note calls "Planned Visits" (TRIP-11).
 
 ### 10.6 Device authorization (AUTH-08..10)
 `devices` (id, user_id, identifier, type, label, first_seen, last_seen, status) with the identifier coming from an MDM/managed-browser header or a native app. Login records the device; a policy flag per user refuses unknown devices. Admin screen A12 manages status.
@@ -665,12 +723,30 @@ A `lead_generation_results` table (user_id, company, url, radius_km, payload JSO
 ### 10.7 Rich text, voice, OCR (NOTE-03, NOTE-04, OCR-*)
 Store notes as sanitized HTML from a constrained editor (bold, italic, lists, links). Voice via the Web Speech API on desktop/Android and native dictation on iOS, editable before save; the transcript feeds the same follow-up suggestion as typed notes (§7.10). OCR via a vision API with a review form before populating the lead.
 
+### 10.8 Sales Trip Planner (TRIP-*, change note of October 21, 2026) — as built
+
+**Tables (migration 5).** See §3.15; the design below is what was built. `sales_trips` (id, owner_id FK users, title VARCHAR(120), address VARCHAR(500), latitude and longitude DECIMAL(9,6), radius_type ENUM `km`/`minutes`, radius_value SMALLINT, business_type_id FK list_values NULL, max_results TINYINT ≤ 50, provider_meta JSON, created_at, updated_at) and `sales_trip_results` (id, trip_id FK CASCADE, sequence, company_name VARCHAR(200), address VARCHAR(500), latitude, longitude, distance_km DECIMAL(7,2), drive_minutes SMALLINT NULL, website VARCHAR(2048), phone VARCHAR(40), provider_place_id VARCHAR(120), job_count SMALLINT NULL, jobs JSON NULL (dialog rows: title, source, location, postedAt, employmentType, url), jobs_fetched_at NULL, matched_lead_id FK leads NULL (SET NULL), action_code VARCHAR(40), action_label VARCHAR(160), shortlisted BOOLEAN, created_at). Results are snapshotted at search time so the list stays stable; re-running a trip replaces its results and recomputes Action.
+
+**Providers behind interfaces** in `features/trips/providers/`: `geocode(address)`, `searchCompanies({ lat, lng, radiusKm | driveMinutes, businessType, limit })`, `distances(origin, targets)` (and an isochrone or distance-matrix call for driving minutes), `jobs({ companyName, website, location })`. First implementations: Google Geocoding and Places (Nearby/Text Search with keyword rules per business type, website and phone from Place Details) and Routes/Distance Matrix under `MAPS_API_KEY`; a licensed job aggregator under `JOBS_API_URL`/`JOBS_API_KEY` (PRD open question 10); `TRIPS_PROVIDER=stub` serves a fixed catalogue of fourteen companies around Mississauga and Toronto (with websites, phones, and listings) for development and tests. Without keys and without the stub the page reports "not configured" the way Gmail and SMTP do. The Google adapter is written to the documented HTTP APIs but has only been exercised through the stub. Provider terms limit how long place data may be cached, so results keep the place id and refresh fields on re-run. Job listings are fetched for every result when the trip is created or re-run (four at a time) so the Hiring column shows counts at once; the dialog re-fetches a company's listings when they are older than a day. The aggregator contract: `GET ${JOBS_API_URL}?company=&website=&location=` with `Authorization: Bearer ${JOBS_API_KEY}` returning `{ jobs: [{ title, source, location, posted_at, employment_type, url }] }`.
+
+**Action matching (TRIP-07).** Normalisation: company name lower-cased, punctuation removed, legal suffixes dropped (inc, ltd, limited, corp, co); website reduced to its registrable domain; phones reduced to their last ten digits; address reduced to street number, street name, and city. Candidates are non-archived leads; archived leads are considered only when nothing else matches (PRD open question 12). A lead matches on domain equality, phone equality, normalised name equality with the same city, or name similarity ≥ 0.9 (Jaro-Winkler) with a matching address. Precedence when several match: domain, then phone, then name with address, then name; ties go to the most recently active lead. Action = the matched lead's combined status label (LEAD-06; "New / Not in CRM" when nothing matches). `matched_lead_id` lets the row open the lead.
+
+**API.** §6.9. "Planned visits" are dates on shortlisted results (`planned_visit_date`); they become `road_visit_stops` when the road visit planner (§10.5) is built. New privilege `plan_trips` (Admin and Sales Manager by default). Trips, re-runs, shortlist changes, and planned visits are audited.
+
+**Client.** View `trips` (my trips, new-trip form with the six criteria of TRIP-01) and `trips/<id>` (A16): column sort on every column (TRIP-09), an Action filter listing the combined labels present in the results (TRIP-08), shortlist checkboxes (TRIP-10), export and print buttons with the scope selector (TRIP-11), the job-listings dialog (TRIP-06). Printing uses a `@media print` stylesheet that renders the field-visit report: trip title, date, address and radius, then Company, Company Address, Distance, Hiring, Action, and the planned time for rows on a visit. The Excel export is a real `.xlsx` written with `exceljs`; the same dependency upgrades the reports CSV export (RPT-06).
+
+**Verification.** `tests/unit/trip-matching.test.mjs` (normalisation, domain, phone, address keys, Jaro-Winkler, precedence, archived fallback, Action labels) and `tests/e2e/06-trips.test.mjs` (a lead recognised by domain, the listings dialog, shortlist, planned visit, Show and Action filters, the Excel export responding with a spreadsheet, the trip list).
+
+### 10.9 Legacy tracker import (go-live data)
+
+The client's current system of record is a Google Sheets workbook (`Sales Leads 2026.xlsx`, kept outside the repository because it holds real contact data). Its main sheet is one row per interaction: 6,669 rows for 3,754 companies between May 2025 and October 2026, with the BRD's 21 columns. `scripts/import-tracker.mjs` (planned) reads the workbook with `exceljs`, groups rows by normalised company name (same rules as §10.8), creates one lead per company from its latest row (status, owner, contact fields, address) with `first_contact_date` set to the earliest row date, and writes one timeline entry per row (`bd_action`, `client_response`, or a `note` carrying the remark; `occurred_at` = the row date). Subset sheets (`Copy of LeadsJun25`, `DEla`, `alex strong leads`, `warm leads`) are skipped; `Clients` confirms status Client; `ArchiveSales` (2021–22) may be loaded as archived leads. Mapping rules: strip the "N ." stage prefix from BD actions; match cities case-insensitively; split phone and email cells holding several values; move non-address text from the Address column to Comments; send text dates and shifted cells to a rejects report. `--dry-run` prints counts and the rejects without writing. Decisions still open: the "Office" lead type, the two numbered BD-action sequences, and whether Not Interested / Do not use Agency responses become Disqualified (PRD open question 13).
+
 ---
 
 ## 11. Security and deployment notes
 
 - Run behind TLS; set `APP_URL` so the origin check and reset links use the public host. An `http://` `APP_URL` turns off the Secure cookie flag for deployments without TLS (internal hosts, the end-to-end stack); browsers drop Secure cookies over plain http on anything but localhost.
-- The app database account has no DDL rights; schema changes go through `npm run db:create`.
+- The app database role has no DDL rights; schema changes go through `npm run db:create`, which runs as the PostgreSQL administrator.
 - Attachments live outside the web root; downloads set `Content-Disposition`, `X-Content-Type-Options: nosniff`, and a sandboxing CSP.
 - Session, reset, and 2FA secrets are stored only as hashes; cookies are httpOnly and SameSite=Lax.
 - Error responses never include SQL or stack details; failures are logged server-side with context.
@@ -681,6 +757,8 @@ Store notes as sanitized HTML from a constrained editor (bold, italic, lists, li
 ## 12. Verification
 
 - `npm run typecheck`, `npm run lint`, `npm run build` must pass.
-- Unit tests (`tests/unit`, `node:test` on Node 22 type stripping, `npm run test:unit`): the natural-language date parser (working days, relative phrases, weekday names, periods, month names, explicit spellings, times of day) and the note follow-up suggestion rules.
+- Unit tests (`tests/unit`, `node:test` on Node 22 type stripping, `npm run test:unit`): the natural-language date parser (working days, relative phrases, weekday names, periods, month names, explicit spellings, times of day), the note follow-up suggestion rules, and the status-reason helpers.
 - End-to-end API suite (kept outside the repo during development) covers: first-run setup, bootstrap key lock-out, login and origin checks, seeding, reference data, role permissions for every mutating endpoint, queued review, edit/transfer rules, activities, lead 360 and audit visibility, tasks and checklists, uploads with versioning and type rejection, downloads, soft delete, dashboard, team and own reports, all periods, drill-down, list-value rename propagation and inactive-value rejection, settings, templates and assignment, user updates with extra privileges, bulk archive/restore/reassign, login history, admin and self password changes, SMTP-missing responses, termination cascade and session revocation, last-admin guard, audit action coverage, rate limiting, sign-out.
-- Browser end-to-end suite (`tests/e2e`, Selenium + `node:test`, run with `scripts/e2e.sh` against a production build, an in-memory MySQL, and a Chromium grid in Docker): first-time setup, sign-in, password change and reset messaging, lead life cycle (create, BD action, timeline, note that offers a follow-up task, Emails tab without Gmail configured, follow-up task, document upload, edit, status, search, archive/restore), tasks (including a due date typed in words), user creation, a per-account sign-out time ending an older session, role-limited navigation, queued-lead approval, transfer, termination hand-off, list of values, settings, business-calendar holiday, target templates, report drill-down.
+- Browser end-to-end suite (`tests/e2e`, Selenium + `node:test`, run with `scripts/e2e.sh` against a production build, an in-memory PostgreSQL, and a Chromium grid in Docker): first-time setup, sign-in, password change and reset messaging, lead life cycle (create, BD action, timeline, note that offers a follow-up task, Emails tab without Gmail configured, follow-up task, document upload, edit, status, search, archive/restore), tasks (including a due date typed in words), user creation, a per-account sign-out time ending an older session, role-limited navigation, queued-lead approval, transfer, termination hand-off, list of values, settings, business-calendar holiday, target templates, report drill-down.
+- Status reasons (LEAD-06): `tests/unit/status-reasons.test.mjs` covers the reason-list mapping and the combined label; `02-leads.test.mjs` sets Disqualified with a reason from the lead header, checks the inline reason select and the timeline entry, and returns the lead to Warm.
+- Sales Trip Planner: `tests/unit/trip-matching.test.mjs` covers the matching rules; `06-trips.test.mjs` plans a trip on the stub provider, checks the recognised lead, the job listings, shortlist and planned visit, filters, the Excel export, and the trip list.

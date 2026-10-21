@@ -13,9 +13,9 @@ type Row = {
 };
 
 const select = `
-  SELECT f.id, f.lead_id AS leadId, f.category, f.label, f.file_name AS fileName, f.mime_type AS mimeType, f.size_bytes AS sizeBytes, f.version,
-    f.replaces_id AS replacesId, f.uploaded_by AS uploadedById, CONCAT(u.first_name, ' ', u.last_name) AS uploadedByName,
-    f.deleted_at AS deletedAt, CONCAT(d.first_name, ' ', d.last_name) AS deletedByName, f.created_at AS createdAt, f.storage_key AS storageKey
+  SELECT f.id, f.lead_id AS "leadId", f.category, f.label, f.file_name AS "fileName", f.mime_type AS "mimeType", f.size_bytes AS "sizeBytes", f.version,
+    f.replaces_id AS "replacesId", f.uploaded_by AS "uploadedById", CONCAT(u.first_name, ' ', u.last_name) AS "uploadedByName",
+    f.deleted_at AS "deletedAt", CONCAT(d.first_name, ' ', d.last_name) AS "deletedByName", f.created_at AS "createdAt", f.storage_key AS "storageKey"
   FROM lead_attachments f
   JOIN users u ON u.id = f.uploaded_by
   LEFT JOIN users d ON d.id = f.deleted_by
@@ -39,7 +39,7 @@ const toAttachment = (row: Row): LeadAttachment => ({
 });
 
 export async function listAttachments(leadId: number, options: { includeDeleted?: boolean } = {}, db: Queryable = getDatabasePool()): Promise<LeadAttachment[]> {
-  const [rows] = await db.query(
+  const { rows } = await db.query(
     `${select} WHERE f.lead_id = ? ${options.includeDeleted ? "" : "AND f.deleted_at IS NULL"} ORDER BY f.category, f.label, f.file_name, f.version DESC, f.id DESC`,
     [leadId],
   );
@@ -47,7 +47,7 @@ export async function listAttachments(leadId: number, options: { includeDeleted?
 }
 
 export async function getAttachmentWithStorage(id: number, db: Queryable = getDatabasePool()): Promise<(LeadAttachment & { storageKey: string }) | null> {
-  const [rows] = await db.query(`${select} WHERE f.id = ?`, [id]);
+  const { rows } = await db.query(`${select} WHERE f.id = ?`, [id]);
   const row = (rows as Row[])[0];
   return row ? { ...toAttachment(row), storageKey: row.storageKey } : null;
 }
@@ -64,16 +64,16 @@ export async function uploadAttachment(input: UploadInput, actor: UserAccount): 
   const bytes = new Uint8Array(await input.file.arrayBuffer());
   const storageKey = await saveAttachmentFile(input.leadId, fileName, bytes);
   return withTransaction(async (connection) => {
-    const [previousRows] = await connection.query(
+    const { rows: previousRows } = await connection.query(
       `SELECT id, version FROM lead_attachments WHERE lead_id = ? AND category = ? AND label = ? AND LOWER(file_name) = LOWER(?) ORDER BY version DESC LIMIT 1`,
       [input.leadId, input.category, label, fileName],
     );
     const previous = (previousRows as { id: number; version: number }[])[0];
     const version = previous ? Number(previous.version) + 1 : 1;
     const now = new Date();
-    const [result] = await connection.query(
+    const result = await connection.query(
       `INSERT INTO lead_attachments (lead_id, uploaded_by, category, label, file_name, mime_type, size_bytes, storage_key, version, replaces_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
       [input.leadId, actor.id, input.category, label, fileName, mimeType, input.file.size, storageKey, version, previous ? Number(previous.id) : null, toSqlDateTime(now)],
     );
     const id = insertId(result);

@@ -4,7 +4,7 @@ import { useCallback, useState, type FormEvent } from "react";
 import { ArrowDown, ArrowUp, Check, Pencil, Plus, X } from "lucide-react";
 import { errorMessage } from "@/lib/api";
 import { useAsyncData } from "@/lib/useAsyncData";
-import { listKeyLabels, listKeys, type ListKey, type ListValue, type ListValuesByKey } from "@/features/list-values/model";
+import { fixedListKeys, listKeyLabels, listKeys, statusCodes, type ListKey, type ListValue, type ListValuesByKey } from "@/features/list-values/model";
 import { useApp } from "@/features/shell/AppContext";
 import { ErrorText, Loading } from "@/features/shell/components";
 import { createListValue, fetchListValues, reorderListValues, updateListValue } from "./client";
@@ -70,6 +70,8 @@ export default function ListValuesPanel() {
   };
 
   const current = values?.[listKey] ?? [];
+  const fixed = fixedListKeys.includes(listKey);
+  const locked = (value: ListValue) => fixed || (value.listKey === "status" && statusCodes.includes(value.code as (typeof statusCodes)[number]));
 
   return (
     <>
@@ -80,7 +82,9 @@ export default function ListValuesPanel() {
         </nav>
         <section className="panel values-panel">
           <div className="panel-heading"><div><h2>{listKeyLabels[listKey]}</h2><p>{current.filter((item) => item.active).length} active · {current.filter((item) => !item.active).length} inactive</p></div></div>
-          <form className="values-add" onSubmit={add}><input value={newValue} onChange={(event) => setNewValue(event.target.value)} maxLength={120} placeholder={`New ${listKeyLabels[listKey].toLowerCase()} value`} required /><button className="button button-primary button-small" type="submit"><Plus size={14} /> Add value</button></form>
+          {fixed
+            ? <p className="field-hint values-fixed-note">These values are fixed by the requirement: rename them if needed, but they cannot be added to or deactivated.</p>
+            : <form className="values-add" onSubmit={add}><input value={newValue} onChange={(event) => setNewValue(event.target.value)} maxLength={120} placeholder={`New ${listKeyLabels[listKey].toLowerCase()} value`} required /><button className="button button-primary button-small" type="submit"><Plus size={14} /> Add value</button></form>}
           <ErrorText message={error} />
           {!values && !error && <Loading />}
           {values && (
@@ -98,7 +102,7 @@ export default function ListValuesPanel() {
                       </td>
                       <td><span className="muted-cell">{value.code}</span></td>
                       <td><span className={`badge ${value.active ? "badge-on" : "badge-off"}`}>{value.active ? "Active" : "Inactive"}</span></td>
-                      <td><span className="row-actions"><button className="icon-button" aria-label={`Rename ${value.value}`} title="Rename" onClick={() => setEditing({ id: value.id, value: value.value })}><Pencil size={14} /></button><button className="text-button" onClick={() => void toggle(value)}>{value.active ? "Deactivate" : "Activate"}</button></span></td>
+                      <td><span className="row-actions"><button className="icon-button" aria-label={`Rename ${value.value}`} title="Rename" onClick={() => setEditing({ id: value.id, value: value.value })}><Pencil size={14} /></button>{!locked(value) && <button className="text-button" onClick={() => void toggle(value)}>{value.active ? "Deactivate" : "Activate"}</button>}</span></td>
                     </tr>
                   ))}
                   {!current.length && <tr><td colSpan={5} className="empty-state">No values yet.</td></tr>}

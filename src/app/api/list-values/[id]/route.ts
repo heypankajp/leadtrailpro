@@ -23,7 +23,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     return NextResponse.json({ value });
   } catch (error) {
     const code = (error as { code?: string }).code;
-    if (code === "ER_DUP_ENTRY") return jsonError(409, "That value already exists in this list.");
+    if (code === "23505") return jsonError(409, "That value already exists in this list.");
     return handleRouteError(error, "Update list value");
   }
 }

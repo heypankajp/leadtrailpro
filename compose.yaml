@@ -1,11 +1,11 @@
-# Development stack: MySQL + hot-reloading Next.js dev server.
+# Development stack: PostgreSQL + hot-reloading Next.js dev server.
 #
 #   docker compose run --rm setup   # once: create schema, app user, and .env.local
 #   docker compose up               # http://localhost:3000
 #   docker compose run --rm setup node scripts/seed-sample-data.mjs   # optional demo data
 #
 # Optional overrides go in an ignored `.env` file next to this file:
-#   MYSQL_ROOT_PASSWORD, APP_PORT (default 3000), DB_PORT (default 3307, loopback only)
+#   POSTGRES_PASSWORD, APP_PORT (default 3000), DB_PORT (default 5433, loopback only)
 #
 # Production: docker compose -f compose.yaml -f compose.prod.yaml up -d --build
 # End-to-end tests (profile "test"): scripts/e2e.sh
@@ -24,41 +24,44 @@ x-dev-image: &dev-image
 
 services:
   db:
-    image: mysql:8.4
+    image: postgres:17-alpine
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-salestrackpro}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-salestrackpro}
     ports:
-      - "127.0.0.1:${DB_PORT:-3307}:3306"
+      - "127.0.0.1:${DB_PORT:-5433}:5432"
     volumes:
-      - mysql_data:/var/lib/mysql
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      # -h forces TCP, which the image only opens once its first-run initialisation has finished.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d postgres"]
       interval: 5s
       timeout: 5s
       retries: 24
-      start_period: 20s
+      start_period: 10s
 
   app:
     <<: *dev-image
     init: true
+    environment:
+      # Sample company data for the Sales Trip Planner; set TRIPS_PROVIDER= (empty) in .env to use the real providers.
+      TRIPS_PROVIDER: ${TRIPS_PROVIDER:-stub}
     ports:
       - "${APP_PORT:-3000}:3000"
     depends_on:
       db:
         condition: service_healthy
 
-  # One-shot setup, run with `docker compose run --rm setup`. Uses the MySQL root
-  # account to create or upgrade the schema and the restricted app account, then
-  # writes .env.local (MYSQL_HOST=db) into the project directory.
+  # One-shot setup, run with `docker compose run --rm setup`. Uses the PostgreSQL
+  # superuser to create or upgrade the schema and the restricted app role, then
+  # writes .env.local (PGHOST=db) into the project directory.
   setup:
     <<: *dev-image
     profiles: ["setup"]
     environment:
-      MYSQL_HOST: db
-      MYSQL_PORT: "3306"
-      MYSQL_USER: root
-      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:-salestrackpro}
-      MYSQL_APP_USER_HOST: "%"
+      PGHOST: db
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: ${POSTGRES_PASSWORD:-salestrackpro}
     depends_on:
       db:
         condition: service_healthy
@@ -66,21 +69,21 @@ services:
 
   # ---------------------------------------------------------------------------
   # End-to-end tests (profile "test"). scripts/e2e.sh wires these together:
-  # a throwaway MySQL in memory, the production build of the app with a fresh
+  # a throwaway PostgreSQL in memory, the production build of the app with a fresh
   # schema, a Selenium Chromium grid, and the test runner (tests/e2e).
   db-test:
-    image: mysql:8.4
+    image: postgres:17-alpine
     profiles: ["test"]
     environment:
-      MYSQL_ROOT_PASSWORD: test
+      POSTGRES_PASSWORD: test
     tmpfs:
-      - /var/lib/mysql
+      - /var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -ptest --silent"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d postgres"]
       interval: 3s
       timeout: 5s
       retries: 40
-      start_period: 10s
+      start_period: 5s
 
   app-test:
     build:
@@ -90,12 +93,13 @@ services:
     profiles: ["test"]
     init: true
     environment:
-      MYSQL_HOST: db-test
-      MYSQL_PORT: "3306"
-      MYSQL_USER: root
-      MYSQL_PASSWORD: test
+      PGHOST: db-test
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: test
       USER_MANAGEMENT_KEY: e2e-user-management-key
       BUSINESS_TIMEZONE: America/Toronto
+      TRIPS_PROVIDER: stub
       APP_URL: http://app-test:3000   # plain http inside the compose network: see session.ts cookie flags
     command: ["sh", "-c", "node scripts/create-database.mjs && exec node server.js"]
     healthcheck:
@@ -135,6 +139,6 @@ services:
     command: ["npm", "run", "test:e2e"]
 
 volumes:
-  mysql_data:
+  postgres_data:
   node_modules:
   next_cache:

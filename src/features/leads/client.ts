@@ -5,7 +5,7 @@ import type { Task, TaskPriority } from "@/features/tasks/model";
 import type { LeadActivity, LeadInput, LeadPage, LeadRecordState, LeadSortKey, LeadSummary, LoggableActivityType } from "./model";
 
 export type LeadQuery = Partial<{
-  state: LeadRecordState; q: string; mine: boolean; statusCode: string; statusId: number; leadTypeId: number; leadCategoryId: number;
+  state: LeadRecordState; q: string; mine: boolean; statusCode: string; statusId: number; statusReasonId: number; leadTypeId: number; leadCategoryId: number;
   companySizeId: number; cityId: number; ownerId: number; clientResponseId: number; bdActionId: number;
   firstContactFrom: string; firstContactTo: string; followUpFrom: string; followUpTo: string; contractSignedFrom: string; contractSignedTo: string;
   sort: LeadSortKey; direction: "asc" | "desc"; page: number; pageSize: number;

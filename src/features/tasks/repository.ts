@@ -14,9 +14,9 @@ type Row = {
 };
 
 const select = `
-  SELECT t.id, t.lead_id AS leadId, l.client_name AS leadName, t.title, t.description, t.assignee_id AS assigneeId,
-    CONCAT(a.first_name, ' ', a.last_name) AS assigneeName, t.creator_id AS creatorId, CONCAT(c.first_name, ' ', c.last_name) AS creatorName,
-    t.due_at AS dueAt, t.priority, t.status, t.checklist, t.completed_at AS completedAt, t.created_at AS createdAt, t.updated_at AS updatedAt
+  SELECT t.id, t.lead_id AS "leadId", l.client_name AS "leadName", t.title, t.description, t.assignee_id AS "assigneeId",
+    CONCAT(a.first_name, ' ', a.last_name) AS "assigneeName", t.creator_id AS "creatorId", CONCAT(c.first_name, ' ', c.last_name) AS "creatorName",
+    t.due_at AS "dueAt", t.priority, t.status, t.checklist, t.completed_at AS "completedAt", t.created_at AS "createdAt", t.updated_at AS "updatedAt"
   FROM tasks t
   JOIN users a ON a.id = t.assignee_id
   JOIN users c ON c.id = t.creator_id
@@ -61,12 +61,12 @@ export async function listTasks(filter: TaskFilter, db: Queryable = getDatabaseP
   if (filter.dueFrom) { clauses.push("t.due_at >= ?"); params.push(toSqlDateTime(filter.dueFrom)); }
   if (filter.dueTo) { clauses.push("t.due_at < ?"); params.push(toSqlDateTime(filter.dueTo)); }
   const limit = Math.min(Math.max(filter.limit ?? 500, 1), 1000);
-  const [rows] = await db.query(`${select} WHERE ${clauses.join(" AND ")} ORDER BY ISNULL(t.due_at), t.due_at ASC, t.id DESC LIMIT ${limit}`, params);
+  const { rows } = await db.query(`${select} WHERE ${clauses.join(" AND ")} ORDER BY t.due_at ASC NULLS LAST, t.id DESC LIMIT ${limit}`, params);
   return (rows as Row[]).map(toTask);
 }
 
 export async function getTask(id: number, db: Queryable = getDatabasePool()): Promise<Task | null> {
-  const [rows] = await db.query(`${select} WHERE t.id = ?`, [id]);
+  const { rows } = await db.query(`${select} WHERE t.id = ?`, [id]);
   const row = (rows as Row[])[0];
   return row ? toTask(row) : null;
 }
@@ -87,8 +87,8 @@ export async function createTask(input: TaskInput, actor: UserAccount): Promise<
       if (!lead) throw new HttpError(400, "The lead does not exist.");
     }
     const now = new Date();
-    const [result] = await connection.query(
-      `INSERT INTO tasks (lead_id, title, description, assignee_id, creator_id, due_at, priority, status, checklist, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)`,
+    const result = await connection.query(
+      `INSERT INTO tasks (lead_id, title, description, assignee_id, creator_id, due_at, priority, status, checklist, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?) RETURNING id`,
       [input.leadId, input.title, input.description || null, assigneeId, actor.id, input.dueAt ? toSqlDateTime(new Date(input.dueAt)) : null, input.priority, JSON.stringify(input.checklist), toSqlDateTime(now)],
     );
     const task = (await getTask(insertId(result), connection))!;

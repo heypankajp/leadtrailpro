@@ -21,7 +21,7 @@ export async function POST(request: Request, context: RouteContext) {
     const target = await getUser(id);
     if (!target) return jsonError(404, "User not found.");
     if (target.role === "admin") {
-      const [rows] = await getDatabasePool().query("SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND is_active = TRUE AND id <> ?", [id]);
+      const { rows } = await getDatabasePool().query("SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND is_active = TRUE AND id <> ?", [id]);
       if (Number((rows as { count: number }[])[0].count) === 0) return jsonError(400, "At least one active administrator must remain.");
     }
     const result = await terminateUser(id, reassignToUserId, actor.id, asString(body?.reason, 500));

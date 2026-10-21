@@ -5,7 +5,7 @@ import type { AuditEntry } from "./model";
 export type AuditInput = {
   actorId: number | null;
   action: string;
-  entityType: "lead" | "user" | "task" | "attachment" | "list_value" | "target_template" | "setting" | "session";
+  entityType: "lead" | "user" | "task" | "attachment" | "list_value" | "target_template" | "setting" | "session" | "sales_trip";
   entityId?: number | null;
   before?: Record<string, unknown> | null;
   after?: Record<string, unknown> | null;
@@ -62,9 +62,9 @@ export async function listAudit(filter: { entityType?: string; entityId?: number
   if (filter.entityId) { clauses.push("a.entity_id = ?"); params.push(filter.entityId); }
   if (filter.actorId) { clauses.push("a.actor_id = ?"); params.push(filter.actorId); }
   const limit = Math.min(Math.max(filter.limit ?? 100, 1), 500);
-  const [rows] = await getDatabasePool().query(
-    `SELECT a.id, a.actor_id AS actorId, CONCAT(u.first_name, ' ', u.last_name) AS actorName, a.action, a.entity_type AS entityType,
-       a.entity_id AS entityId, a.before_json AS beforeJson, a.after_json AS afterJson, a.details, a.created_at AS createdAt
+  const { rows } = await getDatabasePool().query(
+    `SELECT a.id, a.actor_id AS "actorId", CONCAT(u.first_name, ' ', u.last_name) AS "actorName", a.action, a.entity_type AS "entityType",
+       a.entity_id AS "entityId", a.before_json AS "beforeJson", a.after_json AS "afterJson", a.details, a.created_at AS "createdAt"
      FROM audit_log a LEFT JOIN users u ON u.id = a.actor_id
      ${clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""}
      ORDER BY a.id DESC LIMIT ${limit}`,
