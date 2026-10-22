@@ -26,7 +26,8 @@ export async function PATCH(request: Request) {
     const roleLabels = body.roleLabels && typeof body.roleLabels === "object" ? body.roleLabels as Record<string, string> : undefined;
     const reminders = body.reminders && typeof body.reminders === "object" ? body.reminders as { inactivityDays?: number; rules?: unknown } : undefined;
     const holidays = body.holidays !== undefined ? body.holidays : undefined;
-    const settings = await updateSettings({ roleLabels, reminders, holidays }, user.id);
+    const digests = body.digests !== undefined ? body.digests : undefined;
+    const settings = await updateSettings({ roleLabels, reminders, digests, holidays }, user.id);
     return NextResponse.json({ settings });
   } catch (error) {
     return handleRouteError(error, "Update settings");

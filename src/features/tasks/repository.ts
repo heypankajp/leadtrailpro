@@ -2,6 +2,7 @@ import { getDatabasePool, fromSqlDateTime, insertId, toSqlDateTime, withTransact
 import { HttpError } from "@/lib/http";
 import { recordAudit, diffRecords } from "@/features/audit/repository";
 import { addActivity, getLead } from "@/features/leads/repository";
+import { notifyUsers } from "@/features/notifications/repository";
 import { getUser } from "@/features/users/repository";
 import { hasPrivilege } from "@/features/users/model";
 import type { UserAccount } from "@/features/users/model";
@@ -96,6 +97,7 @@ export async function createTask(input: TaskInput, actor: UserAccount): Promise<
       await addActivity(connection, { leadId: task.leadId, userId: actor.id, type: "task", summary: `Task created: ${task.title}${task.dueAt ? ` (due ${task.dueAt.slice(0, 10)})` : ""}`, meta: { taskId: task.id, assigneeId }, occurredAt: now });
     }
     await recordAudit(connection, { actorId: actor.id, action: "task.created", entityType: "task", entityId: task.id, after: auditView(task), details: `${actor.name} created task "${task.title}"` }, now);
+    await notifyUsers(connection, { userIds: [task.assigneeId], actorId: actor.id, type: "task_assigned", title: `Task assigned: ${task.title}`, body: `${actor.name} assigned you this task${task.leadName ? ` on ${task.leadName}` : ""}${task.dueAt ? `, due ${task.dueAt.slice(0, 16).replace("T", " ")}` : ""}.`, leadId: task.leadId, taskId: task.id });
     return task;
   });
 }
@@ -139,6 +141,15 @@ export async function updateTask(id: number, changes: TaskPatch, actor: UserAcco
         await addActivity(connection, { leadId: updated.leadId, userId: actor.id, type: "task", summary: updated.status === "done" ? `Task completed: ${updated.title}` : `Task reopened: ${updated.title}`, meta: { taskId: id }, occurredAt: now });
       }
       await recordAudit(connection, { actorId: actor.id, action: updated.status === "done" && existing.status !== "done" ? "task.completed" : "task.updated", entityType: "task", entityId: id, before: diff.before, after: diff.after, details: `${actor.name} updated ${diff.changed.join(", ")} on task "${updated.title}"` }, now);
+      const completed = updated.status === "done" && existing.status !== "done";
+      if (updated.assigneeId !== existing.assigneeId) {
+        await notifyUsers(connection, { userIds: [updated.assigneeId], actorId: actor.id, type: "task_assigned", title: `Task assigned: ${updated.title}`, body: `${actor.name} assigned you this task${updated.leadName ? ` on ${updated.leadName}` : ""}.`, leadId: updated.leadId, taskId: id });
+      } else {
+        await notifyUsers(connection, { userIds: [updated.assigneeId], actorId: actor.id, type: completed ? "task_completed" : "task_updated", title: completed ? `Task completed: ${updated.title}` : `Task updated: ${updated.title}`, body: `${actor.name} changed ${diff.changed.join(", ")}.`, leadId: updated.leadId, taskId: id });
+      }
+      if (completed && updated.creatorId !== updated.assigneeId) {
+        await notifyUsers(connection, { userIds: [updated.creatorId], actorId: actor.id, type: "task_completed", title: `Task completed: ${updated.title}`, body: `${actor.name} completed the task you created.`, leadId: updated.leadId, taskId: id });
+      }
     }
     return updated;
   });

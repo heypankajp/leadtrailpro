@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { AlertTriangle, CalendarDays, Mail, Plus, RefreshCw, Save, X } from "lucide-react";
+import { AlertTriangle, CalendarDays, Mail, Plus, RefreshCw, Save, Send, X } from "lucide-react";
 import { errorMessage } from "@/lib/api";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { useApp } from "@/features/shell/AppContext";
@@ -9,9 +9,12 @@ import { ErrorText, Field, Loading } from "@/features/shell/components";
 import { maxHolidayNameLength, maxInactivityDays, maxInactivityRules, type AppSettings, type InactivityRule } from "@/features/settings/model";
 import { defaultRoleLabels, systemRoles } from "@/features/users/model";
 import { fetchSettings, updateSettings, type MailStatus } from "./client";
+import { runDigestNow } from "@/features/notifications/client";
+import { weekdayNames, type DigestJob } from "@/features/notifications/model";
 
 export default function SettingsPanel() {
-  const { notify, refreshReference, reference } = useApp();
+  const { notify, refreshReference, reference, bumpData } = useApp();
+  const [sending, setSending] = useState<DigestJob | null>(null);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [meta, setMeta] = useState<{ mailerConfigured: boolean; timeZone: string; mail: MailStatus }>({ mailerConfigured: false, timeZone: "", mail: { provider: "off", outbox: [] } });
   const [openMail, setOpenMail] = useState<number | null>(null);
@@ -31,7 +34,7 @@ export default function SettingsPanel() {
     if (!settings) return;
     setBusy(true);
     try {
-      const result = await updateSettings({ roleLabels: settings.roleLabels, reminders: settings.reminders, holidays: settings.holidays });
+      const result = await updateSettings({ roleLabels: settings.roleLabels, reminders: settings.reminders, digests: settings.digests, holidays: settings.holidays });
       setSettings(result.settings);
       await refreshReference();
       notify("Settings saved");
@@ -57,6 +60,22 @@ export default function SettingsPanel() {
 
   const removeHoliday = (date: string) => {
     if (settings) setSettings({ ...settings, holidays: settings.holidays.filter((holiday) => holiday.date !== date) });
+  };
+
+  // TASK-06: send a digest to yourself right away (also records the run and the outbox entry).
+  const sendDigest = async (job: DigestJob) => {
+    setSending(job);
+    try {
+      const result = await runDigestNow(job);
+      const run = result.ran[0];
+      notify(run ? `${job === "daily" ? "Daily" : "Weekly"} digest sent${run.failures ? ` with ${run.failures} failure(s)` : ""}` : "Nothing was sent", run && !run.failures ? "success" : "error");
+      bumpData();
+      load();
+    } catch (caught) {
+      notify(errorMessage(caught), "error");
+    } finally {
+      setSending(null);
+    }
   };
 
   // TASK-05: needs-attention rules by status and BD action.
@@ -99,6 +118,21 @@ export default function SettingsPanel() {
                   <button type="button" className="button button-outline button-small" onClick={() => setRules([...settings.reminders.rules, { statusId: null, bdActionId: null, days: settings.reminders.inactivityDays }])}><Plus size={13} /> Add rule</button>
                 )}
                 <small className="field-hint">A rule needs a status, a BD action, or both. Rules apply when you save settings.</small>
+              </fieldset>
+              <fieldset className="user-privileges digest-editor">
+                <legend><Send size={12} /> Daily and weekly digests</legend>
+                <p className="field-hint">Each person gets a summary of overdue and upcoming follow-ups, tasks, and their numbers, as an in-app notification and by email when delivery is configured. People can opt out under Notification preferences. Times are in the business timezone.</p>
+                <label className="checklist-item"><input type="checkbox" checked={settings.digests.enabled} onChange={(event) => setSettings({ ...settings, digests: { ...settings.digests, enabled: event.target.checked } })} /><span>Send digests on schedule</span></label>
+                <div className="rule-row">
+                  <Field label="Daily digest at"><input type="time" value={settings.digests.dailyTime} onChange={(event) => setSettings({ ...settings, digests: { ...settings.digests, dailyTime: event.target.value } })} required /></Field>
+                  <Field label="Weekly digest on"><select value={settings.digests.weeklyDay} onChange={(event) => setSettings({ ...settings, digests: { ...settings.digests, weeklyDay: Number(event.target.value) } })}>{weekdayNames.map((name, index) => <option key={name} value={index}>{name}</option>)}</select></Field>
+                  <Field label="Weekly digest at"><input type="time" value={settings.digests.weeklyTime} onChange={(event) => setSettings({ ...settings, digests: { ...settings.digests, weeklyTime: event.target.value } })} required /></Field>
+                </div>
+                <div className="digest-actions">
+                  <button type="button" className="button button-outline button-small" disabled={sending !== null} onClick={() => void sendDigest("daily")}><Send size={13} /> {sending === "daily" ? "Sending..." : "Send me today's digest"}</button>
+                  <button type="button" className="button button-outline button-small" disabled={sending !== null} onClick={() => void sendDigest("weekly")}><Send size={13} /> {sending === "weekly" ? "Sending..." : "Send me the weekly digest"}</button>
+                </div>
+                <small className="field-hint">The schedule applies when you save settings; the buttons send at once.</small>
               </fieldset>
               <fieldset className="user-privileges holiday-editor">
                 <legend><CalendarDays size={12} /> Business calendar · public holidays</legend>

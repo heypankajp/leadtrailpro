@@ -17,6 +17,8 @@ export type LeadDetail = {
   tasks: Task[];
   attachments: LeadAttachment[];
   audit: AuditEntry[];
+  /** Live messages on the lead (COLL-01), for the tab count. */
+  messageCount: number;
   permissions: { edit: boolean };
 };
 

@@ -4,8 +4,8 @@ import { getDatabasePool, affectedRows, fromSqlDateTime, insertId, toSqlDateTime
 import { HttpError } from "@/lib/http";
 import { recordAudit, diffRecords } from "@/features/audit/repository";
 import { isValidTimeOfDay } from "@/lib/dates";
-import { defaultAutoLogoutTime, effectivePrivileges, isPrivilege, isSystemRole, isUserStage } from "./model";
-import type { CreateUserInput, SystemRole, UpdateUserInput, UserAccount, UserPrivilege, UserStage, UserSummary } from "./model";
+import { defaultAutoLogoutTime, effectivePrivileges, hasPrivilege, isPrivilege, isSystemRole, isUserStage, parseNotificationPrefs } from "./model";
+import type { CreateUserInput, NotificationPrefs, SystemRole, UpdateUserInput, UserAccount, UserPrivilege, UserStage, UserSummary } from "./model";
 
 const scrypt = promisify(scryptCallback);
 
@@ -24,13 +24,14 @@ export type UserRow = {
   autoLogoutEnabled: number | boolean;
   autoLogoutTime: string | null;
   targetTemplateId: number | null;
+  notificationPrefs: unknown;
   createdAt: string;
 };
 
 export const userColumns = `
   u.id, u.first_name AS "firstName", u.last_name AS "lastName", u.email, u.phone, u.role, u.privileges, u.stage,
   u.is_active AS active, u.terminated_at AS "terminatedAt", u.two_factor_enabled AS "twoFactorEnabled",
-  u.auto_logout_enabled AS "autoLogoutEnabled", u.auto_logout_time AS "autoLogoutTime", u.target_template_id AS "targetTemplateId", u.created_at AS "createdAt"
+  u.auto_logout_enabled AS "autoLogoutEnabled", u.auto_logout_time AS "autoLogoutTime", u.target_template_id AS "targetTemplateId", u.notification_prefs AS "notificationPrefs", u.created_at AS "createdAt"
 `;
 
 function parsePrivileges(value: string[] | string): UserPrivilege[] {
@@ -62,6 +63,7 @@ export function toUser(row: UserRow): UserAccount {
     autoLogoutEnabled: Boolean(row.autoLogoutEnabled),
     autoLogoutTime: isValidTimeOfDay(row.autoLogoutTime) ? row.autoLogoutTime : defaultAutoLogoutTime,
     targetTemplateId: row.targetTemplateId === null ? null : Number(row.targetTemplateId),
+    notificationPrefs: parseNotificationPrefs(typeof row.notificationPrefs === "string" ? JSON.parse(row.notificationPrefs) : row.notificationPrefs),
     createdAt: fromSqlDateTime(row.createdAt) ?? row.createdAt,
   };
 }
@@ -91,6 +93,24 @@ export async function listDirectory(db: Queryable = getDatabasePool()): Promise<
     role: isSystemRole(row.role) ? row.role : "recruiter",
     active: Boolean(row.active),
   }));
+}
+
+export async function getUsersByIds(ids: number[], db: Queryable = getDatabasePool()): Promise<UserAccount[]> {
+  if (!ids.length) return [];
+  const { rows } = await db.query(`SELECT ${userColumns} FROM users u WHERE u.id IN (${ids.map(() => "?").join(",")})`, ids);
+  return (rows as UserRow[]).map(toUser);
+}
+
+/** Active users whose effective privileges include the given one (for example everyone who can review queued leads). */
+export async function listUsersWithPrivilege(privilege: UserPrivilege, db: Queryable = getDatabasePool()): Promise<UserAccount[]> {
+  return (await listUsers({}, db)).filter((user) => hasPrivilege(user, privilege));
+}
+
+export async function updateNotificationPrefs(userId: number, prefs: NotificationPrefs, db: Queryable = getDatabasePool()): Promise<UserAccount> {
+  await db.query("UPDATE users SET notification_prefs = ? WHERE id = ?", [JSON.stringify(prefs), userId]);
+  const user = await getUser(userId, db);
+  if (!user) throw new HttpError(404, "User not found.");
+  return user;
 }
 
 export async function countUsers(db: Queryable = getDatabasePool()): Promise<number> {

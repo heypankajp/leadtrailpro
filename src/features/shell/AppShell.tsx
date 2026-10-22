@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   AlertCircle, Activity, BriefcaseBusiness, Building2, Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, Clock3, Compass, FileText, Flame, KeyRound,
-  LayoutDashboard, ListTodo, LogOut, Map, Menu, PanelLeftClose, PanelLeftOpen, Search, Settings2, ShieldCheck, SlidersHorizontal, Target, TrendingUp, UsersRound,
+  BellRing, LayoutDashboard, ListTodo, LogOut, Map, Menu, PanelLeftClose, PanelLeftOpen, Search, Settings2, ShieldCheck, SlidersHorizontal, Target, TrendingUp, UsersRound,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAsyncData } from "@/lib/useAsyncData";
@@ -13,6 +13,8 @@ import { fetchLeads } from "@/features/leads/client";
 import LeadDetailDialog from "@/features/leads/LeadDetailDialog";
 import LeadFormDialog from "@/features/leads/LeadFormDialog";
 import LeadListPage, { leadListViews, type LeadListView } from "@/features/leads/LeadListPage";
+import NotificationsMenu from "@/features/notifications/NotificationsMenu";
+import PreferencesDialog from "@/features/notifications/PreferencesDialog";
 import AdminPage, { adminTabs, type AdminTab } from "@/features/admin/AdminPage";
 import LeadGenerationPage from "@/features/preview/LeadGenerationPage";
 import PlannerPage from "@/features/preview/PlannerPage";
@@ -79,6 +81,7 @@ export default function AppShell({ user, setUser, signOut }: { user: UserAccount
   const [activeLeadId, setActiveLeadId] = useState<number | null>(null);
   const [newLeadOpen, setNewLeadOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
+  const [prefsOpen, setPrefsOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -257,6 +260,7 @@ export default function AppShell({ user, setUser, signOut }: { user: UserAccount
                 <input className="global-search-input" aria-label="Search all leads" placeholder="Search leads..." value={search} onChange={(event) => setSearch(event.target.value)} />
               </form>
               <span className="topbar-divider" />
+              <NotificationsMenu />
               <div className="menu-anchor">
                 <button className="topbar-user" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>
                   <span className="profile-avatar">{user.firstName[0]}{user.lastName[0]}</span><ChevronDown size={14} />
@@ -265,6 +269,7 @@ export default function AppShell({ user, setUser, signOut }: { user: UserAccount
                   <div className="menu-dropdown" role="menu">
                     <div className="menu-heading"><strong>{user.name}</strong><small>{roleLabel(user.role)}</small></div>
                     <button role="menuitem" onClick={() => { setMenuOpen(false); setPasswordOpen(true); }}><KeyRound size={14} /> Change password</button>
+                    <button role="menuitem" onClick={() => { setMenuOpen(false); setPrefsOpen(true); }}><BellRing size={14} /> Notification preferences</button>
                     <button role="menuitem" onClick={() => void signOut()}><LogOut size={14} /> Sign out</button>
                   </div>
                 )}
@@ -299,6 +304,7 @@ export default function AppShell({ user, setUser, signOut }: { user: UserAccount
           />
         )}
         {passwordOpen && <ChangePasswordDialog onClose={() => setPasswordOpen(false)} />}
+        {prefsOpen && <PreferencesDialog onClose={() => setPrefsOpen(false)} />}
         {toast && (
           <div className={`toast-message ${toast.tone === "error" ? "toast-error" : ""}`} role="status">
             {toast.tone === "error" ? <AlertCircle size={16} /> : <Check size={16} />}{toast.message}

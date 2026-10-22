@@ -83,6 +83,17 @@ describe("Administration and reports", () => {
     await page.heading("Settings");
   });
 
+  uiTest("sends the daily digest on demand to the outbox and the bell", async () => {
+    await page.clickButton("Send me today's digest", { global: true });
+    await page.toast("Daily digest sent");
+    await page.wait(By.xpath(`//table[contains(@class,"outbox-table")]//tr[.//strong[starts-with(normalize-space(.), "Your daily SalesTrackPro digest")]]`));
+    const bell = await page.wait(By.css("button.notif-button"));
+    await driver.wait(async () => /\d+ unread/.test(await bell.getAttribute("aria-label")), 15000, "unread badge after the digest");
+    await bell.click();
+    await page.wait(By.xpath('//div[contains(@class,"notif-dropdown")]//strong[starts-with(normalize-space(.), "Daily digest:")]'));
+    await page.click(By.css("button.notif-button"), { global: true });
+  });
+
   uiTest("adds a holiday to the business calendar", async () => {
     const name = `Company holiday ${runId}`;
     const row = By.xpath(`//li[contains(@class,"holiday-row")][.//span[normalize-space()=${xq(name)}]]`);

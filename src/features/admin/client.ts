@@ -1,7 +1,7 @@
 import { api, toQuery } from "@/lib/api";
 import type { AuditEntry } from "@/features/audit/model";
 import type { ListKey, ListValue, ListValuesByKey } from "@/features/list-values/model";
-import type { AppSettings, Holiday, InactivityRule } from "@/features/settings/model";
+import type { AppSettings, DigestSettings, Holiday, InactivityRule } from "@/features/settings/model";
 import type { TargetTemplate, TargetTemplateInput } from "@/features/targets/model";
 import type { SystemRole } from "@/features/users/model";
 
@@ -17,7 +17,7 @@ export const assignTargetTemplate = (id: number, userIds: number[]) => api<{ ok:
 
 export type MailStatus = { provider: "stub" | "smtp" | "off"; outbox: { id: number; to: string; subject: string; status: "stubbed" | "sent" | "failed"; error: string | null; text: string | null; createdAt: string }[] };
 export const fetchSettings = () => api<{ settings: AppSettings; mailerConfigured: boolean; mail: MailStatus; timeZone: string }>("/api/settings");
-export const updateSettings = (changes: { roleLabels?: Partial<Record<SystemRole, string>>; reminders?: { inactivityDays: number; rules?: InactivityRule[] }; holidays?: Holiday[] }) =>
+export const updateSettings = (changes: { roleLabels?: Partial<Record<SystemRole, string>>; reminders?: { inactivityDays: number; rules?: InactivityRule[] }; digests?: DigestSettings; holidays?: Holiday[] }) =>
   api<{ settings: AppSettings }>("/api/settings", { method: "PATCH", json: changes });
 
 export const fetchAudit = (query: { entityType?: string; entityId?: number; actorId?: number; limit?: number } = {}) => api<{ entries: AuditEntry[] }>(`/api/audit${toQuery(query)}`);

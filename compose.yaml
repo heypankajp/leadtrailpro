@@ -45,11 +45,25 @@ services:
     environment:
       # Sample company data for the Sales Trip Planner; set TRIPS_PROVIDER= (empty) in .env to use the real providers.
       TRIPS_PROVIDER: ${TRIPS_PROVIDER:-stub}
+      # Shared secret between the app and the jobs service (override in .env).
+      JOBS_KEY: ${JOBS_KEY:-dev-jobs-key}
     ports:
       - "${APP_PORT:-3000}:3000"
     depends_on:
       db:
         condition: service_healthy
+
+  # Scheduler for the daily and weekly digests (TASK-06): asks the app every minute to run whatever is due.
+  jobs:
+    <<: *dev-image
+    init: true
+    environment:
+      JOBS_URL: http://app:3000
+      JOBS_KEY: ${JOBS_KEY:-dev-jobs-key}
+    depends_on:
+      app:
+        condition: service_started
+    command: ["node", "scripts/jobs.mjs"]
 
   # One-shot setup, run with `docker compose run --rm setup`. Uses the PostgreSQL
   # superuser to create or upgrade the schema and the restricted app role, then
@@ -101,6 +115,7 @@ services:
       BUSINESS_TIMEZONE: America/Toronto
       TRIPS_PROVIDER: stub
       MAIL_PROVIDER: stub
+      JOBS_KEY: e2e-jobs-key
       APP_URL: http://app-test:3000   # plain http inside the compose network: see session.ts cookie flags
     command: ["sh", "-c", "node scripts/create-database.mjs && exec node server.js"]
     healthcheck:

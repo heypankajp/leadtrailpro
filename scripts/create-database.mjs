@@ -507,6 +507,74 @@ const migrations = [
       await client.query("CREATE INDEX IF NOT EXISTS idx_mail_outbox_created ON mail_outbox (created_at)");
     },
   },
+  {
+    version: 7,
+    name: "in-app notifications, per-user notification preferences, digest schedule, and job runs (TASK-06, NTF-*)",
+    async run(client) {
+      await addColumnIfMissing(client, "users", "notification_prefs", "JSONB NOT NULL DEFAULT '{}'");
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS notifications (
+          id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          user_id INTEGER NOT NULL,
+          type VARCHAR(40) NOT NULL,
+          title VARCHAR(200) NOT NULL,
+          body TEXT NULL,
+          lead_id INTEGER NULL,
+          task_id BIGINT NULL,
+          read_at TIMESTAMP(0) NULL,
+          created_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW},
+          CONSTRAINT fk_notifications_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+          CONSTRAINT fk_notifications_lead FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE SET NULL,
+          CONSTRAINT fk_notifications_task FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL
+        )
+      `);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications (user_id, read_at, id)");
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS job_runs (
+          id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          job VARCHAR(40) NOT NULL,
+          period_key VARCHAR(40) NOT NULL,
+          status VARCHAR(10) NOT NULL CHECK (status IN ('running', 'success', 'partial', 'failed')),
+          details VARCHAR(500) NULL,
+          started_at TIMESTAMP(0) NOT NULL,
+          finished_at TIMESTAMP(0) NULL,
+          CONSTRAINT uq_job_runs UNIQUE (job, period_key)
+        )
+      `);
+      await client.query(
+        "INSERT INTO app_settings (setting_key, value_json) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        ["digests", JSON.stringify({ enabled: true, dailyTime: "07:30", weeklyDay: 1, weeklyTime: "07:30" })],
+      );
+    },
+  },
+  {
+    version: 8,
+    name: "lead collaboration messages: threads, quotes, mentions, file references, edits, and soft delete (COLL-*)",
+    async run(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS lead_messages (
+          id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          lead_id INTEGER NOT NULL,
+          parent_id BIGINT NULL,
+          author_id INTEGER NOT NULL,
+          body TEXT NOT NULL,
+          mentions JSONB NOT NULL DEFAULT '[]',
+          attachment_ids JSONB NOT NULL DEFAULT '[]',
+          quoted_message_id BIGINT NULL,
+          edited_at TIMESTAMP(0) NULL,
+          deleted_at TIMESTAMP(0) NULL,
+          deleted_by INTEGER NULL,
+          created_at TIMESTAMP(0) NOT NULL,
+          CONSTRAINT fk_lead_messages_lead FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE,
+          CONSTRAINT fk_lead_messages_parent FOREIGN KEY (parent_id) REFERENCES lead_messages(id) ON DELETE CASCADE,
+          CONSTRAINT fk_lead_messages_author FOREIGN KEY (author_id) REFERENCES users(id),
+          CONSTRAINT fk_lead_messages_quoted FOREIGN KEY (quoted_message_id) REFERENCES lead_messages(id) ON DELETE SET NULL
+        )
+      `);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_lead_messages_lead ON lead_messages (lead_id, id)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_lead_messages_parent ON lead_messages (parent_id)");
+    },
+  },
 ];
 
 if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port > 65535 || !/^[a-z_][a-z0-9_]*$/.test(databaseName)) {

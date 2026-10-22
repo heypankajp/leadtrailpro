@@ -12,6 +12,7 @@ import { useAsyncData } from "@/lib/useAsyncData";
 import { documentLabels, previewableMimeTypes, type LeadAttachment } from "@/features/attachments/model";
 import LeadEmails from "@/features/gmail/LeadEmails";
 import { reasonListFor, type ListKey, type ListValue } from "@/features/list-values/model";
+import CollaborationTab from "@/features/messages/CollaborationTab";
 import { useApp } from "@/features/shell/AppContext";
 import { Avatar, Dialog, EmptyState, ErrorText, Field, KeyValue, Loading, PromptDialog, StatusPill, Tabs } from "@/features/shell/components";
 import { createTask, updateTask } from "@/features/tasks/client";
@@ -24,7 +25,7 @@ import { attachmentUrl, fetchLead, logActivity, removeAttachment, reviewLead, se
 import LeadFormDialog from "./LeadFormDialog";
 import { activityLabels, type LeadActivity, type LoggableActivityType } from "./model";
 
-type Tab = "overview" | "timeline" | "emails" | "files" | "profiles" | "tasks" | "history";
+type Tab = "overview" | "timeline" | "collaboration" | "emails" | "files" | "profiles" | "tasks" | "history";
 
 const activityIcon = (type: LeadActivity["type"]) => {
   switch (type) {
@@ -151,6 +152,7 @@ export default function LeadDetailDialog({ leadId, onClose }: { leadId: number; 
           tabs={[
             { id: "overview", label: "Overview" },
             { id: "timeline", label: "Timeline", count: detail.activities.length },
+            { id: "collaboration", label: "Collaboration", count: detail.messageCount },
             { id: "emails", label: "Emails" },
             { id: "files", label: "Documents", count: documents.length },
             { id: "profiles", label: "Profiles shared", count: profiles.length },
@@ -169,6 +171,7 @@ export default function LeadDetailDialog({ leadId, onClose }: { leadId: number; 
           }} />
         )}
         {tab === "timeline" && <TimelineTab detail={detail} onLogged={(message) => refresh(message ?? "Activity recorded")} />}
+        {tab === "collaboration" && <CollaborationTab leadId={lead.id} attachments={detail.attachments} canPost={can("collaborate") && lead.recordState !== "archived"} onChanged={() => { reload(); bumpData(); }} />}
         {tab === "emails" && <LeadEmails leadId={lead.id} addresses={lead.clientEmails} />}
         {(tab === "files" || tab === "profiles") && (
           <FilesTab key={tab} category={tab === "files" ? "document" : "profile"} files={tab === "files" ? documents : profiles} leadId={lead.id} onChanged={(message) => refresh(message)} />

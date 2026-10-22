@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | Source | `Sales_Tracker_App_BRD_SRS.docx` v1.0 (October 13, 2026) and its updated PDF of October 19, 2026 (adds BRD §25, PRD §3.23), the change note `SalesTrackPro_Sales_Trip_Planner_Requirement_Change.docx` (October 21, 2026, local and untracked), and the current codebase |
-| SPEC version | 1.4 — October 22, 2026 (1.3 and 1.2: October 21, 2026; 1.1: October 18, 2026; 1.0: October 17, 2026) |
-| Changes in 1.4 | Opportunity Recommendation design sketch (§10.10) for the updated BRD's §25. Mail provider switch with a stub outbox (`MAIL_PROVIDER`, migration 6, §3.16, §6.2). Needs-attention rules per status / BD action (TASK-05: `reminders.rules`, §3.12, §7.9), report stage and template filters (RPT-05, §6.6), PDF exports with `pdfkit` (RPT-06, `src/lib/pdf.ts`, §6.6, §6.9), axe-core accessibility audit in the browser suite (NFR-07, §12) |
+| SPEC version | 1.5 — October 22, 2026 (1.4: October 22, 2026; 1.3 and 1.2: October 21, 2026; 1.1: October 18, 2026; 1.0: October 17, 2026) |
+| Changes in 1.4 | In-app notifications, preferences, digests, and the jobs scheduler (TASK-06, NTF-*: migration 7, §3.17–3.18, §6.10, §7.11, `scripts/jobs.mjs`, compose `jobs` service). Opportunity Recommendation design sketch (§10.10) for the updated BRD's §25. Mail provider switch with a stub outbox (`MAIL_PROVIDER`, migration 6, §3.16, §6.2). Needs-attention rules per status / BD action (TASK-05: `reminders.rules`, §3.12, §7.9), report stage and template filters (RPT-05, §6.6), PDF exports with `pdfkit` (RPT-06, `src/lib/pdf.ts`, §6.6, §6.9), axe-core accessibility audit in the browser suite (NFR-07, §12) |
 | Changes in 1.3 | Sales Trip Planner built (TRIP-01..11: migration 5, provider interface with stub and Google adapters, lead matching, trips API §6.9, screen A16, Excel export) and report Excel export (RPT-06). Lead status reasons implemented (LEAD-06/07: migration 4, `status_reason_id`, reason lists, status prompt, filters). PostgreSQL replaces MySQL: `pg` driver and `?`→`$n` query layer (§1, §2), PG* settings and `postgres:17` containers (§2), identity columns, JSONB, TIMESTAMP(0) UTC and the updated_at trigger (§3), SQLSTATE error mapping (§6) |
 | Changes in 1.2 | Sales Trip Planner design and screen A16 (§2.1, §8, §9, §10.8), lead status reasons (§3.5, §3.6, §3.13, §6.4, §7.1), legacy tracker import (§10.9) — from the change note of October 21, 2026 (PRD §3.22, LEAD-06/07) |
 | Changes in 1.1 | Docker packaging (§2.3), Selenium end-to-end suite (§12), Secure-cookie rule for plain-http deployments (§4, §11), `mysql2` kept external in the standalone build (§1) |
@@ -62,6 +62,7 @@ Next.js 16 (App Router) — route handlers under src/app/api/**            Node.
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GMAIL_TOKEN_KEY`, `GOOGLE_REDIRECT_URI` | for Gmail | OAuth client for Gmail linking (MAIL-01); the token key encrypts stored refresh tokens; redirect defaults to `APP_URL/api/gmail/callback`. Absent → the Emails tab reports "not configured" |
 | `MAPS_API_KEY` | for TRIP-* with live data | Google Geocoding, Places, and Distance Matrix calls (§10.8). Absent (and no stub) → the Sales Trip Planner reports "not configured" |
 | `JOBS_API_URL`, `JOBS_API_KEY` | for TRIP-06 with live data | Licensed job-listing aggregator behind the JSON contract in §10.8. Absent → the Hiring column is blank |
+| `JOBS_KEY` | for the scheduler | Shared secret that `scripts/jobs.mjs` (or an external cron) sends as `X-Jobs-Key` to `POST /api/jobs/run`; compose passes `${JOBS_KEY:-dev-jobs-key}` to both the app and the `jobs` service |
 | `TRIPS_PROVIDER` | development, tests | `stub` serves the in-repo sample companies (the Docker dev stack and the end-to-end suite set it); empty selects the Google adapter |
 
 `.env.setup.local` (administrator credentials as `PGHOST`/`PGPORT`/`PGUSER`/`PGPASSWORD`, optional `PGAPPUSER` and `PGDATABASE`) is used only by the setup scripts and never by the app. In Docker the `setup` service passes the same variables as environment and does not need the file. Trip-planner keys (`MAPS_API_KEY`, `JOBS_API_URL`, `JOBS_API_KEY`) are written as blank placeholders.
@@ -75,6 +76,7 @@ Next.js 16 (App Router) — route handlers under src/app/api/**            Node.
 | `npm run db:seed` | `scripts/seed-sample-data.mjs` | Requires an administrator. Creates demo users (two Sales Managers, one Recruiter, password `SalesTrackPro-demo-2026`), eleven leads across states and statuses (including one Lost Lead – Pricing and one archived Disqualified – Not Interested), activities, tasks. No-op when leads exist. |
 | `npm run dev` / `build` / `start` | Next.js | Development server / production build / production server |
 | `npm run lint` / `typecheck` | ESLint (next/core-web-vitals + typescript + react-hooks) / `tsc --noEmit` | |
+| `npm run jobs` | `scripts/jobs.mjs` | Scheduler: every `JOBS_INTERVAL_SECONDS` (60) it POSTs to `JOBS_URL/api/jobs/run` with `JOBS_KEY`; the app runs whatever digest is due, once per period |
 | `npm run test:e2e` | `tests/e2e/*.test.mjs` | Selenium suite via `node --test` (sequential, 120 s per test). Targets `E2E_BASE_URL` (default `http://app-test:3000`) and `E2E_SELENIUM_URL` (default `http://selenium:4444`). |
 | `scripts/e2e.sh [files]` | compose profile `test` | Recreates the throwaway test database, builds the production image and the dev image, runs the suite, removes the test containers. Finds the Docker Desktop CLI on macOS when `docker` is not on PATH. |
 | `scripts/docker-entrypoint.sh` | dev container | Runs `npm ci` into the `node_modules` volume when `package-lock.json` differs from the installed stamp, then execs the command. |
@@ -87,6 +89,7 @@ Next.js 16 (App Router) — route handlers under src/app/api/**            Node.
 |---|---|---|
 | `db` | `postgres:17-alpine` | Development database, volume `postgres_data`, published on `127.0.0.1:${DB_PORT:-5433}`, superuser `postgres` with password `${POSTGRES_PASSWORD:-salestrackpro}`; the healthcheck uses `pg_isready -h 127.0.0.1` so it only passes once first-run initialisation is complete |
 | `app` | `salestrackpro-dev` (target `dev`) | Dev server on `${APP_PORT:-3000}`; volumes `node_modules` and `next_cache` shadow the host directories |
+| `jobs` | `salestrackpro-dev` (prod: `salestrackpro` runner) | Runs `scripts/jobs.mjs` against `http://app:3000` with the shared `JOBS_KEY` |
 | `setup` (profile `setup`) | `salestrackpro-dev` | One shot: `create-database.mjs` + `create-app-user.mjs` as `postgres`; writes `.env.local` with `PGHOST=db` into the bind mount |
 | `db-test` (profile `test`) | `postgres:17-alpine` | Throwaway database on tmpfs, password `test`, not published |
 | `app-test` (profile `test`) | `salestrackpro` (target `runner`) | Applies migrations then serves the production build; `APP_URL=http://app-test:3000`, `USER_MANAGEMENT_KEY=e2e-user-management-key`; healthcheck on `/api/auth/session` |
@@ -200,7 +203,7 @@ setting_key PK · value_json. Keys: `role_labels` `{admin, sales_manager, recrui
 
 ### 3.13 `schema_migrations`
 
-version PK · name · applied_at. Versions: 1 core schema; 2 `users.auto_logout_time` and the `business_calendar` setting; 3 `gmail_connections`; 4 status reasons (LEAD-06: `leads.status_reason_id`, the `lost_reason` and `disqualified_reason` lists, the `lost` and `disqualified` status rows); 5 sales trips (`business_type` list, `sales_trips`, `sales_trip_results`, §3.15); 6 `mail_outbox` (§3.16).
+version PK · name · applied_at. Versions: 7 notifications, `users.notification_prefs`, `job_runs`, and the `digests` setting (§3.17–3.18); 1 core schema; 2 `users.auto_logout_time` and the `business_calendar` setting; 3 `gmail_connections`; 4 status reasons (LEAD-06: `leads.status_reason_id`, the `lost_reason` and `disqualified_reason` lists, the `lost` and `disqualified` status rows); 5 sales trips (`business_type` list, `sales_trips`, `sales_trip_results`, §3.15); 6 `mail_outbox` (§3.16).
 
 ### 3.14 `gmail_connections` (MAIL-01)
 
@@ -215,6 +218,18 @@ user_id PK FK → users (CASCADE) · google_email VARCHAR(254) · refresh_token_
 ### 3.16 `mail_outbox` (MAIL_PROVIDER, migration 6)
 
 id BIGINT · to_address · subject · status `stubbed` | `sent` | `failed` (CHECK) · error VARCHAR(500) NULL · text_body TEXT NULL (only for stubbed messages) · created_at. Every `sendMail` call records a row (the newest 500 are kept); a missing table never breaks the caller. Administrators see the latest 20 under Settings → Email delivery.
+
+### 3.17 `notifications` (NTF-01/02, migration 7)
+
+id BIGINT · user_id FK (CASCADE) · type (`task_assigned`, `task_updated`, `task_completed`, `lead_status`, `lead_transferred`, `queued_lead`, `queued_reviewed`, `file_uploaded`, `mention`, `message`, `daily_digest`, `weekly_digest`) · title VARCHAR(200) · body TEXT NULL · lead_id FK NULL (SET NULL) · task_id FK NULL (SET NULL) · read_at NULL · created_at. Index (user_id, read_at, id). `users.notification_prefs` JSONB `{dailyDigest, weeklyDigest, emailEvents}` (NTF-05; defaults true, true, false).
+
+### 3.18 `job_runs` (TASK-06)
+
+id · job (`daily` | `weekly`) · period_key (the business date, `week-<Monday>`, or `manual-<instant>-<actor>`) · status `running` | `success` | `partial` | `failed` · details · started_at · finished_at. UNIQUE (job, period_key) is the lock that makes a digest run once per period however many schedulers call in. The `digests` setting (`{enabled, dailyTime, weeklyDay, weeklyTime}`) lives in app_settings.
+
+### 3.19 `lead_messages` (COLL-*, migration 8)
+
+id BIGINT · lead_id FK (CASCADE) · parent_id FK self NULL (CASCADE; replies are kept one level deep, a reply to a reply is attached to the root) · author_id FK users · body TEXT (the rich-text format of §7.12, stored as written) · mentions JSONB (`[{kind: all|admin|recruiter|salesmanager} | {kind: user, userId, name}]`, parsed on save) · attachment_ids JSONB (ids of `lead_attachments` on the same lead, COLL-06) · quoted_message_id FK self NULL (SET NULL) · edited_at NULL · deleted_at NULL · deleted_by FK users NULL · created_at. Indexes (lead_id, id) and (parent_id). A removed message keeps its row and text (the API blanks the body, mentions, and attachments and reports who removed it); the audit entry `message.deleted` carries the original text.
 
 ---
 
@@ -248,6 +263,8 @@ id BIGINT · to_address · subject · status `stubbed` | `sent` | `failed` (CHEC
 | archive_leads | ✓ | | | Archive/restore, bulk (SRCH-04) |
 | review_queued | ✓ | | | Approve/reject; historical dates save directly (QUE-*) |
 | add_notes | ✓ | ✓ | ✓ | NOTE-02 |
+| collaborate | ✓ | ✓ | ✓ | Post, reply, quote, and edit own messages on leads (COLL-01..03, COLL-06) |
+| moderate_messages | ✓ | | | Remove (soft-delete) any message with audit (COLL-04) |
 | log_activities | ✓ | ✓ | | Calls, emails, visits |
 | manage_tasks | ✓ | ✓ | | Create; update own/assigned tasks |
 | plan_trips | ✓ | ✓ | | Sales Trip Planner: create and re-run trips, shortlist, plan visits, listings, export (TRIP-*) |
@@ -383,6 +400,28 @@ All need `plan_trips`. A trip is visible to its owner and to anyone with `view_t
 
 Audit actions: `trip.created`, `trip.run`, `trip.shortlisted`, `trip.visit_planned` (entity type `sales_trip`).
 
+### 6.10 Notifications, preferences, and jobs (NTF-*, TASK-06)
+
+| Method & path | Auth | Request → response |
+|---|---|---|
+| `GET /api/notifications?limit=&unread=1` | session | `{ notifications (newest first), unread }` for the signed-in user |
+| `PATCH /api/notifications` | session | `{ ids?: number[], all?: true }` → marks read → `{ unread }` |
+| `PATCH /api/auth/preferences` | session | `{ dailyDigest, weeklyDigest, emailEvents }` → `{ user }`; audited as `user.preferences_updated` |
+| `POST /api/jobs/run` | `X-Jobs-Key` header, or an administrator session | With the key: runs every digest that is due (`{ force?: true, job? }` forces one). With a session: `{ job: daily\|weekly, force: true, onlyMe?: true }` sends that digest to the caller (or everyone when `onlyMe: false`). → `{ ran: [{ job, periodKey, recipients, failures }], settings }`; 403 otherwise |
+
+Digest runs are audited as `digest.daily` / `digest.weekly` (entity type `job`).
+
+### 6.11 Collaboration messages (COLL-*)
+
+| Method & path | Auth | Request → response |
+|---|---|---|
+| `GET /api/leads/{id}/messages` | view_leads | `{ threads: [{ root, replies[] }] }`, newest thread first, replies oldest first; removed messages appear with an empty body, `deletedAt`, and `deletedByName` |
+| `POST /api/leads/{id}/messages` | collaborate, same origin | `{ body, parentId?, quotedMessageId?, attachmentIds? }` → 201 `{ message }`; 400 when the body is empty or over 10,000 characters, when the thread or quoted message belongs to another lead; attachment ids not on the lead are dropped; audited as `message.posted`; an archived lead rejects posts in the client |
+| `PATCH /api/messages/{id}` | collaborate (author only), same origin | `{ body }` → `{ message }` with `editedAt`; 403 for another author; 400 for a removed message; audited as `message.edited` (before and after excerpts); newly mentioned people are notified |
+| `DELETE /api/messages/{id}` | moderate_messages, same origin | → `{ message }` marked removed; idempotent; audited as `message.deleted` with the author and full text |
+
+Each message carries `authorName`, `authorRole`, `mentions`, `attachments` (`id`, `fileName`, `label`; download through `/api/attachments/{id}`), `quoted` (`id`, `authorName`, `excerpt`, or "(message removed)"), `editedAt`, `deletedAt`, `deletedByName`, `createdAt`. The lead 360 response (`GET /api/leads/{id}`) adds `messageCount` (live messages) for the tab label.
+
 ---
 
 ## 7. Domain logic
@@ -436,6 +475,22 @@ Calls/emails/visits = counts of user-logged activities by type for this week and
 
 ---
 
+### 7.11 Notifications and digests (NTF-*, TASK-06)
+
+`notifyUsers(db, { userIds, actorId, type, title, body, leadId, taskId })` inserts one row per target inside the caller's transaction, never notifies the actor about their own action, and emails targets whose `emailEvents` preference is on when a mail provider is configured (failures are logged, never thrown). Producers: `createTask`/`updateTask` (assignee; creator on completion by someone else), `updateLead` (owner, on status or reason change), `transferLead` (both owners), `createLead` when queued (everyone with `review_queued`), `reviewQueuedLead` (creator and owner), `uploadAttachment` (owner).
+
+`runDigestJobs` (`features/notifications/digests.ts`): for each job that `isDigestDue` says is due (business time zone; weekly only on `weeklyDay`), claim `(job, period_key)` in `job_runs`, then for every active non-recruiter user who has not opted out build the digest from `buildDashboard(user, "mine")` and `performanceReport` (yesterday for the daily digest, last week for the weekly one, plus the team report for `view_team_reports`), store it as a notification, and email it. A forced run uses a unique manual period key and may target only the caller. The client polls `GET /api/notifications` every 60 s and after every data change.
+
+### 7.12 Collaboration threads, mentions, and rich text (COLL-*, NOTE-03)
+
+**Rich text** (`lib/richtext.ts`): a Markdown-like subset parsed into blocks (paragraphs, bulleted lists from `-`, `*`, or `•`, numbered lists from `1.` or `1)`) and inline nodes (`**bold**`, `_italic_` or `*italic*` at word boundaries, `[text](https://…)` links, bare `http(s)://` URLs with trailing punctuation left out). Only `http`, `https`, and `mailto` targets become links; anything else stays text. `RichText` (shell) renders the tree as React elements, so user input never reaches the page as HTML. `richTextToPlain` feeds quotes, notification bodies, and emails. The composer toolbar wraps the selection or prefixes lines; it never produces HTML.
+
+**Mentions** (`features/messages/model.ts`): `parseMentions` finds the four groups (`@all`, `@admin`, `@recruiter`, `@salesmanager`, case-insensitive, not inside email addresses) and any active directory name written as `@First Last` (longest name first, so "Sam Sellers" is not read as "Sam Seller"); the result is stored with the message. `mentionRecipients` expands groups to active users by system role. The composer offers suggestions while typing after `@` (keyboard: arrows, Enter or Tab, Escape).
+
+**Notifications**: posting notifies mentioned people (`mention`: "A mentioned you on Lead") and then the lead owner plus every other author in the thread (`message`: "A posted/replied on Lead"), never the actor and never twice. Editing notifies only people newly mentioned. Removal notifies nobody; the audit entry carries the text.
+
+**Live updates (COLL-05)**: the tab refetches the thread list every 20 s and after every change; presence and typing indicators are deferred (PRD open question 15).
+
 ### 7.10 Natural-language dates (TASK-03, NOTE-05)
 
 `src/lib/natural-dates.ts` is a dependency-free parser shared by the browser (live preview) and `tests/unit`. `parseNaturalDate(text, { anchor, holidays })` finds the earliest date phrase (a phrase inside a longer one, such as "Feb" inside "Feb 1", is ignored) and resolves it against the anchor calendar date: relative words (today, tomorrow, day after tomorrow, next week/month/quarter/year, end of week/month/year), weekday names, periods ("in two weeks", "six months", "3 business days"), month names alone (first working day of the next such month, year included when given), and explicit dates in several spellings (`Feb 1`, `1st of February 2027`, `Feb/01/2027`, `02/01/2027` month first, `2027-02-01`). Working day = Monday to Friday minus the `business_calendar` holidays. Relative results and month names roll forward to the next working day and report `adjusted`; weekday names move only when they hit a holiday; explicit dates are kept as written. A time of day (`at 10am`, `3:30 pm`, `at 3` = 15:00, `14:45`, noon, morning 09:00, afternoon 14:00, evening 17:00, end of day 17:00) is read from the remaining text.
@@ -459,14 +514,16 @@ Client use: `features/tasks/NaturalDateField` shows "Understood “…” as <da
 | `features/auth` | `AuthScreen`, `ChangePasswordDialog` |
 | `features/dashboard` | `ActionCenter` |
 | `features/gmail` | `LeadEmails` (Emails tab: configuration note, connect/disconnect, recent messages), `client.ts`, server `gmail.ts` (OAuth exchange, token encryption, Gmail search) |
-| `features/leads` | `LeadListPage` (toolbar with status and reason filters, filters panel, bulk bar, pagination), `LeadTable`, `LeadFormDialog` (all fields; reason select for closed statuses), `LeadDetailDialog` (Overview, Timeline, Emails, Documents, Profiles shared, Tasks, Audit tabs; transfer, archive/restore, approve/reject, schedule follow-up, quick BD action/response/status updates, `StatusReasonDialog` for Lost Lead and Disqualified, inline reason select) |
+| `features/leads` | `LeadListPage` (toolbar with status and reason filters, filters panel, bulk bar, pagination), `LeadTable`, `LeadFormDialog` (all fields; reason select for closed statuses), `LeadDetailDialog` (Overview, Timeline, Collaboration, Emails, Documents, Profiles shared, Tasks, Audit tabs; transfer, archive/restore, approve/reject, schedule follow-up, quick BD action/response/status updates, `StatusReasonDialog` for Lost Lead and Disqualified, inline reason select) |
 | `features/tasks` | `TasksPage` (Overdue / Today / Upcoming / Done columns, mine/team), `TaskFormDialog` (lead search, assignee, typed or picked due date, priority, checklist), `NaturalDateField` (TASK-03 preview) |
 | `features/reports` | `ReportsPage` (period chips, person, stage, and template filters, stat tiles, daily stacked bars, performance table with drill-down dialog, Excel and PDF export links via `/api/reports/export`, CSV export) |
-| `features/admin` | `AdminPage` router, `UsersPanel` (+ `UserFormDialog`, password dialog, terminate dialog, login history), `ListValuesPanel`, `TargetsPanel`, `SettingsPanel` (role names, reminder days and needs-attention rules, business-calendar holidays, email delivery mode and outbox), device placeholder |
+| `features/admin` | `AdminPage` router, `UsersPanel` (+ `UserFormDialog`, password dialog, terminate dialog, login history), `ListValuesPanel`, `TargetsPanel`, `SettingsPanel` (role names, reminder days and needs-attention rules, digest schedule with send-now buttons, business-calendar holidays, email delivery mode and outbox), device placeholder |
 | `features/users` | `UserDirectoryDialog` (person picker) |
+| `features/notifications` | `NotificationsMenu` (top-bar bell: unread badge, dropdown, mark read, open lead or task, expand digests), `PreferencesDialog` (profile menu → Notification preferences), `digests.ts`, `repository.ts`, `model.ts` |
+| `features/messages` | `CollaborationTab` (composer with formatting toolbar, @mention picker, file references; threads with Reply, Quote, Edit, Remove), `client.ts`, server `repository.ts` (threads, post, edit, remove, notifications, audit), `model.ts` (input validation, mention parsing and recipients) |
 | `features/preview` | `LeadGenerationPage`, `PlannerPage` (labelled previews) |
 | `features/trips` | `TripsPage` (new-trip form with the six criteria of TRIP-01, list of trips), `TripResultsPage` (sortable columns, Action filter, Show selector for all / shortlisted / planned visits, shortlist checkboxes, planned-visit dates, job-listings dialog, Excel export link, print), `matching.ts` (TRIP-07 rules), `providers/` (`types`, `stub`, `google`, selector) |
-| `features/shell` | `App`, `AppShell`, `AppContext`, shared `Dialog`, `Tabs`, `Field`, `Pagination`, `PromptDialog`, `Avatar`, `StatusPill`, `EmptyState` |
+| `features/shell` | `App`, `AppShell`, `AppContext`, shared `Dialog`, `Tabs`, `Field`, `Pagination`, `PromptDialog`, `Avatar`, `StatusPill`, `EmptyState`, `RichText` (NOTE-03 renderer) |
 
 ### 8.3 Styling
 
@@ -542,7 +599,7 @@ As built columns: select, Client (name, executive, city), Status, Last BD action
 ```
 As built: all fields in a two-column dialog; owner selector for admins on create; historical-date hint. Notes, files, and profiles are on the lead detail (A5); voice and OCR are planned.
 
-### A5. Lead Detail / 360° View — implemented (AI summary, Email, Collaboration tabs planned)
+### A5. Lead Detail / 360° View — implemented (AI summary and stored email threads planned)
 
 ```
 | ACME CO  [Hot] [Owner: Sara] [Transfer]      |
@@ -552,7 +609,7 @@ As built: all fields in a two-column dialog; owner selector for admins on create
 | Latest interactions (newest first)            |
 | [Add Note] [Mic] [Message @user/@all...]      |
 ```
-As built tabs: Overview, Timeline (log call/email/visit, add note), Emails (Gmail, A6), Documents, Profiles shared, Tasks, Audit (admins). Header actions: Edit, Transfer, Approve/Reject, Archive/Restore; status select in the header.
+As built tabs: Overview, Timeline (log call/email/visit, add note), Collaboration (A7, §7.12), Emails (Gmail, A6), Documents, Profiles shared, Tasks, Audit (admins). Header actions: Edit, Transfer, Approve/Reject, Archive/Restore; status select in the header.
 
 ### A6. Gmail / Email Tab — partial: recent messages through a connected Gmail account (see §6.8 and §10.2)
 
@@ -570,7 +627,7 @@ As built tabs: Overview, Timeline (log call/email/visit, add note), Emails (Gmai
 +---------------------------------------------------------------------+
 ```
 
-### A7. Collaboration / Tasks — tasks implemented, collaboration planned (§10.3)
+### A7. Collaboration / Tasks — implemented (presence and typing indicators planned, §10.3)
 
 ```
 +---------------------------------------------------------------------+
@@ -584,7 +641,7 @@ As built tabs: Overview, Timeline (log call/email/visit, add note), Emails (Gmai
 | Checklist: □ Call HR  □ Send profiles  □ Update lead                |
 +---------------------------------------------------------------------+
 ```
-As built: the Tasks page (Overdue / Today / Upcoming / Done) and the Tasks tab on a lead implement the lower half, including assignee, due date and time, priority, and checklist.
+As built: the Collaboration tab on a lead implements the upper half (threads, replies, quotes, own edits, Admin removal, @mentions with a picker, rich text, file references; §6.11, §7.12). The Tasks page (Overdue / Today / Upcoming / Done) and the Tasks tab on a lead implement the lower half, including assignee, due date and time, priority, and checklist.
 
 ### A8. Lead Generation — preview page (planned, §10.4)
 
@@ -715,8 +772,8 @@ As built (first cut, §6.8): per-user read-only Gmail link with the refresh toke
 
 Target design: per-user mailbox authorization (Gmail API `readonly` + `send` scopes) with refresh tokens in `mailbox_connections`. A background sync (cron or queue) pulls messages whose participants match a lead's `client_emails` and stores headers/bodies in `lead_emails` (lead_id, message_id, thread_id, direction, from, to, subject, snippet, body, sent_at) and attachments metadata. Ownership change switches the mailbox used for future association; history stays. The Email tab renders threads; reply/forward call the Gmail send API. AI summaries (email and interaction) are generated by an LLM over the thread and timeline, cached in `lead_summaries` with a hash of the inputs and refreshed when inputs change.
 
-### 10.3 Collaboration and notifications (COLL-*, NTF-*)
-`lead_messages` (lead_id, parent_id, author_id, body_rich, edited_at, deleted_at) with mention parsing into `message_mentions`. A `notifications` table (user_id, type, entity, read_at) fed by the same events that already write `audit_log`; delivery workers send email (existing mailer) and push (FCM/APNs) by preference. Real-time via Server-Sent Events from `/api/events` (presence and typing use short-lived rows keyed by lead).
+### 10.3 Collaboration and notifications (COLL-*, NTF-*) — mostly as built
+Threads, mentions, notifications, and the mailer are built (§3.17, §3.19, §6.10, §6.11, §7.11, §7.12). Remaining: push delivery (FCM/APNs) from the native app, and real-time presence and typing indicators through Server-Sent Events from `/api/events` with short-lived rows keyed by lead (PRD open question 15).
 
 ### 10.4 Lead generation (LGEN-*)
 A `lead_generation_results` table (user_id, company, url, radius_km, payload JSON, created_at). Providers behind an interface: job sources (Indeed API or careers-page scraping where permitted), review sources (Google Places), company data, and an LLM for the approach and introduction email. Results convert to leads via the existing `POST /api/leads`.
@@ -728,7 +785,7 @@ A `lead_generation_results` table (user_id, company, url, radius_km, payload JSO
 `devices` (id, user_id, identifier, type, label, first_seen, last_seen, status) with the identifier coming from an MDM/managed-browser header or a native app. Login records the device; a policy flag per user refuses unknown devices. Admin screen A12 manages status.
 
 ### 10.7 Rich text, voice, OCR (NOTE-03, NOTE-04, OCR-*)
-Store notes as sanitized HTML from a constrained editor (bold, italic, lists, links). Voice via the Web Speech API on desktop/Android and native dictation on iOS, editable before save; the transcript feeds the same follow-up suggestion as typed notes (§7.10). OCR via a vision API with a review form before populating the lead.
+Rich text exists for collaboration messages (§7.12); timeline notes can adopt the same format and `RichText` renderer once the client confirms (the existing plain-text notes render unchanged because plain text parses to paragraphs). Voice via the Web Speech API on desktop/Android and native dictation on iOS, editable before save; the transcript feeds the same follow-up suggestion as typed notes (§7.10). OCR via a vision API with a review form before populating the lead.
 
 ### 10.8 Sales Trip Planner (TRIP-*, change note of October 21, 2026) — as built
 
@@ -781,8 +838,10 @@ The client's current system of record is a Google Sheets workbook (`Sales Leads 
 - Unit tests (`tests/unit`, `node:test` on Node 22 type stripping, `npm run test:unit`): the natural-language date parser (working days, relative phrases, weekday names, periods, month names, explicit spellings, times of day), the note follow-up suggestion rules, the status-reason helpers, the trip matching rules, and the needs-attention rule precedence.
 - End-to-end API suite (kept outside the repo during development) covers: first-run setup, bootstrap key lock-out, login and origin checks, seeding, reference data, role permissions for every mutating endpoint, queued review, edit/transfer rules, activities, lead 360 and audit visibility, tasks and checklists, uploads with versioning and type rejection, downloads, soft delete, dashboard, team and own reports, all periods, drill-down, list-value rename propagation and inactive-value rejection, settings, templates and assignment, user updates with extra privileges, bulk archive/restore/reassign, login history, admin and self password changes, SMTP-missing responses, termination cascade and session revocation, last-admin guard, audit action coverage, rate limiting, sign-out.
 - Browser end-to-end suite (`tests/e2e`, Selenium + `node:test`, run with `scripts/e2e.sh` against a production build, an in-memory PostgreSQL, and a Chromium grid in Docker): first-time setup, sign-in, password change, a reset request accepted in stub mail mode, lead life cycle (create, BD action, timeline, note that offers a follow-up task, Emails tab without Gmail configured, follow-up task, document upload, edit, status, search, archive/restore), tasks (including a due date typed in words), user creation, a per-account sign-out time ending an older session, role-limited navigation, queued-lead approval, transfer, termination hand-off, list of values, settings, business-calendar holiday, target templates, report drill-down.
+- Notifications and digests (TASK-06, NTF-*): `tests/unit/digests.test.mjs` covers the due-time and weekday rules; `04-team.test.mjs` assigns a task to the new Sales Manager and checks the bell, the dropdown entry, and Mark all read; `05-admin-reports.test.mjs` sends the daily digest on demand and finds it in the outbox and the bell.
 - Stub mail (MAIL_PROVIDER): `05-admin-reports.test.mjs` emails a set-password link from User management, opens it from the outbox under Settings, and completes the reset; the e2e stack runs with `MAIL_PROVIDER=stub`.
 - Needs-attention rules (TASK-05): `tests/unit/inactivity-rules.test.mjs` covers rule precedence and validation; `05-admin-reports.test.mjs` adds a rule, reloads, and checks the Action Center heading; the same file filters the report by stage and fetches the PDF and Excel exports.
 - Accessibility (NFR-07): `tests/e2e/07-accessibility.test.mjs` runs axe-core (WCAG 2.0/2.1 A and AA) on the sign-in screen, Action Center, lead dialog and timeline, lead list, tasks, reports, settings, list of values, user management, and the trip planner; serious or critical violations fail the test, lesser ones are printed.
 - Status reasons (LEAD-06): `tests/unit/status-reasons.test.mjs` covers the reason-list mapping and the combined label; `02-leads.test.mjs` sets Disqualified with a reason from the lead header, checks the inline reason select and the timeline entry, and returns the lead to Warm.
+- Collaboration (COLL-*, NOTE-03): `tests/unit/richtext.test.mjs` covers the inline and block parser, unsafe links, and the plain-text form; `tests/unit/messages.test.mjs` covers mention parsing, group expansion, and input validation; `02-leads.test.mjs` posts a message with bold, a list, and an @admin mention picked from the suggestions, replies with a quote, edits the reply, removes it as an administrator, and checks the tab count; `04-team.test.mjs` mentions the Sales Manager on a transferred lead and finds the mention in their bell; `07-accessibility.test.mjs` audits the Collaboration tab.
 - Sales Trip Planner: `tests/unit/trip-matching.test.mjs` covers the matching rules; `06-trips.test.mjs` plans a trip on the stub provider, checks the recognised lead, the job listings, shortlist and planned visit, filters, the Excel export, and the trip list.

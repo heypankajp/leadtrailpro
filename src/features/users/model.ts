@@ -27,6 +27,8 @@ export const userPrivileges = [
   { id: "archive_leads", label: "Archive and restore leads" },
   { id: "review_queued", label: "Approve or reject queued leads" },
   { id: "add_notes", label: "Add interaction notes" },
+  { id: "collaborate", label: "Post collaboration messages" },
+  { id: "moderate_messages", label: "Remove collaboration messages" },
   { id: "log_activities", label: "Log calls, emails and visits" },
   { id: "manage_tasks", label: "Create and update tasks" },
   { id: "plan_trips", label: "Plan sales trips" },
@@ -47,10 +49,10 @@ export const allPrivileges = userPrivileges.map((privilege) => privilege.id) as 
 export const rolePrivileges: Record<SystemRole, UserPrivilege[]> = {
   admin: allPrivileges,
   sales_manager: [
-    "view_leads", "create_leads", "edit_leads", "transfer_leads", "add_notes", "log_activities",
+    "view_leads", "create_leads", "edit_leads", "transfer_leads", "add_notes", "collaborate", "log_activities",
     "manage_tasks", "plan_trips", "upload_files", "view_reports",
   ],
-  recruiter: ["view_leads", "add_notes"],
+  recruiter: ["view_leads", "add_notes", "collaborate"],
 };
 
 export function isPrivilege(value: unknown): value is UserPrivilege {
@@ -93,10 +95,21 @@ export type UserAccount = {
   /** Daily sign-out time (`HH:MM` in the business timezone) applied when autoLogoutEnabled is on. */
   autoLogoutTime: string;
   targetTemplateId: number | null;
+  notificationPrefs: NotificationPrefs;
   createdAt: string;
 };
 
 export const defaultAutoLogoutTime = "23:00";
+
+/** NTF-05: per-account notification preferences. Digests are opt-out; emailing individual events is opt-in. */
+export type NotificationPrefs = { dailyDigest: boolean; weeklyDigest: boolean; emailEvents: boolean };
+export const defaultNotificationPrefs: NotificationPrefs = { dailyDigest: true, weeklyDigest: true, emailEvents: false };
+
+export function parseNotificationPrefs(value: unknown): NotificationPrefs {
+  const record = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const flag = (key: keyof NotificationPrefs) => (typeof record[key] === "boolean" ? (record[key] as boolean) : defaultNotificationPrefs[key]);
+  return { dailyDigest: flag("dailyDigest"), weeklyDigest: flag("weeklyDigest"), emailEvents: flag("emailEvents") };
+}
 
 /** Compact user for owner and assignee selectors. */
 export type UserSummary = { id: number; name: string; role: SystemRole; active: boolean };

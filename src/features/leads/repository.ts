@@ -4,7 +4,8 @@ import { HttpError } from "@/lib/http";
 import { recordAudit, diffRecords } from "@/features/audit/repository";
 import { reasonListFor, statusLabel } from "@/features/list-values/model";
 import { assertListValue, getListValue } from "@/features/list-values/repository";
-import { getUser } from "@/features/users/repository";
+import { notifyUsers } from "@/features/notifications/repository";
+import { getUser, listUsersWithPrivilege } from "@/features/users/repository";
 import { hasPrivilege } from "@/features/users/model";
 import type { UserAccount } from "@/features/users/model";
 import { activityTypes } from "./model";
@@ -324,6 +325,10 @@ export async function createLead(input: LeadInput, actor: UserAccount, ownerId: 
       if (action) await addActivity(connection, { leadId: id, userId: actor.id, type: "bd_action", summary: action.value, valueCode: action.code, occurredAt: now });
     }
     await recordAudit(connection, { actorId: actor.id, action: queued ? "lead.queued" : "lead.created", entityType: "lead", entityId: id, after: leadAuditView(lead), details: `${actor.name} created ${lead.clientName}` }, now);
+    if (queued) {
+      const reviewers = await listUsersWithPrivilege("review_queued", connection);
+      await notifyUsers(connection, { userIds: reviewers.map((user) => user.id), actorId: actor.id, type: "queued_lead", title: `Queued lead awaiting approval: ${lead.clientName}`, body: `${actor.name} created it with first contact on ${input.firstContactDate}.`, leadId: id });
+    }
     return lead;
   });
 }
@@ -393,6 +398,9 @@ export async function updateLead(id: number, changes: Partial<LeadInput>, actor:
       await addActivity(connection, { leadId: id, userId: actor.id, type: "edit", summary: `Updated ${otherChanges.join(", ")}`, occurredAt: now });
     }
     await recordAudit(connection, { actorId: actor.id, action: "lead.updated", entityType: "lead", entityId: id, before: diff.before, after: diff.after, details: `${actor.name} updated ${diff.changed.join(", ")} on ${updated.clientName}` }, now);
+    if (updated.statusId !== existing.statusId || updated.statusReasonId !== existing.statusReasonId) {
+      await notifyUsers(connection, { userIds: [updated.ownerId], actorId: actor.id, type: "lead_status", title: `${updated.clientName} is now ${updated.statusLabel}`, body: `${actor.name} changed the status from ${existing.statusLabel}.`, leadId: id });
+    }
     return (await getLead(id, connection))!;
   });
 }
@@ -421,6 +429,7 @@ export async function transferLead(id: number, newOwnerId: number, reason: strin
       before: { ownerId: lead.ownerId, owner: lead.ownerName }, after: { ownerId: newOwnerId, owner: newOwner.name },
       details: `${actor.name} ${byOwner ? "transferred" : "reassigned"} ${lead.clientName} to ${newOwner.name}${reason ? `: ${reason}` : ""}. ${affectedRows(taskResult)} open task(s) reassigned.`,
     }, now);
+    await notifyUsers(connection, { userIds: [newOwnerId, lead.ownerId], actorId: actor.id, type: "lead_transferred", title: `${lead.clientName} ${byOwner ? "transferred" : "reassigned"} to ${newOwner.name}`, body: `${actor.name} moved the lead from ${lead.ownerName} to ${newOwner.name}${reason ? `: ${reason}` : ""}.`, leadId: id });
     return (await getLead(id, connection))!;
   });
 }
@@ -445,6 +454,7 @@ export async function reviewQueuedLead(id: number, approve: boolean, comment: st
       actorId: actor.id, action: approve ? "lead.approved" : "lead.rejected", entityType: "lead", entityId: id,
       before: { recordState: "queued" }, after: { recordState: state, comment }, details: `${actor.name} ${approve ? "approved" : "rejected"} ${lead.clientName}${comment ? `: ${comment}` : ""}`,
     }, now);
+    await notifyUsers(connection, { userIds: [lead.createdById, lead.ownerId], actorId: actor.id, type: "queued_reviewed", title: `${lead.clientName} ${approve ? "approved" : "rejected"}`, body: `${actor.name} ${approve ? "approved the queued lead" : "rejected the queued lead"}${comment ? `: ${comment}` : ""}.`, leadId: id });
     return (await getLead(id, connection))!;
   });
 }

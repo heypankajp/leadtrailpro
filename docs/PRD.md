@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Source | `Sales_Tracker_App_BRD_SRS.docx`, version 1.0, dated October 13, 2026. The updated BRD/SRS (`docs/Sales_Tracker_App_BRD_SRS_Updated.pdf`, added October 19, 2026) was reconciled on October 22, 2026: its sections 1–24 and appendices A–C are the v1.0 text this PRD already covers, and it adds section 25, Opportunity Recommendation (§3.23, OPP-01..22). The change note `SalesTrackPro_Sales_Trip_Planner_Requirement_Change.docx` (received October 21, 2026; the file stays local and untracked) is incorporated as §3.22 and LEAD-06/07 |
-| PRD version | 1.3 — October 22, 2026: BRD §25 Opportunity Recommendation reconciled (§3.23, OPP-01..22). 1.2 — October 22, 2026: needs-attention rules (TASK-05), report stage/template filters (RPT-05), PDF export (RPT-06), accessibility audit (NFR-07). 1.1 — October 21, 2026: Sales Trip Planner (§3.22, TRIP-01..11), lead status reasons (LEAD-06/07), reference lists (§5), open questions 8–13. (1.0: October 17, 2026; reviewed October 18, 2026) |
+| PRD version | 1.5 — October 22, 2026: collaboration threads with mentions, quotes, edits, and Admin removal (COLL-01..06), rich text for messages (NOTE-03 editor). 1.4 — October 22, 2026: in-app notifications, preferences, and daily/weekly digests (TASK-06, NTF-01..05). 1.3 — October 22, 2026: BRD §25 Opportunity Recommendation reconciled (§3.23, OPP-01..22). 1.2 — October 22, 2026: needs-attention rules (TASK-05), report stage/template filters (RPT-05), PDF export (RPT-06), accessibility audit (NFR-07). 1.1 — October 21, 2026: Sales Trip Planner (§3.22, TRIP-01..11), lead status reasons (LEAD-06/07), reference lists (§5), open questions 8–13. (1.0: October 17, 2026; reviewed October 18, 2026) |
 | Companion | `SPEC.md` (technical specification and screen designs) |
 | Status legend | **Implemented** — in the current codebase · **Partial** — some of the requirement is built · **Planned** — not started, depends on an external service or a later phase |
 
@@ -34,7 +34,7 @@ React frontend, Node.js backend, responsive web experience, Android and iPhone s
 | Phase | Content | Status |
 |---|---|---|
 | Phase 1 — Core | Roles, authentication, leads with the full field set and status reasons, ownership, queued leads, search/filter/archive, interaction timeline, tasks, documents and profiles, action center, targets, reports, user administration, list of values, audit | Implemented (see per-requirement status) |
-| Phase 2 — Internal features | Collaboration threads and mentions, in-app notifications, rich-text notes, device authorization | Planned |
+| Phase 2 — Internal features | Collaboration threads and mentions, rich-text notes, device authorization | Planned (in-app notifications and digests are built) |
 | Phase 3 — Integrations | Google sign-in, Gmail linking and AI summaries, voice-to-text, OCR, job-board and review data, route optimization, live map, company, and job-listing providers for the Sales Trip Planner (TRIP-*; the planner itself is built and runs on sample data until keys are set), the Opportunity Recommendation module (OPP-*, scheduled job-listing searches), push/email notifications | Planned; a first cut of Gmail linking (per-user read-only mailbox link, lead Emails tab) is built and waits on a Google Cloud OAuth client |
 
 ---
@@ -169,7 +169,7 @@ React frontend, Node.js backend, responsive web experience, Android and iPhone s
 |---|---|---|---|
 | NOTE-01 | Notes are stored as individual timeline entries with author and date/time, newest first. | — | Implemented |
 | NOTE-02 | Sales Managers and permitted Recruiters can add notes; historical notes stay attributed. | Recruiters have the note privilege by default. | Implemented |
-| NOTE-03 | Rich text: bold, italics, lists, links. | — | Planned (plain text with line breaks today) |
+| NOTE-03 | Rich text: bold, italics, lists, links. | Messages use a safe text format (`**bold**`, `_italic_`, `- lists`, `1. lists`, `[links](https://…)`, bare URLs) with a toolbar; it is stored as written and rendered without HTML. Timeline notes still use plain text with line breaks. | Partial (collaboration messages; notes planned) |
 | NOTE-04 | Voice-to-text for notes on computer, Android, and iPhone; transcription editable before saving. | — | Planned |
 | NOTE-05 | Natural-language follow-up instructions inside notes may create tasks/reminders after confirmation. | A next-step phrase with a date in a note (or in the notes of a call, email, or visit) offers a task with the resolved date, time, and title shown for review. The task is created on save only while the offer stays ticked, and the lead's follow-up date moves to it. | Implemented |
 | NOTE-06 | Calls, emails, and visits can be logged as timeline entries with a summary, notes, and the time they occurred. | These entries feed the Action Center and reports. | Implemented (extension that makes AC-02 measurable) |
@@ -181,21 +181,21 @@ React frontend, Node.js backend, responsive web experience, Android and iPhone s
 | TASK-01 | Tasks can be created manually or directly from a lead (and later from notes, emails, threads). | Manual creation, creation from a lead, and creation from notes (NOTE-05) are available; emails and threads wait on Phases 2 and 3. | Partial |
 | TASK-02 | Task fields: lead, title, description, assignee, due date/time, priority, status, checklist, creator, timestamps. | All present. | Implemented |
 | TASK-03 | Natural-language due dates typed in notes or task fields: "follow up tomorrow", "follow up Monday", an explicit date such as "Feb/01/2026", "next week", "next month", a month name such as "January", or a period such as "six months". A month name alone resolves to the first working day of that month, subject to the business-calendar configuration. Relative periods ("six months") are counted from the date of the source interaction, not from today. | The resolved date is shown beside the field in the task form, the follow-up scheduler, and the note form before anything is saved. Month names and relative periods skip weekends and the holidays in the business calendar; weekday names are kept unless they fall on a holiday; explicit dates are kept as written. Notes count relative periods from the interaction date. | Implemented |
-| TASK-04 | Task updates notify assignees; users can comment and use collaborative checklists. | Checklists implemented; notifications and comments planned. | Partial |
+| TASK-04 | Task updates notify assignees; users can comment and use collaborative checklists. | Checklists implemented; the assignee is notified in-app (and by email on request) when a task is assigned, changed, or completed, and the creator when someone else completes it; comments are planned. | Partial |
 | TASK-05 | Remind the responsible Sales Manager when a lead has had no action for one week, based on configurable action/status rules. | "Needs attention" list on the Action Center. Admins set a default number of days plus rules per status, per BD action, or per status-and-BD-action pair; the most specific rule wins, each flagged lead shows the limit that applies, and Lost Lead / Disqualified leads are never flagged. Reminder delivery by email is TASK-06. | Implemented |
-| TASK-06 | Daily and weekly reminders for pending/overdue activities. | — | Planned (needs notification delivery) |
+| TASK-06 | Daily and weekly reminders for pending/overdue activities. | A daily digest (overdue, today's, and tomorrow's follow-ups, open and overdue tasks, leads needing attention, yesterday's counts) and a weekly digest (last week's numbers and target progress, this week's follow-ups, plus team totals for administrators) go to every Sales Manager and Admin as an in-app notification and by email when a mail provider is configured. Admins set the times and weekday under Settings and can send either digest to themselves at once; people opt out under Notification preferences. A `jobs` scheduler service (or any cron calling the job endpoint) triggers the runs, which happen once per period. | Implemented |
 | TASK-07 | Scheduling a follow-up from a lead sets the lead's follow-up date and creates a reminder task for the owner. | — | Implemented (extension) |
 
 ### 3.10 Collaboration and messaging (BRD §12)
 
 | ID | Requirement | Status |
 |---|---|---|
-| COLL-01 | Lead-specific threaded messages and comment threads. | Planned |
-| COLL-02 | Mentions: @user, @all, @admin, @recruiter, @salesmanager, generating in-app, email, or push notifications by preference. | Planned |
-| COLL-03 | Reply, quote, edit own messages; timestamps and attribution; rich text. | Planned |
-| COLL-04 | Ordinary users cannot hard-delete; Admin may soft-delete with audit history. | Planned |
-| COLL-05 | Real-time updates, typing indicators, presence showing who is viewing the lead. | Planned |
-| COLL-06 | Files can be referenced from messages, comments, and tasks. | Planned |
+| COLL-01 | Lead-specific threaded messages and comment threads. | Implemented: Collaboration tab on the lead with threads and one level of replies; the tab shows the live message count |
+| COLL-02 | Mentions: @user, @all, @admin, @recruiter, @salesmanager, generating in-app, email, or push notifications by preference. | Implemented for in-app and email: typing @ opens a picker of the groups and active people; mentioned people get a `mention` notification, the lead owner and the thread's other authors a `message` notification; email follows the person's event-email preference; push waits on the native app |
+| COLL-03 | Reply, quote, edit own messages; timestamps and attribution; rich text. | Implemented: Reply, Quote (the quoted excerpt and author stay with the reply), Edit for the author (marked "edited"), author, role, and relative time on every message, rich text per NOTE-03 |
+| COLL-04 | Ordinary users cannot hard-delete; Admin may soft-delete with audit history. | Implemented: nobody can hard-delete; administrators (privilege `moderate_messages`) remove a message after confirming, the thread shows "Message removed by …", and the audit entry `message.deleted` keeps the original text |
+| COLL-05 | Real-time updates, typing indicators, presence showing who is viewing the lead. | Partial: the thread list refreshes every 20 seconds while the tab is open; typing indicators and presence are planned (open question 15) |
+| COLL-06 | Files can be referenced from messages, comments, and tasks. | Implemented for messages: the composer lists the lead's documents and profiles to reference; the message links to them. Tasks planned |
 
 ### 3.11 Files, attachments, and candidate profiles (BRD §13)
 
@@ -302,11 +302,11 @@ React frontend, Node.js backend, responsive web experience, Android and iPhone s
 
 | ID | Requirement | Status |
 |---|---|---|
-| NTF-01 | Channels: in-app, email, mobile push. | Planned |
-| NTF-02 | Events: mentions, comments, task assignment/update, lead status change, file upload, follow-up reminders, queued-lead events, ownership transfer, others configured; the updated BRD adds the Opportunity events of OPP-20. | Planned (all events are already recorded in the audit log and timeline, which is the source for notifications) |
-| NTF-03 | Daily and weekly performance reports by role and preference. | Planned |
-| NTF-04 | Daily and weekly reminders summarizing due/overdue follow-ups and tasks. | Planned |
-| NTF-05 | Per-account preferences subject to mandatory Admin/security notifications. | Planned |
+| NTF-01 | Channels: in-app, email, mobile push. | Partial: in-app (bell in the top bar with unread count, list, mark read, jump to the lead or task) and email (stub or SMTP) are built; mobile push needs the native app |
+| NTF-02 | Events: mentions, comments, task assignment/update, lead status change, file upload, follow-up reminders, queued-lead events, ownership transfer, others configured; the updated BRD adds the Opportunity events of OPP-20. | Partial: mentions (to the people or groups named) and messages (to the lead owner and the thread's authors); task assigned, updated, and completed; lead status or reason change (to the owner); ownership transfer (to both owners); queued lead created (to reviewers) and approved or rejected (to the creator and owner); document or profile upload (to the owner); follow-up reminders through the digests. Opportunity events wait on OPP-* |
+| NTF-03 | Daily and weekly performance reports by role and preference. | Implemented in the digests: yesterday's counts in the daily digest, last week's numbers and target progress in the weekly one, and team totals for administrators |
+| NTF-04 | Daily and weekly reminders summarizing due/overdue follow-ups and tasks. | Implemented (TASK-06) |
+| NTF-05 | Per-account preferences subject to mandatory Admin/security notifications. | Implemented: each person chooses the daily digest, the weekly digest, and emailing of individual events under Notification preferences; in-app notifications are always on; there are no mandatory security notifications yet |
 
 ### 3.21 Audit and compliance (BRD §23)
 
@@ -441,6 +441,7 @@ All lists are Admin-maintainable. Seeded values:
 12. **Action matching rules.** Precedence when several leads match a discovered company, whether archived leads count, and how loose company-name matching may be. Lead addresses are free text and not geocoded today. SPEC §10.8 proposes defaults.
 13. **Legacy data import.** The client's current system of record is a spreadsheet tracker (kept outside the repository because it holds real contact data) with one row per interaction. Its lead type values are "Office" (87% of rows) and "Road_Trip", not Road Trip / Cold Call / Cold Email; its BD actions are two numbered stage sequences (road trip and office); its statuses are exactly Cold / Warm / Hot / Client. Decisions pending: what "Office" maps to, whether the numbered sequences return, and whether the import maps negative responses to Disqualified. SPEC §10.9 describes the import.
 14. **Opportunity Recommendation sources and scheduling (BRD §25).** The module needs the same licensed job-listing access as open question 10 (Indeed has no public search API) plus career-page access that respects robots and terms. The daily run needs a scheduler that survives the standalone deployment: SPEC §10.10 proposes a separate job runner process in Docker rather than an in-request timer. Both are decisions for the client before OPP-* is scheduled.
+15. **Presence and typing indicators (COLL-05).** Live refresh of the Collaboration tab is in place. Showing who is viewing a lead and who is typing needs a push channel (Server-Sent Events or WebSockets) kept open per lead; confirm whether the client wants this before the native app, since it also decides the hosting model.
 
 ---
 
@@ -456,9 +457,9 @@ All lists are Admin-maintainable. Seeded values:
 | §7 Ownership | OWN-01..06 | Implemented |
 | §8 Queued leads | QUE-01..03 | Implemented |
 | §9 Search/filter/archive | SRCH-01..07 | Implemented |
-| §10 Notes/voice | NOTE-01..06 | Partial (rich text and voice planned) |
-| §11 Tasks/reminders | TASK-01..07 | Partial (TASK-05 rules implemented; notifications and digests planned) |
-| §12 Collaboration | COLL-01..06 | Planned |
+| §10 Notes/voice | NOTE-01..06 | Partial (rich text in messages; rich-text notes and voice planned) |
+| §11 Tasks/reminders | TASK-01..07 | Partial (TASK-05 rules and TASK-06 digests implemented; task comments and tasks from emails or threads planned) |
+| §12 Collaboration | COLL-01..06 | Implemented except typing indicators, presence, and file references from tasks |
 | §13 Files | FILE-01..08 | Implemented except AI summaries and upload notifications |
 | §14 OCR | OCR-01..03 | Planned |
 | §15 Gmail | MAIL-01..09 | Partial (recent messages via connected Gmail; threads, send, summaries planned) |
@@ -471,7 +472,7 @@ All lists are Admin-maintainable. Seeded values:
 | §19 Dashboards/reports | RPT-01..06 | Implemented; usage time pending |
 | §20 User management | USR-01..10 | Implemented except devices |
 | §21 List of values | LOV-01..05 | Implemented |
-| §22 Notifications | NTF-01..05 | Planned |
+| §22 Notifications | NTF-01..05 | In-app and email channels, the listed events including mentions and messages, digests, and preferences implemented; push planned |
 | §23 Audit | AUD-01..06 | Implemented for built features |
 | §24 Non-functional | NFR-01..09 | See table |
 | Appendix A Wireframes | See SPEC.md §9 | Screens A1–A5, A7, A10, A11, A13–A15 implemented; A6, A8, A9, A12 planned/preview; A16 (Sales Trip Planner) implemented |

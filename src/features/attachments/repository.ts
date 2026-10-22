@@ -1,7 +1,8 @@
 import { getDatabasePool, fromSqlDateTime, insertId, toSqlDateTime, withTransaction, type Queryable } from "@/lib/db";
 import { HttpError } from "@/lib/http";
 import { recordAudit } from "@/features/audit/repository";
-import { addActivity } from "@/features/leads/repository";
+import { addActivity, getLead } from "@/features/leads/repository";
+import { notifyUsers } from "@/features/notifications/repository";
 import type { UserAccount } from "@/features/users/model";
 import { maxAttachmentBytes, resolveMimeType, sanitizeFileName, saveAttachmentFile } from "./storage";
 
@@ -86,6 +87,8 @@ export async function uploadAttachment(input: UploadInput, actor: UserAccount): 
       actorId: actor.id, action: version > 1 ? "attachment.replaced" : "attachment.uploaded", entityType: "attachment", entityId: id,
       after: { leadId: input.leadId, category: input.category, label, fileName, sizeBytes: input.file.size, version }, details: `${actor.name} uploaded ${fileName} to lead ${input.leadId}`,
     }, now);
+    const lead = await getLead(input.leadId, connection);
+    if (lead) await notifyUsers(connection, { userIds: [lead.ownerId], actorId: actor.id, type: "file_uploaded", title: `${input.category === "profile" ? "Profile shared" : "Document added"} on ${lead.clientName}`, body: `${actor.name} uploaded ${fileName} (${label}).`, leadId: lead.id });
     const { storageKey: _storageKey, ...attachment } = (await getAttachmentWithStorage(id, connection))!;
     void _storageKey;
     return attachment;

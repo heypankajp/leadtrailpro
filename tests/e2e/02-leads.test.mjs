@@ -74,6 +74,40 @@ describe("Leads", () => {
     await page.wait(By.xpath('//article[contains(@class,"timeline-entry")]//strong[starts-with(normalize-space(.), "Follow-up scheduled for")]'));
   });
 
+  uiTest("posts a rich-text message with a mention, replies with a quote, edits it, and removes it", async () => {
+    await page.tab("Collaboration");
+    const editor = await page.wait(By.css(".message-composer textarea"));
+    await editor.sendKeys("Team update: **profiles** ready for @adm");
+    await page.click(By.xpath('.//div[contains(@class,"mention-menu")]//button[.//strong[normalize-space()="@admin"]]'));
+    assert.match(await editor.getAttribute("value"), /@admin $/, "the picker inserts the mention");
+    await editor.sendKeys("\n- send by Friday");
+    await page.clickButton("Post message");
+    await page.toast("Message posted");
+    const thread = await page.wait(By.xpath('//article[contains(@class,"message")][.//p[contains(normalize-space(.), "Team update:")]]'));
+    assert.ok(await thread.findElement(By.xpath('.//strong[normalize-space()="profiles"]')), "bold renders");
+    assert.ok(await thread.findElement(By.xpath('.//li[normalize-space()="send by Friday"]')), "lists render");
+    await page.click(By.xpath('.//article[contains(@class,"message")]//button[normalize-space()="Quote"]'));
+    await page.wait(By.xpath('.//div[contains(@class,"message-composer-head")]//strong[contains(normalize-space(.), "quoting Ada Admin")]'));
+    await (await page.wait(By.css(".message-composer textarea"))).sendKeys("Noted, will do.");
+    await page.clickButton("Post reply");
+    await page.toast("Message posted");
+    await page.wait(By.xpath('//div[contains(@class,"message-replies")]//blockquote[contains(normalize-space(.), "Team update")]'));
+    const reply = By.xpath('//div[contains(@class,"message-replies")]//article[.//p[normalize-space()="Noted, will do."]]');
+    await page.wait(reply);
+    await page.click(By.xpath('//div[contains(@class,"message-replies")]//article[.//p[normalize-space()="Noted, will do."]]//button[normalize-space()="Edit"]'));
+    const editBox = await page.wait(By.css(".message-replies textarea"));
+    await editBox.clear();
+    await editBox.sendKeys("Noted, will do _tomorrow_.");
+    await page.clickButton("Save changes");
+    await page.toast("Message updated");
+    await page.wait(By.xpath('//div[contains(@class,"message-replies")]//article[.//em[normalize-space()="tomorrow"]][.//small[contains(normalize-space(.), "edited")]]'));
+    await page.click(By.xpath('//div[contains(@class,"message-replies")]//article//button[normalize-space()="Remove"]'));
+    await page.clickButton("Confirm removal");
+    await page.toast("Message removed");
+    await page.wait(By.xpath('//div[contains(@class,"message-replies")]//p[contains(@class,"message-removed")][contains(normalize-space(.), "removed by Ada Admin")]'));
+    assert.match(await (await page.wait(By.xpath('.//button[@role="tab" and starts-with(normalize-space(.), "Collaboration")]'))).getText(), /1$/, "the tab counts live messages only");
+  });
+
   uiTest("the Emails tab explains that Gmail is not configured", async () => {
     await page.tab("Emails");
     const note = await page.wait(By.css(".lead-emails .note-warning"));

@@ -4,6 +4,7 @@ import { listAttachments } from "@/features/attachments/repository";
 import { listAudit } from "@/features/audit/repository";
 import { parseLeadPatch } from "@/features/leads/model";
 import { canEditLead, getLead, listActivities, updateLead } from "@/features/leads/repository";
+import { countMessages } from "@/features/messages/repository";
 import { listTasks } from "@/features/tasks/repository";
 import { hasPrivilege, requirePrivilege, requireUser } from "@/features/users/session";
 
@@ -24,13 +25,14 @@ export async function GET(_request: Request, context: RouteContext) {
     if (!id) return jsonError(400, "Invalid lead ID.");
     const lead = await getLead(id);
     if (!lead) return jsonError(404, "Lead not found.");
-    const [activities, tasks, attachments, audit] = await Promise.all([
+    const [activities, tasks, attachments, audit, messageCount] = await Promise.all([
       listActivities(id),
       listTasks({ leadId: id }),
       listAttachments(id, { includeDeleted: hasPrivilege(user, "delete_files") }),
       hasPrivilege(user, "view_audit") ? listAudit({ entityType: "lead", entityId: id, limit: 200 }) : Promise.resolve([]),
+      countMessages(id),
     ]);
-    return NextResponse.json({ lead, activities, tasks, attachments, audit, permissions: { edit: canEditLead(user, lead) } });
+    return NextResponse.json({ lead, activities, tasks, attachments, audit, messageCount, permissions: { edit: canEditLead(user, lead) } });
   } catch (error) {
     return handleRouteError(error, "Load lead");
   }

@@ -1,5 +1,5 @@
 # Production override: standalone Next.js image, no bind mounts, database not
-# published on the host. Requires POSTGRES_PASSWORD in `.env` and a `.env.local`
+# published on the host. Requires POSTGRES_PASSWORD and JOBS_KEY in `.env` and a `.env.local`
 # (created by `docker compose run --rm setup`, which works with this override too;
 # without .env.local the app starts but every request reports the missing settings).
 #
@@ -20,11 +20,22 @@ services:
     restart: unless-stopped
     environment:
       TRIPS_PROVIDER: ${TRIPS_PROVIDER:-}
+      JOBS_KEY: ${JOBS_KEY:?Set JOBS_KEY in .env for production (any long random string)}
     env_file:
       - path: .env.local
         required: false
     volumes: !override
       - attachments:/app/storage/attachments
+
+  jobs:
+    build:
+      target: runner
+    image: salestrackpro
+    restart: unless-stopped
+    environment:
+      JOBS_URL: http://app:3000
+      JOBS_KEY: ${JOBS_KEY:?Set JOBS_KEY in .env for production (any long random string)}
+    volumes: !override []
 
 volumes:
   attachments:

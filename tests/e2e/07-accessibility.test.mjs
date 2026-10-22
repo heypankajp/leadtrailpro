@@ -48,6 +48,9 @@ describe("Accessibility", () => {
     await audit("lead detail dialog");
     await page.tab("Timeline");
     await audit("lead timeline");
+    await page.tab("Collaboration");
+    await page.wait(By.css(".message-composer textarea"));
+    await audit("lead collaboration");
     await page.closeDialog();
     await page.nav("All leads");
     await page.heading("All leads");

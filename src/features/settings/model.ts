@@ -11,9 +11,25 @@ export type InactivityRule = { statusId: number | null; bdActionId: number | nul
 
 export type ReminderSettings = { inactivityDays: number; rules: InactivityRule[] };
 
+/** TASK-06 / NTF-04: when the daily and weekly digests go out (business timezone; weeklyDay 0 = Sunday … 6 = Saturday). */
+export type DigestSettings = { enabled: boolean; dailyTime: string; weeklyDay: number; weeklyTime: string };
+export const defaultDigests: DigestSettings = { enabled: true, dailyTime: "07:30", weeklyDay: 1, weeklyTime: "07:30" };
+
+export function normalizeDigests(value: unknown): { digests: DigestSettings; error: string | null } {
+  const record = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const time = (key: "dailyTime" | "weeklyTime") => (typeof record[key] === "string" ? (record[key] as string).trim() : defaultDigests[key]);
+  const dailyTime = time("dailyTime");
+  const weeklyTime = time("weeklyTime");
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(dailyTime) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(weeklyTime)) return { digests: defaultDigests, error: "Digest times must be HH:MM." };
+  const weeklyDay = record.weeklyDay === undefined ? defaultDigests.weeklyDay : Number(record.weeklyDay);
+  if (!Number.isInteger(weeklyDay) || weeklyDay < 0 || weeklyDay > 6) return { digests: defaultDigests, error: "The weekly digest day must be a weekday number from 0 (Sunday) to 6 (Saturday)." };
+  return { digests: { enabled: record.enabled === undefined ? defaultDigests.enabled : record.enabled === true, dailyTime, weeklyDay, weeklyTime }, error: null };
+}
+
 export type AppSettings = {
   roleLabels: Record<SystemRole, string>;
   reminders: ReminderSettings;
+  digests: DigestSettings;
   /** Sorted by date. Used with weekends for "yesterday" in reports and for natural-language due dates. */
   holidays: Holiday[];
 };

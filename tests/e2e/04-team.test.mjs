@@ -35,6 +35,20 @@ describe("Team, roles, and lead ownership", () => {
     await page.wait(By.xpath(`//table//tr[.//strong[normalize-space()=${xq(manager.name)}]]`));
   });
 
+  uiTest("admin assigns a task to the new sales manager", async () => {
+    await page.nav("Tasks & reminders");
+    await page.heading("Tasks & reminders");
+    await page.clickButton("Create task", { global: true });
+    await page.dialogTitle("Create task");
+    await page.fill("Title", `Welcome call ${runId}`);
+    await page.fill("Assignee", manager.name);
+    await page.clickButton("Create task");
+    await page.toast("Task created");
+    // Back to User management, where the next test edits the account.
+    await page.nav("User management");
+    await page.heading("User management");
+  });
+
   uiTest("a per-account sign-out time ends sessions started before it", async (t) => {
     // The manager signs in through the API first, so this session predates the cutoff the admin is about to set.
     const login = await fetch(`${baseUrl}/api/auth/login`, {
@@ -78,6 +92,16 @@ describe("Team, roles, and lead ownership", () => {
     assert.ok(!labels.includes("Queued leads"), "sales managers cannot review queued leads");
   });
 
+  uiTest("the assigned task appears as a notification for the sales manager", async () => {
+    const bell = await page.wait(By.css("button.notif-button"));
+    await driver.wait(async () => /\d+ unread/.test(await bell.getAttribute("aria-label")), 15000, "unread badge");
+    await bell.click();
+    await page.wait(By.xpath(`//div[contains(@class,"notif-dropdown")]//strong[normalize-space()=${xq(`Task assigned: Welcome call ${runId}`)}]`));
+    await page.clickButton("Mark all read", { global: true });
+    await driver.wait(async () => (await bell.getAttribute("aria-label")) === "Notifications", 15000, "badge cleared");
+    await page.click(By.css("button.notif-button"), { global: true });
+  });
+
   uiTest("a historical first-contact date queues the lead for approval", async () => {
     await page.clickButton("Add a lead", { global: true });
     await page.dialogTitle("Add a new lead");
@@ -118,7 +142,23 @@ describe("Team, roles, and lead ownership", () => {
     await page.clickButton("Transfer lead");
     await page.toast(`transferred to ${manager.name}`);
     await page.waitText(By.css(".detail-owner strong"), manager.name);
+    await page.tab("Collaboration");
+    await (await page.wait(By.css(".message-composer textarea"))).sendKeys(`@${manager.name} please introduce yourself this week.`);
+    await page.clickButton("Post message");
+    await page.toast("Message posted and mentions notified");
     await page.closeDialog();
+  });
+
+  uiTest("the mention reaches the sales manager as a notification", async () => {
+    await page.signOut();
+    await page.signIn(manager);
+    const bell = await page.wait(By.css("button.notif-button"));
+    await driver.wait(async () => /\d+ unread/.test(await bell.getAttribute("aria-label")), 15000, "unread badge after the mention");
+    await bell.click();
+    await page.wait(By.xpath(`//div[contains(@class,"notif-dropdown")]//strong[normalize-space()=${xq(`${admin.name} mentioned you on ${transferLead}`)}]`));
+    await page.click(By.css("button.notif-button"), { global: true });
+    await page.signOut();
+    await page.signIn(admin);
   });
 
   uiTest("terminating the manager reassigns their leads", async () => {

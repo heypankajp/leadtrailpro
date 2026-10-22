@@ -6,9 +6,9 @@ import { assertListValue } from "@/features/list-values/repository";
 import { defaultRoleLabels, systemRoles } from "@/features/users/model";
 import type { SystemRole } from "@/features/users/model";
 
-import { maxHolidayNameLength, maxHolidays, normalizeInactivityRules, type AppSettings, type Holiday, type InactivityRule } from "./model";
+import { defaultDigests, maxHolidayNameLength, maxHolidays, normalizeDigests, normalizeInactivityRules, type AppSettings, type Holiday, type InactivityRule } from "./model";
 
-const defaults: AppSettings = { roleLabels: { ...defaultRoleLabels }, reminders: { inactivityDays: 7, rules: [] }, holidays: [] };
+const defaults: AppSettings = { roleLabels: { ...defaultRoleLabels }, reminders: { inactivityDays: 7, rules: [] }, digests: { ...defaultDigests }, holidays: [] };
 
 /** Keeps well-formed, unique holidays sorted by date; returns the first problem found (for input validation). */
 function normalizeHolidays(value: unknown): { holidays: Holiday[]; error: string | null } {
@@ -40,10 +40,12 @@ export async function getSettings(db: Queryable = getDatabasePool()): Promise<Ap
   const reminders = await readSetting<{ inactivityDays?: unknown; rules?: unknown }>(db, "reminders", {});
   const rules = normalizeInactivityRules(reminders.rules ?? []);
   const calendar = await readSetting<{ holidays?: unknown }>(db, "business_calendar", {});
+  const digests = normalizeDigests(await readSetting<unknown>(db, "digests", {}));
   const { holidays, error } = normalizeHolidays(calendar.holidays ?? []);
   return {
     roleLabels: Object.fromEntries(systemRoles.map((role) => [role, roleLabels[role]?.trim() || defaults.roleLabels[role]])) as Record<SystemRole, string>,
     reminders: { inactivityDays: Number.isInteger(reminders.inactivityDays) && Number(reminders.inactivityDays) > 0 ? Number(reminders.inactivityDays) : defaults.reminders.inactivityDays, rules: rules.error ? [] : rules.rules },
+    digests: digests.error ? { ...defaultDigests } : digests.digests,
     holidays: error ? [] : holidays,
   };
 }
@@ -53,7 +55,7 @@ export async function listHolidayDates(db: Queryable = getDatabasePool()): Promi
   return (await getSettings(db)).holidays.map((holiday) => holiday.date);
 }
 
-export async function updateSettings(changes: { roleLabels?: Partial<Record<SystemRole, string>>; reminders?: { inactivityDays?: number; rules?: unknown }; holidays?: unknown }, actorId: number): Promise<AppSettings> {
+export async function updateSettings(changes: { roleLabels?: Partial<Record<SystemRole, string>>; reminders?: { inactivityDays?: number; rules?: unknown }; digests?: unknown; holidays?: unknown }, actorId: number): Promise<AppSettings> {
   return withTransaction(async (connection) => {
     const current = await getSettings(connection);
     if (changes.roleLabels) {
@@ -89,6 +91,17 @@ export async function updateSettings(changes: { roleLabels?: Partial<Record<Syst
         [JSON.stringify(next)],
       );
       await recordAudit(connection, { actorId, action: "setting.updated", entityType: "setting", before: current.reminders, after: next, details: "Updated reminder settings" });
+    }
+    if (changes.digests !== undefined) {
+      const { digests, error } = normalizeDigests(changes.digests);
+      if (error) throw new HttpError(400, error);
+      await connection.query(
+        "INSERT INTO app_settings (setting_key, value_json) VALUES ('digests', ?) ON CONFLICT (setting_key) DO UPDATE SET value_json = EXCLUDED.value_json",
+        [JSON.stringify(digests)],
+      );
+      if (JSON.stringify(current.digests) !== JSON.stringify(digests)) {
+        await recordAudit(connection, { actorId, action: "setting.updated", entityType: "setting", before: { ...current.digests }, after: { ...digests }, details: "Updated the digest schedule" });
+      }
     }
     if (changes.holidays !== undefined) {
       const { holidays, error } = normalizeHolidays(changes.holidays);
