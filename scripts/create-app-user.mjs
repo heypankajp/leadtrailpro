@@ -28,6 +28,8 @@ const envTemplate = (dbLines) => [
   "# ATTACHMENT_DIR=./storage/attachments",
   "",
   "# Outbound email for password resets and two-factor codes. Leave blank until you have SMTP details.",
+  "# MAIL_PROVIDER=stub records messages in Settings → Email delivery instead of sending (good until a real mailbox exists); smtp sends them.",
+  "MAIL_PROVIDER=stub",
   "SMTP_HOST=",
   "SMTP_PORT=587",
   "SMTP_SECURE=false",

@@ -98,6 +98,7 @@ export default function TripResultsPage({ tripId }: { tripId: number }) {
         <div className="heading-actions">
           <button className="button button-outline" onClick={() => void rerun()} disabled={rerunning}><RefreshCw size={15} /> {rerunning ? "Searching..." : "Run again"}</button>
           <a className="button button-outline" href={tripExportUrl(tripId, scope, action || null)} download><Download size={15} /> Export Excel</a>
+          <a className="button button-outline" href={tripExportUrl(tripId, scope, action || null, "pdf")} download><Download size={15} /> Export PDF</a>
           <button className="button button-primary" onClick={() => window.print()}><Printer size={15} /> Print</button>
         </div>
       </div>

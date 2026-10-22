@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ChevronDown, Download, Mail, MapPin, Phone, TrendingUp, UsersRound } from "lucide-react";
 import { errorMessage } from "@/lib/api";
 import { reportPeriodLabels, reportPeriods, type ReportPeriod } from "@/lib/dates";
@@ -8,8 +8,9 @@ import { formatDate, formatDateTime, formatShortDate } from "@/lib/format";
 import { useAsyncData } from "@/lib/useAsyncData";
 import { useApp } from "@/features/shell/AppContext";
 import { Dialog, EmptyState, ErrorText, Loading } from "@/features/shell/components";
-import { fetchDrilldown, fetchReport } from "./client";
-import type { DrilldownMetric, DrilldownResult, PerformanceReport, PerformanceRow } from "./model";
+import { stageLabels, userStages, type UserStage } from "@/features/users/model";
+import { fetchDrilldown, fetchReport, reportExportUrl } from "./client";
+import type { DrilldownMetric, DrilldownResult, PerformanceReport, PerformanceRow, ReportFilters } from "./model";
 
 const metricColumns: { key: keyof PerformanceRow; label: string; metric?: DrilldownMetric }[] = [
   { key: "leadsCreated", label: "Leads", metric: "leads" },
@@ -29,9 +30,13 @@ export default function ReportsPage() {
   const { user, can, reference, openLead, dataVersion, roleLabel } = useApp();
   const [period, setPeriod] = useState<ReportPeriod>("this_week");
   const [userId, setUserId] = useState<number | null>(null);
+  const [stage, setStage] = useState<UserStage | "">("");
+  const [templateId, setTemplateId] = useState<number | null>(null);
   const [drill, setDrill] = useState<{ row: PerformanceRow; metric: DrilldownMetric; data: DrilldownResult | null; error: string } | null>(null);
   const teamWide = can("view_team_reports");
-  const fetcher = useCallback(() => fetchReport(period, teamWide ? userId : user.id), [period, userId, teamWide, user.id]);
+  // RPT-05: stage and template narrow the team report; a single person's report ignores them.
+  const filters = useMemo<ReportFilters>(() => ({ stage: teamWide && stage ? stage : null, templateId: teamWide ? templateId : null }), [teamWide, stage, templateId]);
+  const fetcher = useCallback(() => fetchReport(period, teamWide ? userId : user.id, filters), [period, userId, teamWide, user.id, filters]);
   const { data: report, error } = useAsyncData<PerformanceReport>(fetcher, dataVersion);
 
   const openDrill = async (row: PerformanceRow, metric: DrilldownMetric) => {
@@ -68,8 +73,11 @@ export default function ReportsPage() {
     <>
       <div className="page-heading">
         <div><div className="eyebrow">{teamWide ? "TEAM PERFORMANCE" : "YOUR PERFORMANCE"}</div><h1>Reports & dashboard</h1><p>{report ? `${formatDate(report.range.startYmd)} to ${formatDate(report.range.endExclusiveYmd === report.range.startYmd ? report.range.startYmd : addDays(report.range.endExclusiveYmd, -1))}` : "Activity, leads, conversions, and target progress."}</p></div>
-        <a className={`button button-outline ${report ? "" : "is-disabled"}`} href={report ? `/api/reports/export?period=${period}${teamWide && userId ? `&userId=${userId}` : ""}` : undefined} download><Download size={16} /> Export Excel</a>
-        <button className="button button-outline" onClick={exportCsv} disabled={!report}><Download size={16} /> CSV</button>
+        <div className="heading-actions">
+          <a className={`button button-outline ${report ? "" : "is-disabled"}`} href={report ? reportExportUrl("xlsx", period, teamWide ? userId : user.id, filters) : undefined} download><Download size={16} /> Export Excel</a>
+          <a className={`button button-outline ${report ? "" : "is-disabled"}`} href={report ? reportExportUrl("pdf", period, teamWide ? userId : user.id, filters) : undefined} download><Download size={16} /> Export PDF</a>
+          <button className="button button-outline" onClick={exportCsv} disabled={!report}><Download size={16} /> CSV</button>
+        </div>
       </div>
       <div className="report-toolbar">
         <div className="report-periods">
@@ -80,6 +88,22 @@ export default function ReportsPage() {
             <select aria-label="Sales manager" value={userId ?? ""} onChange={(event) => setUserId(event.target.value ? Number(event.target.value) : null)}>
               <option value="">All sales managers</option>
               {people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
+            </select><ChevronDown size={14} />
+          </label>
+        )}
+        {teamWide && (
+          <label className="select-filter">
+            <select aria-label="Stage" value={stage} onChange={(event) => setStage(event.target.value as UserStage | "")}>
+              <option value="">All stages</option>
+              {userStages.map((option) => <option key={option} value={option}>{stageLabels[option]}</option>)}
+            </select><ChevronDown size={14} />
+          </label>
+        )}
+        {teamWide && (
+          <label className="select-filter">
+            <select aria-label="Target template" value={templateId ?? ""} onChange={(event) => setTemplateId(event.target.value ? Number(event.target.value) : null)}>
+              <option value="">All templates</option>
+              {reference.targetTemplates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
             </select><ChevronDown size={14} />
           </label>
         )}

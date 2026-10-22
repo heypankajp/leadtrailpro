@@ -39,7 +39,7 @@ export default function ActionCenter() {
     <button className={`followup-row ${emphasize ? "row-overdue" : ""}`} key={lead.id} onClick={() => openLead(lead.id)}>
       <Avatar name={lead.clientName} seed={lead.id} />
       <span className="followup-info"><strong>{lead.clientName}</strong><small>{lead.bdAction ?? "No BD action yet"}{lead.clientExecutive ? ` · ${lead.clientExecutive}` : ""}</small></span>
-      <StatusPill status={lead.status} code={lead.statusCode} />
+      <StatusPill status={lead.statusLabel} code={lead.statusCode} />
       <span className={`followup-time ${emphasize ? "overdue" : ""}`}><Clock3 size={13} /> {formatDate(lead.followUpDate)}</span>
       <span className="followup-owner">{lead.ownerName}</span>
       <ChevronRight className="followup-chevron" size={16} />
@@ -129,15 +129,15 @@ export default function ActionCenter() {
           <div className="dashboard-grid reminders-grid">
             <section className="panel reminder-panel">
               <div className="panel-heading">
-                <div><h2>Needs attention</h2><p>Active leads with no activity for {data.inactivityDays}+ days</p></div>
+                <div><h2>Needs attention</h2><p>Active leads quiet for longer than their limit · default {data.inactivityDays} days{data.inactivityRuleCount ? ` · ${data.inactivityRuleCount} status/action ${data.inactivityRuleCount === 1 ? "rule" : "rules"}` : ""}</p></div>
               </div>
               {data.inactiveLeads.length === 0 ? <EmptyState title="Every lead has recent activity" /> : (
                 <div className="followup-list">
                   {data.inactiveLeads.slice(0, 6).map((lead) => (
                     <button className="followup-row" key={lead.id} onClick={() => openLead(lead.id)}>
                       <span className="reminder-icon"><AlertTriangle size={14} /></span>
-                      <span className="followup-info"><strong>{lead.clientName}</strong><small>Last activity {relativeTime(lead.lastActivityAt)} · {lead.ownerName}</small></span>
-                      <StatusPill status={lead.status} code={lead.statusCode} />
+                      <span className="followup-info"><strong>{lead.clientName}</strong><small>Last activity {relativeTime(lead.lastActivityAt)} · limit {data.inactiveLimits[lead.id] ?? data.inactivityDays} days · {lead.ownerName}</small></span>
+                      <StatusPill status={lead.statusLabel} code={lead.statusCode} />
                       <ChevronRight className="followup-chevron" size={16} />
                     </button>
                   ))}
@@ -176,7 +176,7 @@ export default function ActionCenter() {
                   {data.recentLeads.map((lead) => (
                     <tr key={lead.id}>
                       <td><button className="client-cell" onClick={() => openLead(lead.id)}><Avatar name={lead.clientName} seed={lead.id} /><span><strong>{lead.clientName}</strong><small>{lead.clientExecutive || "No contact"}{lead.city ? ` · ${lead.city}` : ""}</small></span></button></td>
-                      <td><StatusPill status={lead.status} code={lead.statusCode} /></td>
+                      <td><StatusPill status={lead.statusLabel} code={lead.statusCode} /></td>
                       <td><span className="action-cell">{lead.bdAction ?? "—"}</span><small className="activity-time">{relativeTime(lead.lastActivityAt)}</small></td>
                       <td><span className={lead.followUpDate === data.today ? "due-today" : lead.followUpDate && lead.followUpDate < data.today ? "overdue" : "muted-cell"}>{formatDate(lead.followUpDate, "—")}</span></td>
                       <td><span className="owner-cell"><span className="mini-avatar">{lead.ownerName.split(" ").map((part) => part[0]).join("").slice(0, 2)}</span>{lead.ownerName}</span></td>

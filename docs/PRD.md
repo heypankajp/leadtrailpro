@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| Source | `Sales_Tracker_App_BRD_SRS.docx`, version 1.0, dated October 13, 2026. An updated BRD/SRS (`docs/Sales_Tracker_App_BRD_SRS_Updated.pdf`) was added on October 19, 2026 and has not yet been reconciled with this PRD. The change note `SalesTrackPro_Sales_Trip_Planner_Requirement_Change.docx` (received October 21, 2026; the file stays local and untracked) is incorporated as §3.22 and LEAD-06/07 |
-| PRD version | 1.1 — October 21, 2026: Sales Trip Planner (§3.22, TRIP-01..11), lead status reasons (LEAD-06/07), reference lists (§5), open questions 8–13. (1.0: October 17, 2026; reviewed October 18, 2026) |
+| Source | `Sales_Tracker_App_BRD_SRS.docx`, version 1.0, dated October 13, 2026. The updated BRD/SRS (`docs/Sales_Tracker_App_BRD_SRS_Updated.pdf`, added October 19, 2026) was reconciled on October 22, 2026: its sections 1–24 and appendices A–C are the v1.0 text this PRD already covers, and it adds section 25, Opportunity Recommendation (§3.23, OPP-01..22). The change note `SalesTrackPro_Sales_Trip_Planner_Requirement_Change.docx` (received October 21, 2026; the file stays local and untracked) is incorporated as §3.22 and LEAD-06/07 |
+| PRD version | 1.3 — October 22, 2026: BRD §25 Opportunity Recommendation reconciled (§3.23, OPP-01..22). 1.2 — October 22, 2026: needs-attention rules (TASK-05), report stage/template filters (RPT-05), PDF export (RPT-06), accessibility audit (NFR-07). 1.1 — October 21, 2026: Sales Trip Planner (§3.22, TRIP-01..11), lead status reasons (LEAD-06/07), reference lists (§5), open questions 8–13. (1.0: October 17, 2026; reviewed October 18, 2026) |
 | Companion | `SPEC.md` (technical specification and screen designs) |
 | Status legend | **Implemented** — in the current codebase · **Partial** — some of the requirement is built · **Planned** — not started, depends on an external service or a later phase |
 
@@ -35,7 +35,7 @@ React frontend, Node.js backend, responsive web experience, Android and iPhone s
 |---|---|---|
 | Phase 1 — Core | Roles, authentication, leads with the full field set and status reasons, ownership, queued leads, search/filter/archive, interaction timeline, tasks, documents and profiles, action center, targets, reports, user administration, list of values, audit | Implemented (see per-requirement status) |
 | Phase 2 — Internal features | Collaboration threads and mentions, in-app notifications, rich-text notes, device authorization | Planned |
-| Phase 3 — Integrations | Google sign-in, Gmail linking and AI summaries, voice-to-text, OCR, job-board and review data, route optimization, live map, company, and job-listing providers for the Sales Trip Planner (TRIP-*; the planner itself is built and runs on sample data until keys are set), push/email notifications | Planned; a first cut of Gmail linking (per-user read-only mailbox link, lead Emails tab) is built and waits on a Google Cloud OAuth client |
+| Phase 3 — Integrations | Google sign-in, Gmail linking and AI summaries, voice-to-text, OCR, job-board and review data, route optimization, live map, company, and job-listing providers for the Sales Trip Planner (TRIP-*; the planner itself is built and runs on sample data until keys are set), the Opportunity Recommendation module (OPP-*, scheduled job-listing searches), push/email notifications | Planned; a first cut of Gmail linking (per-user read-only mailbox link, lead Emails tab) is built and waits on a Google Cloud OAuth client |
 
 ---
 
@@ -63,8 +63,8 @@ React frontend, Node.js backend, responsive web experience, Android and iPhone s
 | AUTH-02 | Sign-in with email and password. | Correct credentials create a session; passwords are never stored in clear text. | Implemented |
 | AUTH-03 | Sign-in with Google/Gmail (OAuth 2.0). | A "Continue with Google" button signs the user in when the Google email matches a pre-added account. | Planned (needs Google Cloud project and consent screen) |
 | AUTH-04 | Every user can change their own password. | Requires the current password; other sessions are signed out. | Implemented |
-| AUTH-05 | Forgot-password flow sends a secure reset link or code to the registered email. | Link expires in 30 minutes; the response does not reveal whether the address exists. | Implemented (dormant until SMTP is configured) |
-| AUTH-06 | Two-factor authentication by OTP sent to the registered email; Admin enables and configures it per account. | After a correct password the user must enter a 6-digit emailed code that expires in 10 minutes; 5 wrong codes invalidate it. | Implemented (dormant until SMTP is configured) |
+| AUTH-05 | Forgot-password flow sends a secure reset link or code to the registered email. | Link expires in 30 minutes; the response does not reveal whether the address exists. | Implemented (with `MAIL_PROVIDER=stub` the link is recorded in the Settings outbox instead of emailed, until the Google Workspace mailbox exists) |
+| AUTH-06 | Two-factor authentication by OTP sent to the registered email; Admin enables and configures it per account. | After a correct password the user must enter a 6-digit emailed code that expires in 10 minutes; 5 wrong codes invalidate it. | Implemented (in stub mode the code is recorded in the Settings outbox instead of emailed) |
 | AUTH-07 | Admin can enable automatic daily logout per account, with a configurable logout time that defaults to 11:00 PM Eastern. The user must sign in again afterwards, including 2FA when enabled. | Any session started before the most recent cutoff (business timezone) is rejected once the cutoff passes. The switch and the time are set per account under User management; the time defaults to 11:00 PM. | Implemented |
 | AUTH-08 | Admin can authorize specific company phones and laptops per Sales Manager or Recruiter and restrict sign-in to those devices. | Sign-in from an unauthorized device is refused when the policy is active. | Planned (needs a managed-device or mobile identifier; browsers cannot read hardware IDs) |
 | AUTH-09 | The system maintains device-identification information and login history. | Every sign-in attempt stores time, result, address, and browser; Admin can view it per user. | Partial (login history implemented; device identifiers planned) |
@@ -88,7 +88,7 @@ React frontend, Node.js backend, responsive web experience, Android and iPhone s
 | ID | Requirement | Acceptance criteria | Status |
 |---|---|---|---|
 | NAV-01 | Persistent left navigation on desktop/tablet; collapsible drawer on mobile with the same information architecture. | — | Implemented |
-| NAV-02 | Items: Action Center/Home, My Leads, All Leads, Cold, Warm, Hot, Client, Queued Leads, Archive, Lead Generation, Tasks, Road Visit Planner, Dashboard/Reports, Targets/Target Templates, Admin/User Management, List of Values, Device Authorization. | Admin-only items are hidden from users without the privilege. The Sales Trip Planner (§3.22) has its own item under Tools for users with the plan_trips privilege (Admins and Sales Managers by default). | Implemented (Device Authorization opens a placeholder) |
+| NAV-02 | Items: Action Center/Home, My Leads, All Leads, Cold, Warm, Hot, Client, Queued Leads, Archive, Lead Generation, Tasks, Road Visit Planner, Dashboard/Reports, Targets/Target Templates, Admin/User Management, List of Values, Device Authorization; the updated BRD adds Opportunity Recommendation with its submenu and badge (OPP-02). | Admin-only items are hidden from users without the privilege. The Sales Trip Planner (§3.22) has its own item under Tools for users with the plan_trips privilege (Admins and Sales Managers by default). | Implemented (Device Authorization opens a placeholder; Opportunity Recommendation planned) |
 | NAV-03 | Lead views sort by most recent activity first unless another sort is chosen. | — | Implemented |
 | NAV-04 | Archive has its own search and filters. | — | Implemented |
 
@@ -123,6 +123,7 @@ React frontend, Node.js backend, responsive web experience, Android and iPhone s
 | 23 | Documents | Files | General lead documents (see 3.13) |
 | 24 | Resumes / Profiles Shared | Files | Dedicated multiple-file area (see 3.13) |
 | 25 | Status Reason | Dropdown | Required when Status is Lost Lead (Admin-maintained reasons) or Disqualified (fixed reasons); cleared for every other status (LEAD-06) |
+| 26 | Opportunity reference | Link | Planned (OPP-12): the Opportunity and job listing a converted lead came from |
 
 **LEAD-02** (Implemented) Company website URL is also stored (used by lead generation and shown on the lead).
 **LEAD-03** (Implemented) Dates are entered and displayed in the user's locale; the BRD's MM/DD/YYYY is a display preference, storage is ISO.
@@ -181,7 +182,7 @@ React frontend, Node.js backend, responsive web experience, Android and iPhone s
 | TASK-02 | Task fields: lead, title, description, assignee, due date/time, priority, status, checklist, creator, timestamps. | All present. | Implemented |
 | TASK-03 | Natural-language due dates typed in notes or task fields: "follow up tomorrow", "follow up Monday", an explicit date such as "Feb/01/2026", "next week", "next month", a month name such as "January", or a period such as "six months". A month name alone resolves to the first working day of that month, subject to the business-calendar configuration. Relative periods ("six months") are counted from the date of the source interaction, not from today. | The resolved date is shown beside the field in the task form, the follow-up scheduler, and the note form before anything is saved. Month names and relative periods skip weekends and the holidays in the business calendar; weekday names are kept unless they fall on a holiday; explicit dates are kept as written. Notes count relative periods from the interaction date. | Implemented |
 | TASK-04 | Task updates notify assignees; users can comment and use collaborative checklists. | Checklists implemented; notifications and comments planned. | Partial |
-| TASK-05 | Remind the responsible Sales Manager when a lead has had no action for one week, based on configurable action/status rules. | "Needs attention" list on the Action Center; the number of days is an Admin setting. Rules that vary by BD action or status are not yet built. | Partial |
+| TASK-05 | Remind the responsible Sales Manager when a lead has had no action for one week, based on configurable action/status rules. | "Needs attention" list on the Action Center. Admins set a default number of days plus rules per status, per BD action, or per status-and-BD-action pair; the most specific rule wins, each flagged lead shows the limit that applies, and Lost Lead / Disqualified leads are never flagged. Reminder delivery by email is TASK-06. | Implemented |
 | TASK-06 | Daily and weekly reminders for pending/overdue activities. | — | Planned (needs notification delivery) |
 | TASK-07 | Scheduling a follow-up from a lead sets the lead's follow-up date and creates a reminder task for the owner. | — | Implemented (extension) |
 
@@ -269,8 +270,8 @@ React frontend, Node.js backend, responsive web experience, Android and iPhone s
 | RPT-02 | Admin performance dashboard: summary for all Sales Managers; click a name for the individual report. | — | Implemented |
 | RPT-03 | Periods: Today; Yesterday (business-day logic); This Week; Last Week; Month to Date; Last Month; Year to Date. | "Yesterday" skips weekends and the holidays in the business calendar. | Implemented |
 | RPT-04 | Drill-down from charts/cards to the exact leads/activities behind each number; open the entire lead from there. | — | Implemented |
-| RPT-05 | Tool engagement report for all Sales Managers and for an individual: logins, usage time where measurable, leads created/updated/converted, interactions, tasks created/completed, voice notes, documents attached, other feature usage; filters by date range, person, role/stage, and target template; graphical presentation with drill-down to supporting records. | Counts for logins, leads, updates, conversions, interactions, tasks, files are in the report with drill-down; usage time and voice notes are not measured; filters by stage and template are not yet in the UI. | Partial |
-| RPT-06 | Reports exportable to PDF/Excel. | Excel (.xlsx) and CSV export implemented; PDF planned. | Partial |
+| RPT-05 | Tool engagement report for all Sales Managers and for an individual: logins, usage time where measurable, leads created/updated/converted, interactions, tasks created/completed, voice notes, documents attached, other feature usage; filters by date range, person, role/stage, and target template; graphical presentation with drill-down to supporting records. | Counts for logins, leads, updates, conversions, interactions, tasks, files are in the report with drill-down; team reports filter by period, person, stage, and target template (also applied to exports); usage time and voice notes are not measured (open question 7). | Partial |
+| RPT-06 | Reports exportable to PDF/Excel. | Excel (.xlsx), PDF, and CSV exports of the performance report, honouring the RPT-05 filters; the Sales Trip field-visit report also exports to Excel and PDF. | Implemented |
 
 ### 3.18 Admin user management (BRD §20)
 
@@ -302,7 +303,7 @@ React frontend, Node.js backend, responsive web experience, Android and iPhone s
 | ID | Requirement | Status |
 |---|---|---|
 | NTF-01 | Channels: in-app, email, mobile push. | Planned |
-| NTF-02 | Events: mentions, comments, task assignment/update, lead status change, file upload, follow-up reminders, queued-lead events, ownership transfer, others configured. | Planned (all events are already recorded in the audit log and timeline, which is the source for notifications) |
+| NTF-02 | Events: mentions, comments, task assignment/update, lead status change, file upload, follow-up reminders, queued-lead events, ownership transfer, others configured; the updated BRD adds the Opportunity events of OPP-20. | Planned (all events are already recorded in the audit log and timeline, which is the source for notifications) |
 | NTF-03 | Daily and weekly performance reports by role and preference. | Planned |
 | NTF-04 | Daily and weekly reminders summarizing due/overdue follow-ups and tasks. | Planned |
 | NTF-05 | Per-account preferences subject to mandatory Admin/security notifications. | Planned |
@@ -312,7 +313,7 @@ React frontend, Node.js backend, responsive web experience, Android and iPhone s
 | ID | Requirement | Acceptance criteria | Status |
 |---|---|---|---|
 | AUD-01 | Audit lead creation and updates with field-level changes. | Each update records only the changed fields with before and after values. | Implemented |
-| AUD-02 | Audit ownership transfer, assignment, archive/restore, queued approval/rejection, user/role changes, device authorization, security configuration, list values, messages/comments, tasks, documents, profile uploads. | All implemented features write audit entries; messages and devices are planned. | Implemented for built features |
+| AUD-02 | Audit ownership transfer, assignment, archive/restore, queued approval/rejection, user/role changes, device authorization, security configuration, list values, messages/comments, tasks, documents, profile uploads; the updated BRD adds the Opportunity actions of OPP-21. | All implemented features write audit entries (including sales trips); messages, devices, and opportunities are planned. | Implemented for built features |
 | AUD-03 | Records include actor, timestamp, action, affected record, before/after values. | — | Implemented |
 | AUD-04 | Notes display author and date/time, newest first. | — | Implemented |
 | AUD-05 | Soft-deleted content remains represented in audit history. | Files: yes. Messages: planned. | Partial |
@@ -335,6 +336,35 @@ The change note amends a "Sales Trip Planner" requirement that the BRD/SRS does 
 | TRIP-09 | The list can be sorted ascending or descending by any applicable column. | — | Implemented |
 | TRIP-10 | Companies can be shortlisted from the results. | — | Implemented |
 | TRIP-11 | The list can be exported to Excel and printed as a field-visit report, both including Company Name and Company Address, with a scope of All Results, Filtered Results, Shortlisted Companies, or Planned Visits. | Planned Visits are shortlisted companies placed on a road visit plan (PLAN-01). | Implemented; a planned visit is a date set on a shortlisted company until the road visit planner (PLAN-01) exists |
+
+### 3.23 Opportunity Recommendation (BRD §25, added in the updated BRD/SRS of October 19, 2026)
+
+A module that finds sales opportunities in public job listings: Sales Managers keep saved Search Terms, a scheduled morning run queries the configured channels (Indeed first, more channels later), new listings become Opportunities that can be reviewed, converted to leads, or marked irrelevant, and Admins manage channels, schedules, and reporting. It shares the job-source abstraction and open question 10 with the Sales Trip Planner (§3.22) and the delivery channels of §3.20. Design: SPEC §10.10.
+
+| ID | Requirement | Acceptance criteria | Status |
+|---|---|---|---|
+| OPP-01 | Opportunities are identified automatically from permitted public job-listing sources. Indeed is the initial channel; Admins can add and configure further channels without changes to the core workflows (25.1, 25.4). | Each channel is a connector behind a common interface; Indeed is not hard-coded. | Planned |
+| OPP-02 | A dedicated "Opportunity Recommendation" item in the left navigation with the submenu Dashboard, My Opportunities, Search Terms, New Opportunities, Converted to Leads, Irrelevant, and a badge with the number of new opportunities (25.2). | — | Planned |
+| OPP-03 | Sales Managers create and manage saved Search Terms with Search Name, Keyword, Job Type, Location, Channel/Source, Created Date, Expiry Date, Status (Active, Paused, Inactive), Created By, Last Run, Next Run, Opportunities Found, New Opportunities (25.3). | Active terms run on schedule; Paused terms keep history and are skipped; expired terms become Inactive automatically. | Planned |
+| OPP-04 | A Search Term uses one channel, several, or All Active Channels (25.4). | — | Planned |
+| OPP-05 | Admin "Opportunity Recommendation > Channels" screen: add, edit, activate, pause, deactivate, configure, and test a channel; restrict a channel to all or selected Sales Managers; fields Channel Name, Type (API, Public Job Feed, Career Page, other), Status, Connection/Configuration, Created Date/By, Last Successful Run, Last Error, Availability, Execution Priority (25.5). | — | Planned |
+| OPP-06 | A daily run at an Admin-configurable time and time zone executes every Active Search Term on its channels, normalises listings into one Opportunity format, detects duplicates, stores only new recommendations, and updates run statistics; one failing channel does not stop the others, and each channel execution records success, partial success, or failure (25.6). | — | Planned |
+| OPP-07 | An Opportunity stores Company Name, Job Title, Job Type, Location, Posting Date, Description/Summary, Primary Channel, Source Name, Source Job ID, Original Job URL, Date Found, Search Term, Sales Manager, Status, Matching Keyword, Last Checked Date, and the other channels where it was found, and shows whether the company already exists as a Lead, Client, another Opportunity, or an earlier irrelevant Opportunity (25.7). | The CRM check reuses the Sales Trip Planner matching rules (TRIP-07). | Planned |
+| OPP-08 | Statuses New, Reviewed, Converted to Lead, Irrelevant; new opportunities stay highlighted until reviewed (25.8). | — | Planned |
+| OPP-09 | Cross-channel duplicate detection on Source Job ID, URL, Company, Title, Location, Posting Date, and description similarity; one Opportunity lists every source; converted, irrelevant, or reviewed opportunities keep their status when rediscovered (25.9). | — | Planned |
+| OPP-10 | After the morning run each Sales Manager gets a Daily Opportunity Report of new opportunities grouped by Search Term with per-channel counts and the unique total, by email and in-app (push where enabled); Admin decides whether a "no new opportunities" report is sent (25.10). | Depends on NTF-01 delivery and the mail provider. | Planned |
+| OPP-11 | Opportunity Dashboard cards: New, Found Today, Found This Week, Converted to Leads, Irrelevant, Active Search Terms; results grouped by Search Term with drill-down; filters by Search Term, Channel, Status, Job Type, Location, date range, keyword (25.11). | — | Planned |
+| OPP-12 | Convert to Lead opens the Add Lead form pre-filled (Company Name, Location, City, Industry, Positions, Company Size where available, source job details, Opportunity reference); after saving, the Opportunity becomes Converted to Lead and both records link to each other (25.12). | Adds an Opportunity reference to the lead record (LEAD-01 #26). | Planned |
+| OPP-13 | Mark Irrelevant removes an Opportunity from recommendations but keeps it in history, with optional reasons: Existing Client, Existing Lead, Not Target Industry, Position Not Relevant, Company Not Suitable, Duplicate, Location Not Relevant, Other (25.13). | Reasons are an Admin list. | Planned |
+| OPP-14 | Find Similar Opportunities runs an on-demand search across selected or all authorised channels, pre-filled from the Opportunity (Title, Keywords, Job Type, Location, Radius, Industry, Channels) and editable; results can be converted, marked irrelevant, opened at the source, saved, or refined (25.14). | — | Planned |
+| OPP-15 | Run Search Now executes a Search Term on demand with its configured criteria, compares results with existing Opportunities, and records the run in Search History (25.15). | — | Planned |
+| OPP-16 | Each Search Term keeps an execution history: run date/time, run type (Scheduled, On-Demand, Similar Opportunity), channels, listings found, new opportunities, duplicates, status, error details (25.16). | — | Planned |
+| OPP-17 | Admin configuration: daily run on/off, time and time zone, Daily Report on/off, email and in-app delivery, maximum automated searches per Sales Manager, expiry rules, duplicate-detection rules, retention, and the Job Type and Location value lists through List of Values (25.17). | — | Planned |
+| OPP-18 | Channel performance report: opportunities found, unique found, new, converted, irrelevant, conversion rate, searches executed, successful, failed, last successful run per channel (25.18). | — | Planned |
+| OPP-19 | Admin opportunity reporting for all or one Sales Manager by found, new, reviewed, converted, irrelevant, conversion rate, active terms, terms by Sales Manager, keyword, job type, location, and channel, with drill-down to the Opportunity, Search Term, Sales Manager, or converted Lead (25.19). | — | Planned |
+| OPP-20 | Notifications: Daily Opportunity Report, New Opportunities, Search Term approaching expiry, Search Term expired, Scheduled Search failure, by in-app, email, and push where enabled (25.20). | Extends NTF-02. | Planned |
+| OPP-21 | Audit of Search Term changes, status and expiry changes, scheduled and on-demand runs, similar searches, Opportunity status changes, conversions, irrelevant classification, channel changes, and Admin configuration, with actor, time, action, and before/after values (25.21). | Extends AUD-02. | Planned |
+| OPP-22 | Sources are accessed only through technically and legally permitted methods, honouring APIs, terms, robots and access restrictions, and data-use rules; connectors are isolated so one source cannot disrupt the module (25.22). | Same constraint as NFR-08 and open question 10. | Planned |
 
 ---
 
@@ -368,6 +398,9 @@ All lists are Admin-maintainable. Seeded values:
 - **Disqualified Reason** (fixed, LEAD-06): Not Interested, Bad Timing / Not Right Now, No Longer Interested, Cannot Contact, Does Not Meet Criteria
 - **Lost Lead Reason** (Admin-maintained, LEAD-06): seeded with Pricing
 - **Business Type** (Admin-maintained, TRIP-01): Manufacturing, Warehouse / Distribution, Bakery / Food Manufacturing, Any
+- **Job Type** (Admin-maintained, OPP-03/OPP-17, planned): Full-Time, Part-Time, Contract, Temporary
+- **Opportunity Location** (Admin-maintained, OPP-17, planned): to be seeded from the City list plus region values such as GTA
+- **Irrelevant Reason** (Admin-maintained, OPP-13, planned): Existing Client, Existing Lead, Not Target Industry, Position Not Relevant, Company Not Suitable, Duplicate, Location Not Relevant, Other
 - **Lead Category:** Skilled, Non Skilled, Both
 - **Company Size:** Large, Medium, Small
 - **Sales Manager Stage:** Onboarding, Training, Full Productive (fixed)
@@ -386,7 +419,7 @@ All lists are Admin-maintainable. Seeded values:
 | NFR-04 | Encryption in transit; protection for sensitive stored data. | TLS is a deployment responsibility (session cookies are Secure in production unless `APP_URL` declares a plain-http internal deployment); passwords are scrypt-hashed; session and reset tokens are stored only as SHA-256 hashes |
 | NFR-05 | Scalable search/filter and activity timelines. | Server-side filtering with indexes and pagination |
 | NFR-06 | Reliable audit logging and background notification processing. | Audit is written in the same transaction as the change; background processing planned |
-| NFR-07 | Accessibility-minded forms, keyboard navigation, labels, validation messages, readable contrast. | Labels, roles, and keyboard dismissal are in place; a formal audit is pending |
+| NFR-07 | Accessibility-minded forms, keyboard navigation, labels, validation messages, readable contrast. | Labels, roles, and keyboard dismissal are in place. An axe-core WCAG 2.1 A/AA audit runs in the browser suite (`07-accessibility.test.mjs`) over the sign-in screen, Action Center, lead dialog and timeline, lead list, tasks, reports, settings, list of values, user management, and trip planner; serious or critical findings fail the build. The October 22, 2026 audit found only colour-contrast failures, fixed by darkening every secondary text and badge colour to at least 4.6:1 against the lightest tints |
 | NFR-08 | Integrations comply with Google Workspace and third-party terms and capabilities. | Applies to Phase 3 |
 | NFR-09 | Rate limiting and brute-force protection on sign-in. | Implemented |
 
@@ -395,7 +428,7 @@ All lists are Admin-maintainable. Seeded values:
 ## 7. Assumptions, dependencies, and open questions
 
 1. **Device identification.** Standard browsers cannot read a MAC address. Device authorization needs either a managed-device identifier (MDM), a native/mobile wrapper, or a registration token per browser. Decision pending.
-2. **Email delivery.** Password reset, invitations, and 2FA depend on SMTP credentials that are not yet available. Until then Admins set passwords directly and 2FA cannot be enabled.
+2. **Email delivery.** Google Workspace SMTP credentials were supplied on October 22, 2026 but could not be verified (the development network blocks SMTP ports, and Google normally requires an App Password). Until the Workspace app is confirmed, `MAIL_PROVIDER=stub` keeps every email feature working by recording messages in the Settings outbox instead of sending them.
 3. **Google Workspace.** OAuth sign-in and Gmail linking need a Google Cloud project, verified consent screen, and domain-wide or per-user authorization. The Gmail link is coded (per-user consent, read-only scope) and stays dormant until `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GMAIL_TOKEN_KEY` are set.
 4. **External data sources.** Indeed, company careers pages, Glassdoor, and Google reviews have their own terms; the BRD scopes these to "when lawfully/technically available".
 5. **Business calendar.** Resolved: Admins keep the public-holiday list under Settings → Business calendar. Weekends and listed holidays are non-working days for "yesterday" in reports, target scaling, and natural-language dates.
@@ -407,6 +440,7 @@ All lists are Admin-maintainable. Seeded values:
 11. **Lost and Disqualified leads.** Defaults built on October 21, 2026, pending the client's confirmation: the lead stays active (not archived) and keeps its owner; there is no dedicated navigation view (use the status filter); conversions still count only changes to Client; closed leads are excluded from the needs-attention reminder; Lost Lead reasons are an Admin list seeded with Pricing. Any of these can change without schema work. Related: the existing Client Response values Not Interested, Do not use Agency, and Not Hiring overlap with the Disqualified reasons; in the client's current tracker those responses are recorded with the Status still Cold, so a mapping rule for existing data is needed.
 12. **Action matching rules.** Precedence when several leads match a discovered company, whether archived leads count, and how loose company-name matching may be. Lead addresses are free text and not geocoded today. SPEC §10.8 proposes defaults.
 13. **Legacy data import.** The client's current system of record is a spreadsheet tracker (kept outside the repository because it holds real contact data) with one row per interaction. Its lead type values are "Office" (87% of rows) and "Road_Trip", not Road Trip / Cold Call / Cold Email; its BD actions are two numbered stage sequences (road trip and office); its statuses are exactly Cold / Warm / Hot / Client. Decisions pending: what "Office" maps to, whether the numbered sequences return, and whether the import maps negative responses to Disqualified. SPEC §10.9 describes the import.
+14. **Opportunity Recommendation sources and scheduling (BRD §25).** The module needs the same licensed job-listing access as open question 10 (Indeed has no public search API) plus career-page access that respects robots and terms. The daily run needs a scheduler that survives the standalone deployment: SPEC §10.10 proposes a separate job runner process in Docker rather than an in-request timer. Both are decisions for the client before OPP-* is scheduled.
 
 ---
 
@@ -423,7 +457,7 @@ All lists are Admin-maintainable. Seeded values:
 | §8 Queued leads | QUE-01..03 | Implemented |
 | §9 Search/filter/archive | SRCH-01..07 | Implemented |
 | §10 Notes/voice | NOTE-01..06 | Partial (rich text and voice planned) |
-| §11 Tasks/reminders | TASK-01..07 | Partial (notifications planned) |
+| §11 Tasks/reminders | TASK-01..07 | Partial (TASK-05 rules implemented; notifications and digests planned) |
 | §12 Collaboration | COLL-01..06 | Planned |
 | §13 Files | FILE-01..08 | Implemented except AI summaries and upload notifications |
 | §14 OCR | OCR-01..03 | Planned |
@@ -432,8 +466,9 @@ All lists are Admin-maintainable. Seeded values:
 | §17 Road planner | PLAN-01..04 | Planned (preview); visits feed reports |
 | Change note Oct 21, 2026 §1–7, §9 (Sales Trip Planner) | TRIP-01..11 | Implemented on sample data; live providers need keys (§3.22) |
 | Change note Oct 21, 2026 §8 (lead status) | LEAD-06..07 | Implemented |
+| §25 Opportunity Recommendation (updated BRD of Oct 19, 2026) | OPP-01..22 | Planned (§3.23; depends on open questions 10 and 14) |
 | §18 Targets | TGT-01..06 | Implemented |
-| §19 Dashboards/reports | RPT-01..06 | Implemented; usage time and PDF export pending |
+| §19 Dashboards/reports | RPT-01..06 | Implemented; usage time pending |
 | §20 User management | USR-01..10 | Implemented except devices |
 | §21 List of values | LOV-01..05 | Implemented |
 | §22 Notifications | NTF-01..05 | Planned |

@@ -2,8 +2,9 @@
 
 | | |
 |---|---|
-| Source | `Sales_Tracker_App_BRD_SRS.docx` v1.0 (October 13, 2026), the change note `SalesTrackPro_Sales_Trip_Planner_Requirement_Change.docx` (October 21, 2026, local and untracked), and the current codebase |
-| SPEC version | 1.3 — October 21, 2026 (1.2: October 21, 2026; 1.1: October 18, 2026; 1.0: October 17, 2026) |
+| Source | `Sales_Tracker_App_BRD_SRS.docx` v1.0 (October 13, 2026) and its updated PDF of October 19, 2026 (adds BRD §25, PRD §3.23), the change note `SalesTrackPro_Sales_Trip_Planner_Requirement_Change.docx` (October 21, 2026, local and untracked), and the current codebase |
+| SPEC version | 1.4 — October 22, 2026 (1.3 and 1.2: October 21, 2026; 1.1: October 18, 2026; 1.0: October 17, 2026) |
+| Changes in 1.4 | Opportunity Recommendation design sketch (§10.10) for the updated BRD's §25. Mail provider switch with a stub outbox (`MAIL_PROVIDER`, migration 6, §3.16, §6.2). Needs-attention rules per status / BD action (TASK-05: `reminders.rules`, §3.12, §7.9), report stage and template filters (RPT-05, §6.6), PDF exports with `pdfkit` (RPT-06, `src/lib/pdf.ts`, §6.6, §6.9), axe-core accessibility audit in the browser suite (NFR-07, §12) |
 | Changes in 1.3 | Sales Trip Planner built (TRIP-01..11: migration 5, provider interface with stub and Google adapters, lead matching, trips API §6.9, screen A16, Excel export) and report Excel export (RPT-06). Lead status reasons implemented (LEAD-06/07: migration 4, `status_reason_id`, reason lists, status prompt, filters). PostgreSQL replaces MySQL: `pg` driver and `?`→`$n` query layer (§1, §2), PG* settings and `postgres:17` containers (§2), identity columns, JSONB, TIMESTAMP(0) UTC and the updated_at trigger (§3), SQLSTATE error mapping (§6) |
 | Changes in 1.2 | Sales Trip Planner design and screen A16 (§2.1, §8, §9, §10.8), lead status reasons (§3.5, §3.6, §3.13, §6.4, §7.1), legacy tracker import (§10.9) — from the change note of October 21, 2026 (PRD §3.22, LEAD-06/07) |
 | Changes in 1.1 | Docker packaging (§2.3), Selenium end-to-end suite (§12), Secure-cookie rule for plain-http deployments (§4, §11), `mysql2` kept external in the standalone build (§1) |
@@ -26,7 +27,7 @@ Next.js 16 (App Router) — route handlers under src/app/api/**            Node.
    │
    ├─ PostgreSQL 14+  (restricted app role: SELECT/INSERT/UPDATE/DELETE only)
    ├─ Local file storage for attachments (ATTACHMENT_DIR)
-   └─ SMTP (nodemailer) for reset links and two-factor codes
+   └─ SMTP (nodemailer) for reset links and two-factor codes, or the stub outbox (MAIL_PROVIDER=stub)
 ```
 
 **Conventions**
@@ -38,9 +39,9 @@ Next.js 16 (App Router) — route handlers under src/app/api/**            Node.
 - JSONB columns hold lists (client emails, privileges, checklist) and audit snapshots.
 - Repositories write SQL with `?` placeholders; `src/lib/db.ts` rewrites them to `$1 … $n`, returns `{ rows, rowCount }`, and inserts use `RETURNING id`. camelCase column aliases are double-quoted because PostgreSQL folds unquoted identifiers to lower case.
 
-**Stack:** Next.js 16.4 (Turbopack), React 19.3, TypeScript 5, Tailwind v4 (preflight only; styling is hand-written CSS in `src/app/globals.css`), pg, exceljs, nodemailer, lucide-react icons, mammoth (Word preview). Dev dependency for tests: selenium-webdriver 4.51.
+**Stack:** Next.js 16.4 (Turbopack), React 19.3, TypeScript 5, Tailwind v4 (preflight only; styling is hand-written CSS in `src/app/globals.css`), pg, exceljs, pdfkit, nodemailer, lucide-react icons, mammoth (Word preview). Dev dependency for tests: selenium-webdriver 4.51.
 
-**Build output:** `next.config.ts` sets `output: "standalone"` (traced server + `node_modules` under `.next/standalone`) and lists `pg` in `serverExternalPackages` so the driver stays a plain Node package; the production image therefore also runs `scripts/*.mjs`. Cache Components and partial prefetching are enabled; the single page `/` prerenders as a static shell and every API route is dynamic.
+**Build output:** `next.config.ts` sets `output: "standalone"` (traced server + `node_modules` under `.next/standalone`) and lists `pg`, `exceljs`, and `pdfkit` in `serverExternalPackages` so they stay plain Node packages; the production image therefore also runs `scripts/*.mjs`. Cache Components and partial prefetching are enabled; the single page `/` prerenders as a static shell and every API route is dynamic.
 
 ---
 
@@ -56,7 +57,8 @@ Next.js 16 (App Router) — route handlers under src/app/api/**            Node.
 | `TRUSTED_ORIGINS` | optional | Extra allowed origins, comma separated |
 | `BUSINESS_TIMEZONE` | optional | IANA zone, default `America/Toronto` (BR-12) |
 | `ATTACHMENT_DIR` | optional | Attachment root, default `./storage/attachments` |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | for email | Mailer; absent → email features report "not configured" |
+| `MAIL_PROVIDER` | optional | `stub` records every message in `mail_outbox` instead of sending (reset links and sign-in codes readable under Settings → Email delivery); `smtp` (default when SMTP_* exists) sends; `off` disables email even with SMTP_* set. The Docker dev stack template and the e2e stack use `stub` |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | for real email | Mailer; absent (and no stub) → email features report "not configured" |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GMAIL_TOKEN_KEY`, `GOOGLE_REDIRECT_URI` | for Gmail | OAuth client for Gmail linking (MAIL-01); the token key encrypts stored refresh tokens; redirect defaults to `APP_URL/api/gmail/callback`. Absent → the Emails tab reports "not configured" |
 | `MAPS_API_KEY` | for TRIP-* with live data | Google Geocoding, Places, and Distance Matrix calls (§10.8). Absent (and no stub) → the Sales Trip Planner reports "not configured" |
 | `JOBS_API_URL`, `JOBS_API_KEY` | for TRIP-06 with live data | Licensed job-listing aggregator behind the JSON contract in §10.8. Absent → the Hiring column is blank |
@@ -194,11 +196,11 @@ id · name VARCHAR(80) UNIQUE · stage · daily_leads · weekly_leads · daily_v
 
 ### 3.12 `app_settings`
 
-setting_key PK · value_json. Keys: `role_labels` `{admin, sales_manager, recruiter}` (ROLE-02), `reminders` `{inactivityDays}` (TASK-05), `business_calendar` `{holidays: [{date, name}]}` sorted by date (RPT-03, TASK-03).
+setting_key PK · value_json. Keys: `role_labels` `{admin, sales_manager, recruiter}` (ROLE-02), `reminders` `{inactivityDays, rules: [{statusId, bdActionId, days}]}` (TASK-05: list-value ids or null for "any"; a rule needs at least one of the two; duplicates of a pair collapse; 1–365 days), `business_calendar` `{holidays: [{date, name}]}` sorted by date (RPT-03, TASK-03).
 
 ### 3.13 `schema_migrations`
 
-version PK · name · applied_at. Versions: 1 core schema; 2 `users.auto_logout_time` and the `business_calendar` setting; 3 `gmail_connections`; 4 status reasons (LEAD-06: `leads.status_reason_id`, the `lost_reason` and `disqualified_reason` lists, the `lost` and `disqualified` status rows); 5 sales trips (`business_type` list, `sales_trips`, `sales_trip_results`, §3.15).
+version PK · name · applied_at. Versions: 1 core schema; 2 `users.auto_logout_time` and the `business_calendar` setting; 3 `gmail_connections`; 4 status reasons (LEAD-06: `leads.status_reason_id`, the `lost_reason` and `disqualified_reason` lists, the `lost` and `disqualified` status rows); 5 sales trips (`business_type` list, `sales_trips`, `sales_trip_results`, §3.15); 6 `mail_outbox` (§3.16).
 
 ### 3.14 `gmail_connections` (MAIL-01)
 
@@ -209,6 +211,10 @@ user_id PK FK → users (CASCADE) · google_email VARCHAR(254) · refresh_token_
 `sales_trips`: id · owner_id FK users · title VARCHAR(120) · address VARCHAR(500) · latitude, longitude DOUBLE PRECISION NULL (geocoded origin) · radius_type `km` | `minutes` (CHECK) · radius_value SMALLINT · business_type_id FK list_values NULL (SET NULL) · max_results SMALLINT (≤ 50) · provider VARCHAR(40) (`stub` or `google`) · last_run_at · result_count · timestamps (updated_at trigger). Index (owner_id, created_at).
 
 `sales_trip_results`: id · trip_id FK (CASCADE) · sequence · company_name VARCHAR(200) · address VARCHAR(500) · latitude, longitude · distance_km NUMERIC(7,2) NULL · drive_minutes SMALLINT NULL · website VARCHAR(2048) · phone VARCHAR(40) · provider_place_id VARCHAR(120) · job_count SMALLINT NULL (NULL = no job source) · jobs JSONB NULL (the dialog rows) · jobs_fetched_at · matched_lead_id FK leads NULL (SET NULL) · action_code VARCHAR(40) (`new` or a status code) · action_label VARCHAR(160) · shortlisted BOOLEAN · planned_visit_date DATE NULL · created_at. Index (trip_id, sequence). Results are a snapshot taken when the trip is created or re-run.
+
+### 3.16 `mail_outbox` (MAIL_PROVIDER, migration 6)
+
+id BIGINT · to_address · subject · status `stubbed` | `sent` | `failed` (CHECK) · error VARCHAR(500) NULL · text_body TEXT NULL (only for stubbed messages) · created_at. Every `sendMail` call records a row (the newest 500 are kept); a missing table never breaks the caller. Administrators see the latest 20 under Settings → Email delivery.
 
 ---
 
@@ -288,8 +294,8 @@ All endpoints return JSON; errors are `{ "error": string }` with status 400 (val
 | Method & path | Auth | Response |
 |---|---|---|
 | `GET /api/reference` | session | `{ listValues (active, by key), users (active directory), roleLabels, inactivityDays, holidays (dates), targetTemplates, mailerConfigured, today, timeZone }` |
-| `GET /api/settings` | session | `{ settings, mailerConfigured, timeZone }` |
-| `PATCH /api/settings` | manage_settings | `{ roleLabels?, reminders?, holidays? [{date, name}] }` → `{ settings }` (holidays: valid dates, names ≤ 80 characters, ≤ 400 entries, duplicates collapse) |
+| `GET /api/settings` | session | `{ settings, mailerConfigured, mail: { provider: stub\|smtp\|off, outbox (latest 20, administrators only) }, timeZone }` |
+| `PATCH /api/settings` | manage_settings | `{ roleLabels?, reminders? { inactivityDays, rules? }, holidays? [{date, name}] }` → `{ settings }` (holidays: valid dates, names ≤ 80 characters, ≤ 400 entries, duplicates collapse; rule ids must exist in the status and BD action lists) |
 
 ### 6.3 Users
 
@@ -336,8 +342,9 @@ LEAD-06/07: `LeadInput.statusReasonId` is required when the status code is `lost
 
 | Method & path | Auth | Response |
 |---|---|---|
-| `GET /api/dashboard?scope=mine\|team` | session | `{ today, metrics {calls,emails,visits: {thisWeek,lastWeek}}, followUps {overdue,today,tomorrow}, targets, inactiveLeads, inactivityDays, openTasks, overdueTaskCount, recentLeads, teamWide }` |
-| `GET /api/reports?period=&userId=` | view_reports | `{ range, rows: PerformanceRow[], series: daily points }` |
+| `GET /api/dashboard?scope=mine\|team` | session | `{ today, metrics {calls,emails,visits: {thisWeek,lastWeek}}, followUps {overdue,today,tomorrow}, targets, inactiveLeads, inactivityDays, inactiveLimits {leadId: days}, inactivityRuleCount, openTasks, overdueTaskCount, recentLeads, teamWide }` |
+| `GET /api/reports?period=&userId=&stage=&templateId=` | view_reports | `{ range, rows: PerformanceRow[], series: daily points }`; `stage` and `templateId` (RPT-05) apply to team reports and compare against each person's resolved template |
+| `GET /api/reports/export?period=&userId=&stage=&templateId=&format=xlsx\|pdf` | view_reports | `.xlsx` (Performance, Daily, Report sheets) or `.pdf` (landscape table with totals) of the same report (RPT-06) |
 | `GET /api/reports/drilldown?period=&userId=&metric=` | view_reports | `{ activities }` \| `{ leads }` \| `{ tasks }` |
 
 ### 6.7 Administration
@@ -372,7 +379,7 @@ All need `plan_trips`. A trip is visible to its owner and to anyone with `view_t
 | `PATCH /api/trips/{id}/results/{resultId}` | `{ shortlisted?, plannedVisitDate? (YYYY-MM-DD or null) }` → `{ result }`. Planning a visit shortlists the company; removing it from the shortlist clears the visit |
 | `GET /api/trips/{id}/results/{resultId}/jobs` | `{ result, jobs }`, refreshed from the job source when missing or older than a day |
 | `GET /api/trips/{id}/export?scope=all\|filtered\|shortlisted\|planned&action=` | `.xlsx` with a Companies sheet (Company, Company Address, Distance, Hiring, Action, Website, Phone, Shortlisted, Planned visit) and a Trip sheet |
-| `GET /api/reports/export?period=&userId=` | `.xlsx` of the performance report (RPT-06): Performance, Daily, and Report sheets |
+| `GET /api/trips/{id}/export?…&format=pdf` | `.pdf` field-visit report of the same scope (title block, scope, Company, Company Address, Distance, Hiring, Action, Phone, Planned visit) |
 
 Audit actions: `trip.created`, `trip.run`, `trip.shortlisted`, `trip.visit_planned` (entity type `sales_trip`).
 
@@ -425,7 +432,7 @@ Computed in the business timezone: today; yesterday = previous working day (Mon�
 
 ### 7.9 Dashboard composition (AC-*)
 
-Calls/emails/visits = counts of user-logged activities by type for this week and last week (own, or whole team for admins). Follow-ups = active leads by `follow_up_date` (< today, = today, = tomorrow). Needs attention = active leads with `last_activity_at` older than `inactivityDays`. Open tasks = assignee's open tasks (overdue count by `due_at`). Recent leads = active leads by `last_activity_at`.
+Calls/emails/visits = counts of user-logged activities by type for this week and last week (own, or whole team for admins). Follow-ups = active leads by `follow_up_date` (< today, = today, = tomorrow). Needs attention (TASK-05) = active leads (not Lost Lead or Disqualified) whose `last_activity_at` is older than the limit that applies to them: `resolveInactivityDays` picks the rule for status + BD action, else BD action, else status, else `inactivityDays`; candidates are read once with the shortest configured limit and filtered in memory; `inactiveLimits` reports the limit per flagged lead. Open tasks = assignee's open tasks (overdue count by `due_at`). Recent leads = active leads by `last_activity_at`.
 
 ---
 
@@ -454,8 +461,8 @@ Client use: `features/tasks/NaturalDateField` shows "Understood “…” as <da
 | `features/gmail` | `LeadEmails` (Emails tab: configuration note, connect/disconnect, recent messages), `client.ts`, server `gmail.ts` (OAuth exchange, token encryption, Gmail search) |
 | `features/leads` | `LeadListPage` (toolbar with status and reason filters, filters panel, bulk bar, pagination), `LeadTable`, `LeadFormDialog` (all fields; reason select for closed statuses), `LeadDetailDialog` (Overview, Timeline, Emails, Documents, Profiles shared, Tasks, Audit tabs; transfer, archive/restore, approve/reject, schedule follow-up, quick BD action/response/status updates, `StatusReasonDialog` for Lost Lead and Disqualified, inline reason select) |
 | `features/tasks` | `TasksPage` (Overdue / Today / Upcoming / Done columns, mine/team), `TaskFormDialog` (lead search, assignee, typed or picked due date, priority, checklist), `NaturalDateField` (TASK-03 preview) |
-| `features/reports` | `ReportsPage` (period chips, user filter, stat tiles, daily stacked bars, performance table with drill-down dialog, Excel export link via `/api/reports/export` and CSV export) |
-| `features/admin` | `AdminPage` router, `UsersPanel` (+ `UserFormDialog`, password dialog, terminate dialog, login history), `ListValuesPanel`, `TargetsPanel`, `SettingsPanel` (role names, reminder days, business-calendar holidays), device placeholder |
+| `features/reports` | `ReportsPage` (period chips, person, stage, and template filters, stat tiles, daily stacked bars, performance table with drill-down dialog, Excel and PDF export links via `/api/reports/export`, CSV export) |
+| `features/admin` | `AdminPage` router, `UsersPanel` (+ `UserFormDialog`, password dialog, terminate dialog, login history), `ListValuesPanel`, `TargetsPanel`, `SettingsPanel` (role names, reminder days and needs-attention rules, business-calendar holidays, email delivery mode and outbox), device placeholder |
 | `features/users` | `UserDirectoryDialog` (person picker) |
 | `features/preview` | `LeadGenerationPage`, `PlannerPage` (labelled previews) |
 | `features/trips` | `TripsPage` (new-trip form with the six criteria of TRIP-01, list of trips), `TripResultsPage` (sortable columns, Action filter, Show selector for all / shortlisted / planned visits, shortlist checkboxes, planned-visit dates, job-listings dialog, Excel export link, print), `matching.ts` (TRIP-07 rules), `providers/` (`types`, `stub`, `google`, selector) |
@@ -741,6 +748,20 @@ Store notes as sanitized HTML from a constrained editor (bold, italic, lists, li
 
 The client's current system of record is a Google Sheets workbook (`Sales Leads 2026.xlsx`, kept outside the repository because it holds real contact data). Its main sheet is one row per interaction: 6,669 rows for 3,754 companies between May 2025 and October 2026, with the BRD's 21 columns. `scripts/import-tracker.mjs` (planned) reads the workbook with `exceljs`, groups rows by normalised company name (same rules as §10.8), creates one lead per company from its latest row (status, owner, contact fields, address) with `first_contact_date` set to the earliest row date, and writes one timeline entry per row (`bd_action`, `client_response`, or a `note` carrying the remark; `occurred_at` = the row date). Subset sheets (`Copy of LeadsJun25`, `DEla`, `alex strong leads`, `warm leads`) are skipped; `Clients` confirms status Client; `ArchiveSales` (2021–22) may be loaded as archived leads. Mapping rules: strip the "N ." stage prefix from BD actions; match cities case-insensitively; split phone and email cells holding several values; move non-address text from the Address column to Comments; send text dates and shifted cells to a rejects report. `--dry-run` prints counts and the rejects without writing. Decisions still open: the "Office" lead type, the two numbered BD-action sequences, and whether Not Interested / Do not use Agency responses become Disqualified (PRD open question 13).
 
+### 10.10 Opportunity Recommendation (OPP-*, BRD §25) — design sketch
+
+**Tables.** `opportunity_channels` (id, name, type `api` | `feed` | `career_page` | `other`, status `active` | `paused` | `inactive`, config JSONB (provider key and settings, secrets encrypted like Gmail tokens), availability `all` | `selected` with `opportunity_channel_users`, priority, last_success_at, last_error, created_by, timestamps). `opportunity_search_terms` (id, owner_id, name, keyword, job_type_id FK list_values, location_id FK list_values, all_channels BOOLEAN, expiry_date, status `active` | `paused` | `inactive`, last_run_at, next_run_at, found_count, new_count, timestamps) with `opportunity_search_term_channels`. `opportunities` (id, owner_id, search_term_id, company_name, job_title, job_type, location, posted_on, summary TEXT, primary_channel_id, source_name, source_job_id, url, found_at, status `new` | `reviewed` | `converted` | `irrelevant`, irrelevant_reason_id FK list_values, matching_keyword, last_checked_at, matched_lead_id FK leads, match_kind `lead` | `client` | `opportunity` | `irrelevant` | NULL, converted_lead_id FK leads, dedupe_key VARCHAR(64)) with `opportunity_sources` (opportunity_id, channel_id, source_job_id, url, found_at) for every channel a listing appeared on. `opportunity_search_runs` (id, search_term_id, run_type `scheduled` | `on_demand` | `similar`, started_at, finished_at, channels JSONB, listings_found, new_count, duplicate_count, status `success` | `partial` | `failed`, error TEXT). `leads.opportunity_id` (LEAD-01 #26). Lists: `job_type`, `opportunity_location`, `irrelevant_reason`.
+
+**Connectors.** One interface, `searchListings({ keyword, jobType, location, radiusKm?, since? }) → Listing[]`, implemented per channel type and selected by `channels.config.provider`; the Sales Trip Planner's job contract (§10.8) is the first API connector, a career-page connector fetches permitted pages and extracts postings, and a stub connector serves fixed listings for tests. Connectors run in isolation (per-channel try/catch, timeout, and run record) so one failure never stops a run (OPP-06, OPP-22).
+
+**Scheduler.** A separate `jobs` process (`scripts/run-jobs.mjs` as a compose service, or an external cron hitting `POST /api/jobs/opportunities` with a shared secret) runs at the Admin-configured time and time zone, iterates active terms (capped by the per-manager maximum), writes runs and opportunities in one transaction per term, then queues the Daily Opportunity Report through the notification pipeline (§10.3) and the mailer. The same runner can carry the TASK-06 reminder digests.
+
+**Dedupe and CRM match.** `dedupe_key` = SHA-256 of normalised (source job id ∥ url) when present, else (normalised company ∥ title ∥ location ∥ posting date); a Jaro-Winkler check on the summary catches near-duplicates across channels. The CRM check reuses `features/trips/matching.ts`: a matched lead, client, or earlier opportunity sets `match_kind` and `matched_lead_id` (OPP-07, OPP-09). Rediscovered opportunities keep their status.
+
+**Screens.** Navigation item with submenu and badge (OPP-02); dashboard cards and grouped list (OPP-11, wireframe 25.24); search-term form with channel checkboxes and "Save & Run Now" (25.26); Admin channel screen with Test (25.25); Convert opens `LeadFormDialog` pre-filled and links both records (OPP-12); Irrelevant prompt with reason list (OPP-13); Find Similar opens the term form pre-filled (OPP-14); run history per term (OPP-16); channel and opportunity reports beside the performance report (OPP-18, OPP-19). Privileges: `manage_opportunities` (Sales Manager, Admin) and `manage_channels` (Admin).
+
+**Open before building:** the job source licence (PRD open question 10) and where the scheduler runs (open question 14).
+
 ---
 
 ## 11. Security and deployment notes
@@ -757,8 +778,11 @@ The client's current system of record is a Google Sheets workbook (`Sales Leads 
 ## 12. Verification
 
 - `npm run typecheck`, `npm run lint`, `npm run build` must pass.
-- Unit tests (`tests/unit`, `node:test` on Node 22 type stripping, `npm run test:unit`): the natural-language date parser (working days, relative phrases, weekday names, periods, month names, explicit spellings, times of day), the note follow-up suggestion rules, and the status-reason helpers.
+- Unit tests (`tests/unit`, `node:test` on Node 22 type stripping, `npm run test:unit`): the natural-language date parser (working days, relative phrases, weekday names, periods, month names, explicit spellings, times of day), the note follow-up suggestion rules, the status-reason helpers, the trip matching rules, and the needs-attention rule precedence.
 - End-to-end API suite (kept outside the repo during development) covers: first-run setup, bootstrap key lock-out, login and origin checks, seeding, reference data, role permissions for every mutating endpoint, queued review, edit/transfer rules, activities, lead 360 and audit visibility, tasks and checklists, uploads with versioning and type rejection, downloads, soft delete, dashboard, team and own reports, all periods, drill-down, list-value rename propagation and inactive-value rejection, settings, templates and assignment, user updates with extra privileges, bulk archive/restore/reassign, login history, admin and self password changes, SMTP-missing responses, termination cascade and session revocation, last-admin guard, audit action coverage, rate limiting, sign-out.
-- Browser end-to-end suite (`tests/e2e`, Selenium + `node:test`, run with `scripts/e2e.sh` against a production build, an in-memory PostgreSQL, and a Chromium grid in Docker): first-time setup, sign-in, password change and reset messaging, lead life cycle (create, BD action, timeline, note that offers a follow-up task, Emails tab without Gmail configured, follow-up task, document upload, edit, status, search, archive/restore), tasks (including a due date typed in words), user creation, a per-account sign-out time ending an older session, role-limited navigation, queued-lead approval, transfer, termination hand-off, list of values, settings, business-calendar holiday, target templates, report drill-down.
+- Browser end-to-end suite (`tests/e2e`, Selenium + `node:test`, run with `scripts/e2e.sh` against a production build, an in-memory PostgreSQL, and a Chromium grid in Docker): first-time setup, sign-in, password change, a reset request accepted in stub mail mode, lead life cycle (create, BD action, timeline, note that offers a follow-up task, Emails tab without Gmail configured, follow-up task, document upload, edit, status, search, archive/restore), tasks (including a due date typed in words), user creation, a per-account sign-out time ending an older session, role-limited navigation, queued-lead approval, transfer, termination hand-off, list of values, settings, business-calendar holiday, target templates, report drill-down.
+- Stub mail (MAIL_PROVIDER): `05-admin-reports.test.mjs` emails a set-password link from User management, opens it from the outbox under Settings, and completes the reset; the e2e stack runs with `MAIL_PROVIDER=stub`.
+- Needs-attention rules (TASK-05): `tests/unit/inactivity-rules.test.mjs` covers rule precedence and validation; `05-admin-reports.test.mjs` adds a rule, reloads, and checks the Action Center heading; the same file filters the report by stage and fetches the PDF and Excel exports.
+- Accessibility (NFR-07): `tests/e2e/07-accessibility.test.mjs` runs axe-core (WCAG 2.0/2.1 A and AA) on the sign-in screen, Action Center, lead dialog and timeline, lead list, tasks, reports, settings, list of values, user management, and the trip planner; serious or critical violations fail the test, lesser ones are printed.
 - Status reasons (LEAD-06): `tests/unit/status-reasons.test.mjs` covers the reason-list mapping and the combined label; `02-leads.test.mjs` sets Disqualified with a reason from the lead header, checks the inline reason select and the timeline entry, and returns the lead to Warm.
 - Sales Trip Planner: `tests/unit/trip-matching.test.mjs` covers the matching rules; `06-trips.test.mjs` plans a trip on the stub provider, checks the recognised lead, the job listings, shortlist and planned visit, filters, the Excel export, and the trip list.

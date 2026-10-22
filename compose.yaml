@@ -100,6 +100,7 @@ services:
       USER_MANAGEMENT_KEY: e2e-user-management-key
       BUSINESS_TIMEZONE: America/Toronto
       TRIPS_PROVIDER: stub
+      MAIL_PROVIDER: stub
       APP_URL: http://app-test:3000   # plain http inside the compose network: see session.ts cookie flags
     command: ["sh", "-c", "node scripts/create-database.mjs && exec node server.js"]
     healthcheck:

@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { after, before, describe } from "node:test";
 import { By, Page, createDriver, uiTest, waitForServices, xq } from "./helpers/ui.mjs";
 import { admin, ensureAdmin, runId } from "./helpers/data.mjs";
@@ -40,6 +41,48 @@ describe("Administration and reports", () => {
     await page.waitText(By.css(".workspace-switcher strong"), "Admin");
   });
 
+  uiTest("adds a needs-attention rule for a status", async () => {
+    await page.clickButton("Add rule", { global: true });
+    await page.setValue(await page.wait(By.css('select[aria-label="Rule 1 status"]')), "Hot");
+    await page.setValue(await page.wait(By.css('input[aria-label="Rule 1 days"]')), "3");
+    await page.clickButton("Save settings", { global: true });
+    await page.toast("Settings saved");
+    await driver.navigate().refresh();
+    await page.heading("Settings");
+    assert.equal(await page.selectedText(await page.wait(By.css('select[aria-label="Rule 1 status"]'))), "Hot");
+    assert.equal(await (await page.wait(By.css('input[aria-label="Rule 1 days"]'))).getAttribute("value"), "3");
+    await page.nav("Action center");
+    await page.waitText(By.xpath('//section[contains(@class,"reminder-panel")][.//h2[normalize-space()="Needs attention"]]//p'), "1 status/action rule");
+    await page.nav("Settings");
+    await page.heading("Settings");
+  });
+
+  uiTest("a set-password link from the stub outbox resets the password", async () => {
+    await page.nav("User management");
+    await page.heading("User management");
+    await page.click(By.css(`button[aria-label="Email a set-password link to ${admin.name}"]`), { global: true });
+    await page.toast("set-password link was emailed");
+    await page.nav("Settings");
+    await page.heading("Settings");
+    const row = await page.wait(By.xpath('//table[contains(@class,"outbox-table")]//tr[.//strong[normalize-space()="Reset your SalesTrackPro password"]]'));
+    assert.ok((await row.getText()).includes(admin.email), "the newest outbox row is addressed to the administrator");
+    await page.click(By.css(`button[aria-label="Show message to ${admin.email}"]`), { global: true });
+    const body = await (await page.wait(By.css(".outbox-body"))).getText();
+    const link = body.match(/https?:\/\/\S+\?reset=\S+/)?.[0];
+    assert.ok(link, "the stubbed message carries the reset link");
+    // The reset form is part of the signed-out screen, so sign out before following the link.
+    await page.signOut();
+    await driver.get(link);
+    await page.heading("Choose a new password");
+    await page.fill("New password", admin.password, { global: true });
+    await page.fill("Confirm password", admin.password, { global: true });
+    await page.clickButton("Set password", { global: true });
+    await page.heading("Welcome back");
+    await page.signIn(admin);
+    await page.nav("Settings");
+    await page.heading("Settings");
+  });
+
   uiTest("adds a holiday to the business calendar", async () => {
     const name = `Company holiday ${runId}`;
     const row = By.xpath(`//li[contains(@class,"holiday-row")][.//span[normalize-space()=${xq(name)}]]`);
@@ -78,6 +121,20 @@ describe("Administration and reports", () => {
     await page.dialogTitle(`${name} · calls`);
     await page.wait(By.xpath('//section[@role="dialog"]//div[contains(@class,"timeline-list")]'));
     await page.closeDialog();
+  });
+
+  uiTest("reports filter by stage and export to PDF and Excel", async () => {
+    await page.setValue(await page.wait(By.css('select[aria-label="Stage"]')), "Full Productive");
+    await page.wait(By.xpath('(//table[contains(@class,"report-table")]//tbody/tr)[1]'));
+    await page.setValue(await page.wait(By.css('select[aria-label="Stage"]')), "All stages");
+    for (const [label, type] of [["Export PDF", "application/pdf"], ["Export Excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"]]) {
+      const href = await (await page.wait(By.xpath(`//a[contains(normalize-space(.), "${label}")]`))).getAttribute("href");
+      const response = await driver.executeAsyncScript(
+        "const [url, done] = arguments; fetch(url, { credentials: 'same-origin' }).then((r) => done(`${r.status} ${r.headers.get('content-type')}`)).catch((e) => done(`error ${e}`));",
+        href,
+      );
+      assert.match(response, new RegExp(`^200 ${type.replace(/[.+]/g, "\\$&")}`), label);
+    }
   });
 
   uiTest("action center metrics link to the reports page", async () => {

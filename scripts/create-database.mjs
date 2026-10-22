@@ -489,6 +489,24 @@ const migrations = [
       await client.query("CREATE INDEX IF NOT EXISTS idx_sales_trip_results_trip ON sales_trip_results (trip_id, sequence)");
     },
   },
+  {
+    version: 6,
+    name: "mail outbox: stubbed, sent, and failed email deliveries (MAIL_PROVIDER)",
+    async run(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS mail_outbox (
+          id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          to_address VARCHAR(254) NOT NULL,
+          subject VARCHAR(255) NOT NULL,
+          status VARCHAR(10) NOT NULL CHECK (status IN ('stubbed', 'sent', 'failed')),
+          error VARCHAR(500) NULL,
+          text_body TEXT NULL,
+          created_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW}
+        )
+      `);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_mail_outbox_created ON mail_outbox (created_at)");
+    },
+  },
 ];
 
 if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port > 65535 || !/^[a-z_][a-z0-9_]*$/.test(databaseName)) {

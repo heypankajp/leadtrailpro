@@ -55,12 +55,12 @@ describe("Sign-in and first-time setup", () => {
     assert.equal(await page.alertText(), "Email or password is incorrect.");
   });
 
-  uiTest("explains that password reset email is not configured", async () => {
+  uiTest("accepts a password reset request (stub mail mode records it in the outbox)", async () => {
     await page.clickButton("Forgot your password?", { global: true });
     await page.heading("Reset your password");
     await page.fill("Email address", admin.email, { global: true });
     await page.clickButton("Send reset link", { global: true });
-    assert.match(await page.alertText(), /not configured/);
+    await page.waitText(By.css("p.login-message"), "on its way");
     await page.clickButton("Back to sign in", { global: true });
     await page.heading("Welcome back");
   });

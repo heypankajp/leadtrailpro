@@ -4,13 +4,14 @@ import { selectLeads } from "@/features/leads/repository";
 import type { LeadSummary } from "@/features/leads/model";
 import { listTasks } from "@/features/tasks/repository";
 import type { Task } from "@/features/tasks/model";
+import { resolveInactivityDays } from "@/features/settings/model";
 import { getSettings, listHolidayDates } from "@/features/settings/repository";
 import { resolveTargetTemplate } from "@/features/targets/repository";
 import type { TargetTemplate } from "@/features/targets/model";
 import { listUsers } from "@/features/users/repository";
 import { hasPrivilege } from "@/features/users/model";
 import type { UserAccount } from "@/features/users/model";
-import type { ActivityCounts, Dashboard, DrilldownMetric, PerformanceRow, TargetProgress } from "./model";
+import type { ActivityCounts, Dashboard, DrilldownMetric, PerformanceRow, ReportFilters, TargetProgress } from "./model";
 
 async function activityCounts(db: Queryable, userIds: number[] | null, range: DateRange): Promise<Map<number, ActivityCounts>> {
   const params: unknown[] = [toSqlDateTime(range.start), toSqlDateTime(range.end)];
@@ -67,7 +68,7 @@ function scaledTargets(template: TargetTemplate | null, range: DateRange, holida
   };
 }
 
-export async function performanceReport(period: ReportPeriod, viewer: UserAccount, userId: number | null): Promise<{ range: DateRange; rows: PerformanceRow[]; series: { date: string; calls: number; emails: number; visits: number; leads: number }[] }> {
+export async function performanceReport(period: ReportPeriod, viewer: UserAccount, userId: number | null, filters: ReportFilters = { stage: null, templateId: null }): Promise<{ range: DateRange; rows: PerformanceRow[]; series: { date: string; calls: number; emails: number; visits: number; leads: number }[] }> {
   const db = getDatabasePool();
   const holidays = await listHolidayDates(db);
   const range = periodRange(period, undefined, undefined, holidays);
@@ -76,6 +77,11 @@ export async function performanceReport(period: ReportPeriod, viewer: UserAccoun
   if (!teamWide) users = users.filter((user) => user.id === viewer.id);
   else if (userId) users = users.filter((user) => user.id === userId);
   else users = users.filter((user) => user.active && user.role !== "recruiter");
+  // RPT-05 filters apply to team reports; the template filter compares against each person's resolved template.
+  if (teamWide && filters.stage) users = users.filter((user) => user.stage === filters.stage);
+  const templates = new Map<number, TargetTemplate | null>();
+  for (const user of users) templates.set(user.id, await resolveTargetTemplate(user, db));
+  if (teamWide && filters.templateId) users = users.filter((user) => templates.get(user.id)?.id === filters.templateId);
   const ids = users.map((user) => user.id);
   if (!ids.length) return { range, rows: [], series: [] };
   const startSql = toSqlDateTime(range.start);
@@ -93,7 +99,7 @@ export async function performanceReport(period: ReportPeriod, viewer: UserAccoun
   const rows: PerformanceRow[] = [];
   for (const user of users) {
     const activity = activities.get(user.id) ?? { calls: 0, emails: 0, visits: 0, notes: 0 };
-    const template = await resolveTargetTemplate(user, db);
+    const template = templates.get(user.id) ?? null;
     const targets = scaledTargets(template, range, holidays);
     const achieved = { leads: leadsCreated.get(user.id) ?? 0, visits: activity.visits, conversions: conversions.get(user.id) ?? 0 };
     rows.push({
@@ -193,8 +199,18 @@ export async function buildDashboard(viewer: UserAccount, scope: "mine" | "team"
   };
   targets.percent = progressPercent([targets.leads, targets.visits, targets.conversions]);
 
-  const inactiveSince = toSqlDateTime(new Date(Date.now() - settings.reminders.inactivityDays * 86_400_000));
-  const inactiveLeads = await selectLeads(`l.record_state = 'active' AND st.code NOT IN ('lost', 'disqualified') AND l.last_activity_at < ? ${ownerClause}`, [inactiveSince, ...ownerParams], "l.last_activity_at ASC", 20, db);
+  // TASK-05: candidates older than the shortest configured limit, then each lead is judged by its own rule.
+  const reminders = settings.reminders;
+  const shortest = Math.min(reminders.inactivityDays, ...reminders.rules.map((rule) => rule.days));
+  const nowMs = Date.now();
+  const candidates = await selectLeads(`l.record_state = 'active' AND st.code NOT IN ('lost', 'disqualified') AND l.last_activity_at < ? ${ownerClause}`, [toSqlDateTime(new Date(nowMs - shortest * 86_400_000)), ...ownerParams], "l.last_activity_at ASC", 300, db);
+  const inactiveLimits: Record<string, number> = {};
+  const inactiveLeads = candidates.filter((lead) => {
+    const days = resolveInactivityDays(lead, reminders);
+    if (new Date(lead.lastActivityAt).getTime() >= nowMs - days * 86_400_000) return false;
+    inactiveLimits[lead.id] = days;
+    return true;
+  }).slice(0, 20);
   const openTasks = await listTasks({ assigneeId: teamWide ? undefined : viewer.id, status: "open", limit: 200 }, db);
   const nowIso = new Date().toISOString();
   const recentLeads = await selectLeads(`l.record_state = 'active' ${ownerClause}`, ownerParams, "l.last_activity_at DESC", 8, db);
@@ -210,6 +226,8 @@ export async function buildDashboard(viewer: UserAccount, scope: "mine" | "team"
     targets,
     inactiveLeads,
     inactivityDays: settings.reminders.inactivityDays,
+    inactiveLimits,
+    inactivityRuleCount: reminders.rules.length,
     openTasks: openTasks.slice(0, 10),
     overdueTaskCount: openTasks.filter((task) => task.dueAt && task.dueAt < nowIso).length,
     recentLeads,

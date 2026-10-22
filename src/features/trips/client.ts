@@ -10,4 +10,4 @@ export const rerunTrip = (id: number) => api<TripDetail>(`/api/trips/${id}/run`,
 export const updateTripResult = (tripId: number, resultId: number, changes: { shortlisted?: boolean; plannedVisitDate?: string | null }) =>
   api<{ result: TripResult }>(`/api/trips/${tripId}/results/${resultId}`, { method: "PATCH", json: changes });
 export const fetchResultJobs = (tripId: number, resultId: number) => api<{ result: TripResult; jobs: JobListing[] | null }>(`/api/trips/${tripId}/results/${resultId}/jobs`);
-export const tripExportUrl = (tripId: number, scope: ExportScope, action: string | null) => `/api/trips/${tripId}/export${toQuery({ scope, action })}`;
+export const tripExportUrl = (tripId: number, scope: ExportScope, action: string | null, format: "xlsx" | "pdf" = "xlsx") => `/api/trips/${tripId}/export${toQuery({ scope, action, format: format === "pdf" ? "pdf" : null })}`;
