@@ -8,6 +8,7 @@
     "db:create": "node --env-file=.env.setup.local scripts/create-database.mjs",
     "db:user:create": "node --env-file=.env.setup.local scripts/create-app-user.mjs",
     "db:seed": "node --env-file=.env.setup.local scripts/seed-sample-data.mjs",
+    "db:import": "node --env-file=.env.setup.local scripts/import-tracker.mjs",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",

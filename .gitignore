@@ -29,6 +29,7 @@
 # client source documents kept locally only (requirement change notes, the legacy lead tracker with real contact data)
 /docs/*.docx
 /docs/*.xlsx
+/import-report*.txt
 
 # misc
 .DS_Store

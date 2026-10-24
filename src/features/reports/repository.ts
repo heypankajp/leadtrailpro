@@ -6,7 +6,7 @@ import { listTasks } from "@/features/tasks/repository";
 import type { Task } from "@/features/tasks/model";
 import { resolveInactivityDays } from "@/features/settings/model";
 import { getSettings, listHolidayDates } from "@/features/settings/repository";
-import { resolveTargetTemplate } from "@/features/targets/repository";
+import { listTargetTemplates, resolveTargetTemplate } from "@/features/targets/repository";
 import type { TargetTemplate } from "@/features/targets/model";
 import { listUsers } from "@/features/users/repository";
 import { hasPrivilege } from "@/features/users/model";
@@ -79,22 +79,29 @@ export async function performanceReport(period: ReportPeriod, viewer: UserAccoun
   else users = users.filter((user) => user.active && user.role !== "recruiter");
   // RPT-05 filters apply to team reports; the template filter compares against each person's resolved template.
   if (teamWide && filters.stage) users = users.filter((user) => user.stage === filters.stage);
+  // One query for every template, then the same resolution as resolveTargetTemplate (assigned template, else the first for the stage).
+  const allTemplates = await listTargetTemplates(db);
   const templates = new Map<number, TargetTemplate | null>();
-  for (const user of users) templates.set(user.id, await resolveTargetTemplate(user, db));
+  for (const user of users) templates.set(user.id, (user.targetTemplateId && allTemplates.find((template) => template.id === user.targetTemplateId)) || allTemplates.find((template) => template.stage === user.stage) || null);
   if (teamWide && filters.templateId) users = users.filter((user) => templates.get(user.id)?.id === filters.templateId);
   const ids = users.map((user) => user.id);
   if (!ids.length) return { range, rows: [], series: [] };
   const startSql = toSqlDateTime(range.start);
   const endSql = toSqlDateTime(range.end);
 
-  const activities = await activityCounts(db, ids, range);
-  const leadsCreated = await countBy(db, `SELECT created_by AS "userId", COUNT(*) AS count FROM leads WHERE created_at >= ? AND created_at < ? AND created_by IN (${inList(ids)}) GROUP BY created_by`, [startSql, endSql, ...ids]);
-  const leadsUpdated = await countBy(db, `SELECT actor_id AS "userId", COUNT(*) AS count FROM audit_log WHERE action = 'lead.updated' AND created_at >= ? AND created_at < ? AND actor_id IN (${inList(ids)}) GROUP BY actor_id`, [startSql, endSql, ...ids]);
-  const conversions = await countBy(db, `SELECT user_id AS "userId", COUNT(*) AS count FROM lead_activities WHERE activity_type = 'status_change' AND value_code = 'client' AND occurred_at >= ? AND occurred_at < ? AND user_id IN (${inList(ids)}) GROUP BY user_id`, [startSql, endSql, ...ids]);
-  const tasksCreated = await countBy(db, `SELECT creator_id AS "userId", COUNT(*) AS count FROM tasks WHERE created_at >= ? AND created_at < ? AND creator_id IN (${inList(ids)}) GROUP BY creator_id`, [startSql, endSql, ...ids]);
-  const tasksCompleted = await countBy(db, `SELECT assignee_id AS "userId", COUNT(*) AS count FROM tasks WHERE status = 'done' AND completed_at >= ? AND completed_at < ? AND assignee_id IN (${inList(ids)}) GROUP BY assignee_id`, [startSql, endSql, ...ids]);
-  const files = await countBy(db, `SELECT uploaded_by AS "userId", COUNT(*) AS count FROM lead_attachments WHERE created_at >= ? AND created_at < ? AND uploaded_by IN (${inList(ids)}) GROUP BY uploaded_by`, [startSql, endSql, ...ids]);
-  const logins = await countBy(db, `SELECT user_id AS "userId", COUNT(*) AS count FROM login_history WHERE succeeded = TRUE AND created_at >= ? AND created_at < ? AND user_id IN (${inList(ids)}) GROUP BY user_id`, [startSql, endSql, ...ids]);
+  // Independent counts run concurrently on the pool.
+  const [activities, leadsCreated, leadsUpdated, conversions, tasksCreated, tasksCompleted, files, logins, activityRows, leadRows] = await Promise.all([
+    activityCounts(db, ids, range),
+    countBy(db, `SELECT created_by AS "userId", COUNT(*) AS count FROM leads WHERE created_at >= ? AND created_at < ? AND created_by IN (${inList(ids)}) GROUP BY created_by`, [startSql, endSql, ...ids]),
+    countBy(db, `SELECT actor_id AS "userId", COUNT(*) AS count FROM audit_log WHERE action = 'lead.updated' AND created_at >= ? AND created_at < ? AND actor_id IN (${inList(ids)}) GROUP BY actor_id`, [startSql, endSql, ...ids]),
+    countBy(db, `SELECT user_id AS "userId", COUNT(*) AS count FROM lead_activities WHERE activity_type = 'status_change' AND value_code = 'client' AND occurred_at >= ? AND occurred_at < ? AND user_id IN (${inList(ids)}) GROUP BY user_id`, [startSql, endSql, ...ids]),
+    countBy(db, `SELECT creator_id AS "userId", COUNT(*) AS count FROM tasks WHERE created_at >= ? AND created_at < ? AND creator_id IN (${inList(ids)}) GROUP BY creator_id`, [startSql, endSql, ...ids]),
+    countBy(db, `SELECT assignee_id AS "userId", COUNT(*) AS count FROM tasks WHERE status = 'done' AND completed_at >= ? AND completed_at < ? AND assignee_id IN (${inList(ids)}) GROUP BY assignee_id`, [startSql, endSql, ...ids]),
+    countBy(db, `SELECT uploaded_by AS "userId", COUNT(*) AS count FROM lead_attachments WHERE created_at >= ? AND created_at < ? AND uploaded_by IN (${inList(ids)}) GROUP BY uploaded_by`, [startSql, endSql, ...ids]),
+    countBy(db, `SELECT user_id AS "userId", COUNT(*) AS count FROM login_history WHERE succeeded = TRUE AND created_at >= ? AND created_at < ? AND user_id IN (${inList(ids)}) GROUP BY user_id`, [startSql, endSql, ...ids]),
+    db.query(`SELECT occurred_at AS "occurredAt", activity_type AS type FROM lead_activities WHERE activity_type IN ('call', 'email', 'visit') AND occurred_at >= ? AND occurred_at < ? AND user_id IN (${inList(ids)})`, [startSql, endSql, ...ids]).then((result) => result.rows as { occurredAt: string; type: string }[]),
+    db.query(`SELECT created_at AS "createdAt" FROM leads WHERE created_at >= ? AND created_at < ? AND created_by IN (${inList(ids)})`, [startSql, endSql, ...ids]).then((result) => result.rows as { createdAt: string }[]),
+  ]);
 
   const rows: PerformanceRow[] = [];
   for (const user of users) {
@@ -117,20 +124,15 @@ export async function performanceReport(period: ReportPeriod, viewer: UserAccoun
   rows.sort((a, b) => b.leadsCreated - a.leadsCreated || a.name.localeCompare(b.name));
 
   // Daily series bucketed in the business timezone.
-  const { rows: activityRows } = await db.query(
-    `SELECT occurred_at AS "occurredAt", activity_type AS type FROM lead_activities WHERE activity_type IN ('call', 'email', 'visit') AND occurred_at >= ? AND occurred_at < ? AND user_id IN (${inList(ids)})`,
-    [startSql, endSql, ...ids],
-  );
-  const { rows: leadRows } = await db.query(`SELECT created_at AS "createdAt" FROM leads WHERE created_at >= ? AND created_at < ? AND created_by IN (${inList(ids)})`, [startSql, endSql, ...ids]);
   const buckets = new Map<string, { date: string; calls: number; emails: number; visits: number; leads: number }>();
   for (let cursor = range.startYmd; cursor < range.endExclusiveYmd; cursor = addDaysYmd(cursor, 1)) buckets.set(cursor, { date: cursor, calls: 0, emails: 0, visits: 0, leads: 0 });
   const dayOf = (value: string) => { const parts = zonedParts(new Date(fromSqlDateTime(value) ?? value)); return formatYmd(parts.year, parts.month, parts.day); };
-  for (const row of activityRows as { occurredAt: string; type: string }[]) {
+  for (const row of activityRows) {
     const bucket = buckets.get(dayOf(row.occurredAt));
     if (!bucket) continue;
     if (row.type === "call") bucket.calls += 1; else if (row.type === "email") bucket.emails += 1; else bucket.visits += 1;
   }
-  for (const row of leadRows as { createdAt: string }[]) {
+  for (const row of leadRows) {
     const bucket = buckets.get(dayOf(row.createdAt));
     if (bucket) bucket.leads += 1;
   }
@@ -172,38 +174,41 @@ export async function buildDashboard(viewer: UserAccount, scope: "mine" | "team"
   const thisWeek = periodRange("this_week", undefined, undefined, holidays);
   const lastWeek = periodRange("last_week", undefined, undefined, holidays);
   const sum = (counts: Map<number, ActivityCounts>, key: keyof ActivityCounts) => [...counts.values()].reduce((total, entry) => total + entry[key], 0);
-  const thisCounts = await activityCounts(db, userIds, thisWeek);
-  const lastCounts = await activityCounts(db, userIds, lastWeek);
-
   const ownerClause = teamWide ? "" : "AND l.owner_id = ?";
   const ownerParams = teamWide ? [] : [viewer.id];
-  const followUps = {
-    overdue: await selectLeads(`l.record_state = 'active' AND l.follow_up_date < ? ${ownerClause}`, [today, ...ownerParams], "l.follow_up_date ASC, l.id DESC", 50, db),
-    today: await selectLeads(`l.record_state = 'active' AND l.follow_up_date = ? ${ownerClause}`, [today, ...ownerParams], "l.last_activity_at DESC", 50, db),
-    tomorrow: await selectLeads(`l.record_state = 'active' AND l.follow_up_date = ? ${ownerClause}`, [addDaysYmd(today, 1), ...ownerParams], "l.last_activity_at DESC", 50, db),
-  };
-
-  const template = await resolveTargetTemplate(viewer, db);
   const monthRange = periodRange("month_to_date", undefined, undefined, holidays);
   const weekStart = startOfWeekYmd(today);
-  const { rows: weekLeads } = await db.query("SELECT COUNT(*) AS count FROM leads WHERE created_by = ? AND created_at >= ? AND created_at < ?", [viewer.id, toSqlDateTime(thisWeek.start), toSqlDateTime(thisWeek.end)]);
-  const { rows: monthConversions } = await db.query("SELECT COUNT(*) AS count FROM lead_activities WHERE user_id = ? AND activity_type = 'status_change' AND value_code = 'client' AND occurred_at >= ? AND occurred_at < ?", [viewer.id, toSqlDateTime(monthRange.start), toSqlDateTime(monthRange.end)]);
-  const ownCounts = teamWide ? await activityCounts(db, [viewer.id], thisWeek) : thisCounts;
-  const weekVisits = ownCounts.get(viewer.id)?.visits ?? 0;
-  const targets: TargetProgress = {
-    template,
-    leads: { achieved: Number((weekLeads as { count: number }[])[0].count), target: template?.weeklyLeads ?? 0, label: `Leads this week (from ${weekStart})` },
-    visits: { achieved: weekVisits, target: template?.weeklyVisits ?? 0, label: "Road visits this week" },
-    conversions: { achieved: Number((monthConversions as { count: number }[])[0].count), target: template?.monthlyConversions ?? 0, label: `Conversions since ${startOfMonthYmd(today)}` },
-    percent: null,
-  };
-  targets.percent = progressPercent([targets.leads, targets.visits, targets.conversions]);
-
   // TASK-05: candidates older than the shortest configured limit, then each lead is judged by its own rule.
   const reminders = settings.reminders;
   const shortest = Math.min(reminders.inactivityDays, ...reminders.rules.map((rule) => rule.days));
   const nowMs = Date.now();
-  const candidates = await selectLeads(`l.record_state = 'active' AND st.code NOT IN ('lost', 'disqualified') AND l.last_activity_at < ? ${ownerClause}`, [toSqlDateTime(new Date(nowMs - shortest * 86_400_000)), ...ownerParams], "l.last_activity_at ASC", 300, db);
+
+  // The dashboard's queries are independent, so they run concurrently on the pool (NFR-01: the Action Center stays fast as the lead base grows).
+  const [thisCounts, lastCounts, overdue, dueToday, dueTomorrow, template, weekLeads, monthConversions, ownCounts, candidates, openTasks, recentLeads] = await Promise.all([
+    activityCounts(db, userIds, thisWeek),
+    activityCounts(db, userIds, lastWeek),
+    selectLeads(`l.record_state = 'active' AND l.follow_up_date < ? ${ownerClause}`, [today, ...ownerParams], "l.follow_up_date ASC, l.id DESC", 50, db),
+    selectLeads(`l.record_state = 'active' AND l.follow_up_date = ? ${ownerClause}`, [today, ...ownerParams], "l.last_activity_at DESC", 50, db),
+    selectLeads(`l.record_state = 'active' AND l.follow_up_date = ? ${ownerClause}`, [addDaysYmd(today, 1), ...ownerParams], "l.last_activity_at DESC", 50, db),
+    resolveTargetTemplate(viewer, db),
+    db.query("SELECT COUNT(*) AS count FROM leads WHERE created_by = ? AND created_at >= ? AND created_at < ?", [viewer.id, toSqlDateTime(thisWeek.start), toSqlDateTime(thisWeek.end)]).then((result) => Number((result.rows as { count: number }[])[0].count)),
+    db.query("SELECT COUNT(*) AS count FROM lead_activities WHERE user_id = ? AND activity_type = 'status_change' AND value_code = 'client' AND occurred_at >= ? AND occurred_at < ?", [viewer.id, toSqlDateTime(monthRange.start), toSqlDateTime(monthRange.end)]).then((result) => Number((result.rows as { count: number }[])[0].count)),
+    teamWide ? activityCounts(db, [viewer.id], thisWeek) : null,
+    selectLeads(`l.record_state = 'active' AND st.code NOT IN ('lost', 'disqualified') AND l.last_activity_at < ? ${ownerClause}`, [toSqlDateTime(new Date(nowMs - shortest * 86_400_000)), ...ownerParams], "l.last_activity_at ASC", 300, db),
+    listTasks({ assigneeId: teamWide ? undefined : viewer.id, status: "open", limit: 200 }, db),
+    selectLeads(`l.record_state = 'active' ${ownerClause}`, ownerParams, "l.last_activity_at DESC", 8, db),
+  ]);
+  const followUps = { overdue, today: dueToday, tomorrow: dueTomorrow };
+  const weekVisits = (ownCounts ?? thisCounts).get(viewer.id)?.visits ?? 0;
+  const targets: TargetProgress = {
+    template,
+    leads: { achieved: weekLeads, target: template?.weeklyLeads ?? 0, label: `Leads this week (from ${weekStart})` },
+    visits: { achieved: weekVisits, target: template?.weeklyVisits ?? 0, label: "Road visits this week" },
+    conversions: { achieved: monthConversions, target: template?.monthlyConversions ?? 0, label: `Conversions since ${startOfMonthYmd(today)}` },
+    percent: null,
+  };
+  targets.percent = progressPercent([targets.leads, targets.visits, targets.conversions]);
+
   const inactiveLimits: Record<string, number> = {};
   const inactiveLeads = candidates.filter((lead) => {
     const days = resolveInactivityDays(lead, reminders);
@@ -211,9 +216,7 @@ export async function buildDashboard(viewer: UserAccount, scope: "mine" | "team"
     inactiveLimits[lead.id] = days;
     return true;
   }).slice(0, 20);
-  const openTasks = await listTasks({ assigneeId: teamWide ? undefined : viewer.id, status: "open", limit: 200 }, db);
   const nowIso = new Date().toISOString();
-  const recentLeads = await selectLeads(`l.record_state = 'active' ${ownerClause}`, ownerParams, "l.last_activity_at DESC", 8, db);
 
   return {
     today,

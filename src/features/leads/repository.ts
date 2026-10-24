@@ -169,14 +169,17 @@ export async function listLeads(filters: LeadFilters, viewer: UserAccount): Prom
     : `${sortColumn} ${direction}, l.id DESC`;
   const offset = (filters.page - 1) * filters.pageSize;
   const db = getDatabasePool();
-  const { rows: countRows } = await db.query(
-    `SELECT COUNT(*) AS total FROM leads l JOIN users o ON o.id = l.owner_id JOIN list_values st ON st.id = l.status_id JOIN list_values lt ON lt.id = l.lead_type_id
-     LEFT JOIN list_values sr ON sr.id = l.status_reason_id LEFT JOIN list_values ba ON ba.id = l.bd_action_id LEFT JOIN list_values cr ON cr.id = l.client_response_id LEFT JOIN list_values ci ON ci.id = l.city_id
-     WHERE ${where}`,
-    params,
-  );
+  // The count and the page are independent, so they run concurrently on the pool.
+  const [{ rows: countRows }, { rows }] = await Promise.all([
+    db.query(
+      `SELECT COUNT(*) AS total FROM leads l JOIN users o ON o.id = l.owner_id JOIN list_values st ON st.id = l.status_id JOIN list_values lt ON lt.id = l.lead_type_id
+       LEFT JOIN list_values sr ON sr.id = l.status_reason_id LEFT JOIN list_values ba ON ba.id = l.bd_action_id LEFT JOIN list_values cr ON cr.id = l.client_response_id LEFT JOIN list_values ci ON ci.id = l.city_id
+       WHERE ${where}`,
+      params,
+    ),
+    db.query(`${leadSelect} WHERE ${where} ORDER BY ${orderBy} LIMIT ${filters.pageSize} OFFSET ${offset}`, params),
+  ]);
   const total = Number((countRows as { total: number }[])[0].total);
-  const { rows } = await db.query(`${leadSelect} WHERE ${where} ORDER BY ${orderBy} LIMIT ${filters.pageSize} OFFSET ${offset}`, params);
   return { leads: (rows as LeadRow[]).map(toLead), total, page: filters.page, pageSize: filters.pageSize };
 }
 

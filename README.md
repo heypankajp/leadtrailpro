@@ -8,7 +8,7 @@ SalesTrackPro is a sales workspace for a staffing and recruitment business, buil
 |---|---|
 | Stack | Next.js 16.4 (App Router, Turbopack), React 19, TypeScript 5, PostgreSQL 17 (14 or newer works), hand-written CSS |
 | Packaging | Docker: hot-reloading development stack, standalone production image, one-shot setup service |
-| Tests | ESLint, `tsc`, production build, unit suites for the date parser, status helpers, trip matching, reminder rules, digests, rich text, and mentions, and a 52-test Selenium browser suite with an axe-core accessibility audit, all in Docker |
+| Tests | ESLint, `tsc`, production build, unit suites for the date parser, status helpers, trip matching, reminder rules, digests, rich text, mentions, and the tracker import rules, and a 52-test Selenium browser suite with an axe-core accessibility audit, all in Docker |
 | Notifications | Bell in the top bar for task, lead, queue, and file events; daily and weekly digests by email and in-app, scheduled by the `jobs` service |
 | Email | Password resets, set-password links, and two-factor codes work in stub mode (`MAIL_PROVIDER=stub`, messages recorded under Settings → Email delivery) until `SMTP_*` is configured and `MAIL_PROVIDER=smtp` |
 | Sales trip planner | Built from the October 2026 change note; runs on sample company data until `MAPS_API_KEY` and a job-listing source are configured |
@@ -33,6 +33,7 @@ Everyday commands:
 | Lint, typecheck, build | `docker compose exec app npm run lint` (likewise `typecheck`, `build`) |
 | Browser end-to-end tests | `scripts/e2e.sh` (see [Checks and tests](#checks-and-tests)) |
 | Sample data (needs an administrator) | `docker compose run --rm setup node scripts/seed-sample-data.mjs` |
+| Import the legacy tracker (needs an administrator; `--dry-run` first) | `docker compose run --rm setup node scripts/import-tracker.mjs "docs/Sales Leads 2026.xlsx" --dry-run` |
 | Schema upgrade after pulling code | `docker compose run --rm setup node scripts/create-database.mjs` |
 | Add a dependency | `docker compose exec app npm install <package>`, then `docker compose build` |
 | PostgreSQL from a desktop tool | `127.0.0.1:5433`, database `salestrackpro`, user `postgres`, password `salestrackpro` (unless overridden) |
@@ -57,7 +58,7 @@ npm run db:user:create                          # restricted app account + .env.
 npm run dev
 ```
 
-Then complete the first-time setup in the browser as above. `npm run db:seed` adds sample data (demo Sales Managers, a Recruiter, leads, activities, tasks) once an administrator exists. Re-running `npm run db:create` after pulling new code applies any migrations that have not run yet.
+Then complete the first-time setup in the browser as above. `npm run db:seed` adds sample data (demo Sales Managers, a Recruiter, leads, activities, tasks) once an administrator exists. `npm run db:import -- "docs/Sales Leads 2026.xlsx" --dry-run` reads the client's legacy tracker and reports what it would create; without `--dry-run` it imports one lead per company with a timeline entry per row (rules and options in SPEC.md §10.9; the report lands in `import-report.txt`). Re-running `npm run db:create` after pulling new code applies any migrations that have not run yet.
 
 ## Configuration (`.env.local`)
 
@@ -119,7 +120,7 @@ docker compose -f compose.yaml -f compose.prod.yaml up -d --build
 src/app/                 Next.js App Router: page.tsx (client shell) and api/** route handlers
 src/features/<area>/     model.ts (types, validation) · repository.ts (SQL, rules) · client.ts (fetch) · React components
 src/lib/                 database pool, dates and timezone, HTTP helpers, mailer, async-data hook
-scripts/                 create-database.mjs (migrations), create-app-user.mjs, seed-sample-data.mjs,
+scripts/                 create-database.mjs (migrations), create-app-user.mjs, seed-sample-data.mjs, import-tracker.mjs (+ lib/tracker-mapping.mjs),
                          docker-entrypoint.sh (dev container), e2e.sh (browser suite runner)
 tests/e2e/               Selenium end-to-end suite (node:test) with helpers/ui.mjs and helpers/data.mjs
 docs/                    PRD.md (requirements with IDs and status), SPEC.md (design, API, data model, screens),
