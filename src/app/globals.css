@@ -1189,3 +1189,20 @@ h1 { margin: 9px 0 5px; color: #242941; font-size: 25px; font-weight: 690; lette
 .message-replies { display: grid; gap: 2px; margin-left: 37px; padding-left: 10px; border-left: 2px solid #eceef4; }
 .message-reply .message-avatar { width: 22px; height: 22px; font-size: 7px; }
 @media (max-width: 640px) { .message-replies { margin-left: 12px; } }
+
+/* ---- Rich-text editor shared by notes, messages, and task comments (NOTE-03/04) ---- */
+.rich-editor { display: grid; gap: 6px; width: 100%; }
+.lead-form label .rich-editor textarea { font-weight: 400; }
+.message-toolbar button.is-listening { color: #b23b2e; border-color: #efc2bb; background: #fff1ee; animation: listening-pulse 1.4s ease-in-out infinite; }
+@keyframes listening-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(178, 59, 46, 0.25); } 50% { box-shadow: 0 0 0 5px rgba(178, 59, 46, 0); } }
+.dictation-status { color: #5a6075; font-size: 9px; font-style: italic; }
+.dictation-status.is-error { color: #b23b2e; font-style: normal; }
+.message-file-picker label { display: inline; color: #50566c; font-size: 10px; font-weight: 400; cursor: pointer; }
+.rich-text.timeline-body { white-space: normal; }
+
+/* ---- Task comments (TASK-04) ---- */
+.task-comments { display: grid; gap: 10px; margin-top: 18px; padding-top: 14px; border-top: 1px solid #eceef4; }
+.task-comments h3 { display: flex; align-items: center; gap: 6px; margin: 0; color: #4d5268; font-size: 10px; font-weight: 650; }
+.task-comments .muted-note { margin: 0; color: #62697b; font-size: 10px; }
+.task-comment-composer { padding: 10px; border: 1px solid #e8eaf0; border-radius: 9px; background: #fbfbfd; }
+.task-card .task-comment-count { display: inline-flex; align-items: center; gap: 3px; }

@@ -575,6 +575,29 @@ const migrations = [
       await client.query("CREATE INDEX IF NOT EXISTS idx_lead_messages_parent ON lead_messages (parent_id)");
     },
   },
+  {
+    version: 9,
+    name: "task comments with mentions, file references, edits, and soft delete (TASK-04, COLL-06)",
+    async run(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS task_comments (
+          id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          task_id BIGINT NOT NULL,
+          author_id INTEGER NOT NULL,
+          body TEXT NOT NULL,
+          mentions JSONB NOT NULL DEFAULT '[]',
+          attachment_ids JSONB NOT NULL DEFAULT '[]',
+          edited_at TIMESTAMP(0) NULL,
+          deleted_at TIMESTAMP(0) NULL,
+          deleted_by INTEGER NULL,
+          created_at TIMESTAMP(0) NOT NULL,
+          CONSTRAINT fk_task_comments_task FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+          CONSTRAINT fk_task_comments_author FOREIGN KEY (author_id) REFERENCES users(id)
+        )
+      `);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_task_comments_task ON task_comments (task_id, id)");
+    },
+  },
 ];
 
 if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port > 65535 || !/^[a-z_][a-z0-9_]*$/.test(databaseName)) {

@@ -8,7 +8,7 @@ SalesTrackPro is a sales workspace for a staffing and recruitment business, buil
 |---|---|
 | Stack | Next.js 16.4 (App Router, Turbopack), React 19, TypeScript 5, PostgreSQL 17 (14 or newer works), hand-written CSS |
 | Packaging | Docker: hot-reloading development stack, standalone production image, one-shot setup service |
-| Tests | ESLint, `tsc`, production build, unit suites for the date parser, status helpers, trip matching, reminder rules, digests, rich text, mentions, and the tracker import rules, and a 52-test Selenium browser suite with an axe-core accessibility audit, all in Docker |
+| Tests | ESLint, `tsc`, production build, unit suites for the date parser, status helpers, trip matching, reminder rules, digests, rich text, mentions, and the tracker import rules, and a 53-test Selenium browser suite with an axe-core accessibility audit, all in Docker; GitHub Actions runs all of it on every push and pull request |
 | Notifications | Bell in the top bar for task, lead, queue, and file events; daily and weekly digests by email and in-app, scheduled by the `jobs` service |
 | Email | Password resets, set-password links, and two-factor codes work in stub mode (`MAIL_PROVIDER=stub`, messages recorded under Settings → Email delivery) until `SMTP_*` is configured and `MAIL_PROVIDER=smtp` |
 | Sales trip planner | Built from the October 2026 change note; runs on sample company data until `MAPS_API_KEY` and a job-listing source are configured |
@@ -149,7 +149,7 @@ compose.prod.yaml        production override
 
 ## Not yet connected
 
-Google sign-in, stored email threads with reply and forward, AI summaries, voice-to-text, OCR of business cards, presence and typing indicators on collaboration threads, mobile push notifications, device authorization, rich-text timeline notes, the Opportunity Recommendation module from the updated BRD (scheduled job-listing searches), and live map, company, review, routing, or job-board data (the sales trip planner uses sample companies until keys are set). Lead generation and the road visit planner show sample content. Designs for these are in SPEC.md section 10.
+Google sign-in, stored email threads with reply and forward, AI summaries, OCR of business cards, presence and typing indicators on collaboration threads, mobile push notifications, device authorization, the Opportunity Recommendation module from the updated BRD (scheduled job-listing searches), and live map, company, review, routing, or job-board data (the sales trip planner uses sample companies until keys are set). Lead generation and the road visit planner show sample content. Designs for these are in SPEC.md section 10.
 
 ## Checks and tests
 
@@ -161,6 +161,10 @@ npm run test:unit     # date parser, status helpers, trip matching, reminder rul
 ```
 
 Inside Docker, prefix each with `docker compose exec app`.
+
+### Continuous integration
+
+`.github/workflows/ci.yml` runs on every push to `master` and every pull request: typecheck, lint, and the unit tests on Node 22, then the browser suite through `scripts/e2e.sh` on the GitHub runner's Docker. Screenshots of failed browser tests are attached to the run as the `e2e-failures` artifact.
 
 ### Browser end-to-end tests (Selenium)
 

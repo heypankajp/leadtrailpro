@@ -11,6 +11,7 @@ import { Dialog, ErrorText, Field } from "@/features/shell/components";
 import { createTask, updateTask } from "./client";
 import { taskPriorities, type ChecklistItem, type Task, type TaskPriority } from "./model";
 import NaturalDateField from "./NaturalDateField";
+import TaskComments from "./TaskComments";
 
 type Props = { task?: Task; leadId?: number | null; leadName?: string | null; defaultAssigneeId?: number; onClose: () => void; onSaved: (task: Task) => void };
 
@@ -106,6 +107,7 @@ export default function TaskFormDialog({ task, leadId, leadName, defaultAssignee
           <button type="submit" className="button button-primary" disabled={busy}>{busy ? "Saving..." : task ? "Save task" : "Create task"}</button>
         </div>
       </form>
+      {task && <TaskComments task={task} />}
     </Dialog>
   );
 }

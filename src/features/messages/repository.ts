@@ -48,14 +48,15 @@ function toMessage(row: Row, attachments: Map<number, MessageAttachment>): LeadM
   };
 }
 
-async function leadAttachments(leadId: number, db: Queryable): Promise<Map<number, MessageAttachment>> {
+/** The lead's live files by id, for references from messages and task comments (COLL-06). */
+export async function listAttachmentRefs(leadId: number, db: Queryable = getDatabasePool()): Promise<Map<number, MessageAttachment>> {
   const { rows } = await db.query('SELECT id, file_name AS "fileName", label FROM lead_attachments WHERE lead_id = ? AND deleted_at IS NULL', [leadId]);
   return new Map((rows as MessageAttachment[]).map((row) => [Number(row.id), { id: Number(row.id), fileName: row.fileName, label: row.label }]));
 }
 
 export async function listThreads(leadId: number, db: Queryable = getDatabasePool()): Promise<MessageThread[]> {
   const { rows } = await db.query(`${select} WHERE m.lead_id = ? ORDER BY m.id`, [leadId]);
-  const attachments = await leadAttachments(leadId, db);
+  const attachments = await listAttachmentRefs(leadId, db);
   const messages = (rows as Row[]).map((row) => toMessage(row, attachments));
   const threads = new Map<number, MessageThread>();
   for (const message of messages) if (message.parentId === null) threads.set(message.id, { root: message, replies: [] });
@@ -71,7 +72,7 @@ export async function countMessages(leadId: number, db: Queryable = getDatabaseP
 export async function getMessage(id: number, db: Queryable = getDatabasePool()): Promise<LeadMessage | null> {
   const { rows } = await db.query(`${select} WHERE m.id = ?`, [id]);
   const row = (rows as Row[])[0];
-  return row ? toMessage(row, await leadAttachments(Number(row.leadId), db)) : null;
+  return row ? toMessage(row, await listAttachmentRefs(Number(row.leadId), db)) : null;
 }
 
 /** Notifies mentioned people (type `mention`), then the lead owner and the thread's other authors (type `message`). */
@@ -105,7 +106,7 @@ export async function postMessage(leadId: number, input: MessageInput, actor: Us
       const quoted = await getMessage(input.quotedMessageId, connection);
       if (!quoted || quoted.leadId !== leadId) throw new HttpError(400, "The quoted message does not belong to this lead.");
     }
-    const files = await leadAttachments(leadId, connection);
+    const files = await listAttachmentRefs(leadId, connection);
     const attachmentIds = input.attachmentIds.filter((id) => files.has(id));
     const mentions = parseMentions(input.body, await listDirectory(connection));
     const now = new Date();

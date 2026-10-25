@@ -13,6 +13,8 @@ import { documentLabels, previewableMimeTypes, type LeadAttachment } from "@/fea
 import LeadEmails from "@/features/gmail/LeadEmails";
 import { reasonListFor, type ListKey, type ListValue } from "@/features/list-values/model";
 import CollaborationTab from "@/features/messages/CollaborationTab";
+import RichText from "@/features/shell/RichText";
+import RichTextArea from "@/features/shell/RichTextArea";
 import { useApp } from "@/features/shell/AppContext";
 import { Avatar, Dialog, EmptyState, ErrorText, Field, KeyValue, Loading, PromptDialog, StatusPill, Tabs } from "@/features/shell/components";
 import { createTask, updateTask } from "@/features/tasks/client";
@@ -184,7 +186,7 @@ export default function LeadDetailDialog({ leadId, onClose }: { leadId: number; 
                 <button className={`task-checkbox ${task.status === "done" ? "is-done" : ""}`} aria-label={task.status === "done" ? `Reopen ${task.title}` : `Complete ${task.title}`} disabled={!can("manage_tasks")} onClick={async () => { try { await updateTask(task.id, { status: task.status === "done" ? "open" : "done" }); await refresh(task.status === "done" ? "Task reopened" : "Task completed"); } catch (caught) { notify(errorMessage(caught), "error"); } }}><Check size={13} /></button>
                 <div className="task-card-content">
                   <strong className={task.status === "done" ? "is-done" : ""}>{task.title}</strong>
-                  <small>{task.assigneeName} · {task.dueAt ? formatDateTime(task.dueAt) : "No due date"}{task.checklist.length ? ` · ${task.checklist.filter((item) => item.done).length}/${task.checklist.length} checklist` : ""}</small>
+                  <small>{task.assigneeName} · {task.dueAt ? formatDateTime(task.dueAt) : "No due date"}{task.checklist.length ? ` · ${task.checklist.filter((item) => item.done).length}/${task.checklist.length} checklist` : ""}{task.commentCount ? ` · ${task.commentCount} comment${task.commentCount === 1 ? "" : "s"}` : ""}</small>
                   <span className={`priority priority-${task.priority}`}>{task.priority} priority</span>
                 </div>
                 {can("manage_tasks") && <button className="row-more" aria-label={`Edit ${task.title}`} onClick={() => setDialog({ kind: "task", task })}><Pencil size={15} /></button>}
@@ -415,7 +417,7 @@ function TimelineTab({ detail, onLogged }: { detail: LeadDetail; onLogged: (mess
       {type && (
         <form className="lead-form activity-form" onSubmit={submit}>
           {type !== "note" && <Field label="Summary" wide><input value={summary} onChange={(event) => setSummary(event.target.value)} maxLength={500} placeholder={type === "call" ? "Spoke with HR about the Q1 hiring plan" : type === "email" ? "Sent the introduction email" : "On-site meeting with the plant manager"} autoFocus /></Field>}
-          <Field label={type === "note" ? "Interaction note" : "Notes (optional)"} wide required={type === "note"} hint={canSuggest ? "Mention the next step with a date (\u201cfollow up next Tuesday\u201d, \u201csend the proposal by Friday\u201d) and a task will be offered." : undefined}><textarea rows={4} value={body} onChange={(event) => setBody(event.target.value)} maxLength={10000} placeholder="What was discussed, commitments, next steps..." autoFocus={type === "note"} required={type === "note"} /></Field>
+          <Field label={type === "note" ? "Interaction note" : "Notes (optional)"} wide required={type === "note"} hint={canSuggest ? "Mention the next step with a date (\u201cfollow up next Tuesday\u201d, \u201csend the proposal by Friday\u201d) and a task will be offered. Use the toolbar or the microphone; **bold**, _italic_, lists, and links are kept." : undefined}><RichTextArea value={body} onChange={setBody} rows={4} maxLength={10000} placeholder="What was discussed, commitments, next steps..." autoFocus={type === "note"} required={type === "note"} /></Field>
           <Field label="When"><input type="datetime-local" value={occurredAt} max={toLocalInput(new Date().toISOString())} onChange={(event) => setOccurredAt(event.target.value)} required /></Field>
           {draft && suggestion && (
             <div className="form-note follow-up-suggestion field-wide">
@@ -445,7 +447,7 @@ function TimelineTab({ detail, onLogged }: { detail: LeadDetail; onLogged: (mess
             <span className="timeline-dot">{activityIcon(activity.type)}</span>
             <div>
               <div className="timeline-head"><strong>{activity.summary}</strong><span className="badge badge-muted">{activityLabels[activity.type]}</span></div>
-              {activity.body && <p className="timeline-body">{activity.body}</p>}
+              {activity.body && <RichText text={activity.body} className="timeline-body" />}
               <small>{activity.userName} · {formatDateTime(activity.occurredAt)} ({relativeTime(activity.occurredAt)})</small>
             </div>
           </article>

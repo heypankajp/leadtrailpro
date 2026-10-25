@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { Check, ListTodo, Pencil, Plus } from "lucide-react";
+import { Check, ListTodo, MessageSquare, Pencil, Plus } from "lucide-react";
 import { errorMessage } from "@/lib/api";
 import { formatDateTime, localToday } from "@/lib/format";
 import { useAsyncData } from "@/lib/useAsyncData";
@@ -76,7 +76,13 @@ export default function TasksPage() {
                       {task.leadName ? <button type="button" className="link-button" onClick={() => task.leadId && openLead(task.leadId)}>{task.leadName}</button> : "No lead"}
                       {" · "}{task.dueAt ? formatDateTime(task.dueAt) : "No due date"}{scope === "all" ? ` · ${task.assigneeName}` : ""}
                     </small>
-                    {task.checklist.length > 0 && <small>{task.checklist.filter((item) => item.done).length}/{task.checklist.length} checklist items done</small>}
+                    {(task.checklist.length > 0 || task.commentCount > 0) && (
+                      <small>
+                        {task.checklist.length > 0 ? `${task.checklist.filter((item) => item.done).length}/${task.checklist.length} checklist items done` : ""}
+                        {task.checklist.length > 0 && task.commentCount > 0 ? " · " : ""}
+                        {task.commentCount > 0 ? <span className="task-comment-count"><MessageSquare size={10} /> {task.commentCount} comment{task.commentCount === 1 ? "" : "s"}</span> : null}
+                      </small>
+                    )}
                     <span className={`priority priority-${task.priority}`}>{task.priority} priority</span>
                   </div>
                   {can("manage_tasks") && <button className="row-more" aria-label={`Edit ${task.title}`} onClick={() => setDialog({ task })}><Pencil size={15} /></button>}

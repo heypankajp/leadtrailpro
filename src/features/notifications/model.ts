@@ -1,7 +1,7 @@
 /** In-app notifications (NTF-01/02) and the digests that summarise follow-ups and tasks (TASK-06, NTF-03/04). */
 
 export const notificationTypes = [
-  "task_assigned", "task_updated", "task_completed", "lead_status", "lead_transferred", "queued_lead", "queued_reviewed", "file_uploaded", "mention", "message", "daily_digest", "weekly_digest",
+  "task_assigned", "task_updated", "task_completed", "lead_status", "lead_transferred", "queued_lead", "queued_reviewed", "file_uploaded", "mention", "message", "task_comment", "daily_digest", "weekly_digest",
 ] as const;
 export type NotificationType = (typeof notificationTypes)[number];
 

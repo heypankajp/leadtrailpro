@@ -11,13 +11,14 @@ import type { ChecklistItem, Task, TaskInput, TaskPatch, TaskPriority, TaskStatu
 type Row = {
   id: number; leadId: number | null; leadName: string | null; title: string; description: string | null; assigneeId: number; assigneeName: string;
   creatorId: number; creatorName: string; dueAt: string | null; priority: string; status: string; checklist: string | ChecklistItem[];
-  completedAt: string | null; createdAt: string; updatedAt: string;
+  completedAt: string | null; commentCount: number; createdAt: string; updatedAt: string;
 };
 
 const select = `
   SELECT t.id, t.lead_id AS "leadId", l.client_name AS "leadName", t.title, t.description, t.assignee_id AS "assigneeId",
     CONCAT(a.first_name, ' ', a.last_name) AS "assigneeName", t.creator_id AS "creatorId", CONCAT(c.first_name, ' ', c.last_name) AS "creatorName",
-    t.due_at AS "dueAt", t.priority, t.status, t.checklist, t.completed_at AS "completedAt", t.created_at AS "createdAt", t.updated_at AS "updatedAt"
+    t.due_at AS "dueAt", t.priority, t.status, t.checklist, t.completed_at AS "completedAt", t.created_at AS "createdAt", t.updated_at AS "updatedAt",
+    (SELECT COUNT(*) FROM task_comments tc WHERE tc.task_id = t.id AND tc.deleted_at IS NULL)::int AS "commentCount"
   FROM tasks t
   JOIN users a ON a.id = t.assignee_id
   JOIN users c ON c.id = t.creator_id
@@ -46,6 +47,7 @@ const toTask = (row: Row): Task => {
     status: (row.status === "done" ? "done" : "open") as TaskStatus,
     checklist: Array.isArray(checklist) ? checklist.filter((item) => item && typeof item.text === "string") : [],
     completedAt: fromSqlDateTime(row.completedAt),
+    commentCount: Number(row.commentCount ?? 0),
     createdAt: fromSqlDateTime(row.createdAt) ?? row.createdAt,
     updatedAt: fromSqlDateTime(row.updatedAt) ?? row.updatedAt,
   };

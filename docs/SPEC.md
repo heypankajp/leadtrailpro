@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Source | `Sales_Tracker_App_BRD_SRS.docx` v1.0 (October 13, 2026) and its updated PDF of October 19, 2026 (adds BRD §25, PRD §3.23), the change note `SalesTrackPro_Sales_Trip_Planner_Requirement_Change.docx` (October 21, 2026, local and untracked), and the current codebase |
-| SPEC version | 1.6 — October 23, 2026: legacy tracker import as built (§10.9). 1.5 — October 22, 2026 (1.4: October 22, 2026; 1.3 and 1.2: October 21, 2026; 1.1: October 18, 2026; 1.0: October 17, 2026) |
+| SPEC version | 1.7 — October 25, 2026: shared rich-text editor with dictation (§7.12), task comments (§3.20, §6.12), CI workflow (§12). 1.6 — October 23, 2026: legacy tracker import as built (§10.9). 1.5 — October 22, 2026 (1.4: October 22, 2026; 1.3 and 1.2: October 21, 2026; 1.1: October 18, 2026; 1.0: October 17, 2026) |
 | Changes in 1.4 | In-app notifications, preferences, digests, and the jobs scheduler (TASK-06, NTF-*: migration 7, §3.17–3.18, §6.10, §7.11, `scripts/jobs.mjs`, compose `jobs` service). Opportunity Recommendation design sketch (§10.10) for the updated BRD's §25. Mail provider switch with a stub outbox (`MAIL_PROVIDER`, migration 6, §3.16, §6.2). Needs-attention rules per status / BD action (TASK-05: `reminders.rules`, §3.12, §7.9), report stage and template filters (RPT-05, §6.6), PDF exports with `pdfkit` (RPT-06, `src/lib/pdf.ts`, §6.6, §6.9), axe-core accessibility audit in the browser suite (NFR-07, §12) |
 | Changes in 1.3 | Sales Trip Planner built (TRIP-01..11: migration 5, provider interface with stub and Google adapters, lead matching, trips API §6.9, screen A16, Excel export) and report Excel export (RPT-06). Lead status reasons implemented (LEAD-06/07: migration 4, `status_reason_id`, reason lists, status prompt, filters). PostgreSQL replaces MySQL: `pg` driver and `?`→`$n` query layer (§1, §2), PG* settings and `postgres:17` containers (§2), identity columns, JSONB, TIMESTAMP(0) UTC and the updated_at trigger (§3), SQLSTATE error mapping (§6) |
 | Changes in 1.2 | Sales Trip Planner design and screen A16 (§2.1, §8, §9, §10.8), lead status reasons (§3.5, §3.6, §3.13, §6.4, §7.1), legacy tracker import (§10.9) — from the change note of October 21, 2026 (PRD §3.22, LEAD-06/07) |
@@ -227,6 +227,10 @@ id BIGINT · user_id FK (CASCADE) · type (`task_assigned`, `task_updated`, `tas
 
 id · job (`daily` | `weekly`) · period_key (the business date, `week-<Monday>`, or `manual-<instant>-<actor>`) · status `running` | `success` | `partial` | `failed` · details · started_at · finished_at. UNIQUE (job, period_key) is the lock that makes a digest run once per period however many schedulers call in. The `digests` setting (`{enabled, dailyTime, weeklyDay, weeklyTime}`) lives in app_settings.
 
+### 3.20 `task_comments` (TASK-04, COLL-06, migration 9)
+
+id BIGINT · task_id FK tasks (CASCADE) · author_id FK users · body TEXT (rich-text format of §7.12) · mentions JSONB · attachment_ids JSONB (ids of `lead_attachments` on the task's lead) · edited_at NULL · deleted_at NULL · deleted_by FK users NULL · created_at. Index (task_id, id). Same removal semantics as `lead_messages`: the row and text stay, the API blanks the body, the audit entry `task.comment_removed` keeps the text. Task rows carry a live `commentCount`.
+
 ### 3.19 `lead_messages` (COLL-*, migration 8)
 
 id BIGINT · lead_id FK (CASCADE) · parent_id FK self NULL (CASCADE; replies are kept one level deep, a reply to a reply is attached to the root) · author_id FK users · body TEXT (the rich-text format of §7.12, stored as written) · mentions JSONB (`[{kind: all|admin|recruiter|salesmanager} | {kind: user, userId, name}]`, parsed on save) · attachment_ids JSONB (ids of `lead_attachments` on the same lead, COLL-06) · quoted_message_id FK self NULL (SET NULL) · edited_at NULL · deleted_at NULL · deleted_by FK users NULL · created_at. Indexes (lead_id, id) and (parent_id). A removed message keeps its row and text (the API blanks the body, mentions, and attachments and reports who removed it); the audit entry `message.deleted` carries the original text.
@@ -411,6 +415,15 @@ Audit actions: `trip.created`, `trip.run`, `trip.shortlisted`, `trip.visit_plann
 
 Digest runs are audited as `digest.daily` / `digest.weekly` (entity type `job`).
 
+### 6.12 Task comments (TASK-04)
+
+| Method & path | Auth | Request → response |
+|---|---|---|
+| `GET /api/tasks/{id}/comments` | session | `{ comments }` oldest first; removed comments carry an empty body, `deletedAt`, `deletedByName` |
+| `POST /api/tasks/{id}/comments` | collaborate, same origin | `{ body, attachmentIds? }` → 201 `{ comment }`; ids not on the task's lead are dropped; audited as `task.commented`; notifies mentioned people (`mention`), then the assignee, the creator, and earlier commenters (`task_comment`) |
+| `PATCH /api/task-comments/{id}` | collaborate (author only), same origin | `{ body }` → `{ comment }`; audited as `task.comment_edited`; newly mentioned people are notified |
+| `DELETE /api/task-comments/{id}` | moderate_messages, same origin | → `{ comment }` marked removed; audited as `task.comment_removed` with the text |
+
 ### 6.11 Collaboration messages (COLL-*)
 
 | Method & path | Auth | Request → response |
@@ -493,6 +506,10 @@ The twelve queries behind the dashboard are independent and run concurrently on 
 
 **Live updates (COLL-05)**: the tab refetches the thread list every 20 s and after every change; presence and typing indicators are deferred (PRD open question 15).
 
+**Shared editor** (`features/shell/RichTextArea.tsx`): one controlled textarea with the formatting toolbar, @mention suggestions (when a directory is passed), the file-reference picker (when the lead's attachments are passed), and dictation. Timeline notes and call/email/visit remarks, the collaboration composer, and task comments all use it; timeline bodies render through `RichText`, so pre-existing plain-text notes are unchanged (plain text parses to paragraphs).
+
+**Dictation (NOTE-04)**: the editor looks for `SpeechRecognition` / `webkitSpeechRecognition` after mount and shows the microphone only when present (Chrome, Edge, Safari; not Firefox). Recognition runs continuously with interim results in the user's browser language; each final phrase is inserted at the cursor (with a leading space when needed), interim text and errors (microphone blocked, no microphone, service unreachable) appear in a live region under the textarea, and nothing is saved until the user submits. Browsers require a secure context (HTTPS or localhost) for the microphone. No audio reaches the application server; Chrome and Edge send it to the vendor's speech service, Safari to Apple's.
+
 ### 7.10 Natural-language dates (TASK-03, NOTE-05)
 
 `src/lib/natural-dates.ts` is a dependency-free parser shared by the browser (live preview) and `tests/unit`. `parseNaturalDate(text, { anchor, holidays })` finds the earliest date phrase (a phrase inside a longer one, such as "Feb" inside "Feb 1", is ignored) and resolves it against the anchor calendar date: relative words (today, tomorrow, day after tomorrow, next week/month/quarter/year, end of week/month/year), weekday names, periods ("in two weeks", "six months", "3 business days"), month names alone (first working day of the next such month, year included when given), and explicit dates in several spellings (`Feb 1`, `1st of February 2027`, `Feb/01/2027`, `02/01/2027` month first, `2027-02-01`). Working day = Monday to Friday minus the `business_calendar` holidays. Relative results and month names roll forward to the next working day and report `adjusted`; weekday names move only when they hit a holiday; explicit dates are kept as written. A time of day (`at 10am`, `3:30 pm`, `at 3` = 15:00, `14:45`, noon, morning 09:00, afternoon 14:00, evening 17:00, end of day 17:00) is read from the remaining text.
@@ -517,7 +534,7 @@ Client use: `features/tasks/NaturalDateField` shows "Understood “…” as <da
 | `features/dashboard` | `ActionCenter` |
 | `features/gmail` | `LeadEmails` (Emails tab: configuration note, connect/disconnect, recent messages), `client.ts`, server `gmail.ts` (OAuth exchange, token encryption, Gmail search) |
 | `features/leads` | `LeadListPage` (toolbar with status and reason filters, filters panel, bulk bar, pagination), `LeadTable`, `LeadFormDialog` (all fields; reason select for closed statuses), `LeadDetailDialog` (Overview, Timeline, Collaboration, Emails, Documents, Profiles shared, Tasks, Audit tabs; transfer, archive/restore, approve/reject, schedule follow-up, quick BD action/response/status updates, `StatusReasonDialog` for Lost Lead and Disqualified, inline reason select) |
-| `features/tasks` | `TasksPage` (Overdue / Today / Upcoming / Done columns, mine/team), `TaskFormDialog` (lead search, assignee, typed or picked due date, priority, checklist), `NaturalDateField` (TASK-03 preview) |
+| `features/tasks` | `TasksPage` (Overdue / Today / Upcoming / Done columns, mine/team, comment counts), `TaskFormDialog` (lead search, assignee, typed or picked due date, priority, checklist; `TaskComments` below the form of an existing task), `TaskComments` (list, composer with mentions and file references, edit own, Admin removal), `NaturalDateField` (TASK-03 preview), server `comments.ts` |
 | `features/reports` | `ReportsPage` (period chips, person, stage, and template filters, stat tiles, daily stacked bars, performance table with drill-down dialog, Excel and PDF export links via `/api/reports/export`, CSV export) |
 | `features/admin` | `AdminPage` router, `UsersPanel` (+ `UserFormDialog`, password dialog, terminate dialog, login history), `ListValuesPanel`, `TargetsPanel`, `SettingsPanel` (role names, reminder days and needs-attention rules, digest schedule with send-now buttons, business-calendar holidays, email delivery mode and outbox), device placeholder |
 | `features/users` | `UserDirectoryDialog` (person picker) |
@@ -525,7 +542,7 @@ Client use: `features/tasks/NaturalDateField` shows "Understood “…” as <da
 | `features/messages` | `CollaborationTab` (composer with formatting toolbar, @mention picker, file references; threads with Reply, Quote, Edit, Remove), `client.ts`, server `repository.ts` (threads, post, edit, remove, notifications, audit), `model.ts` (input validation, mention parsing and recipients) |
 | `features/preview` | `LeadGenerationPage`, `PlannerPage` (labelled previews) |
 | `features/trips` | `TripsPage` (new-trip form with the six criteria of TRIP-01, list of trips), `TripResultsPage` (sortable columns, Action filter, Show selector for all / shortlisted / planned visits, shortlist checkboxes, planned-visit dates, job-listings dialog, Excel export link, print), `matching.ts` (TRIP-07 rules), `providers/` (`types`, `stub`, `google`, selector) |
-| `features/shell` | `App`, `AppShell`, `AppContext`, shared `Dialog`, `Tabs`, `Field`, `Pagination`, `PromptDialog`, `Avatar`, `StatusPill`, `EmptyState`, `RichText` (NOTE-03 renderer) |
+| `features/shell` | `App`, `AppShell`, `AppContext`, shared `Dialog`, `Tabs`, `Field`, `Pagination`, `PromptDialog`, `Avatar`, `StatusPill`, `EmptyState`, `RichText` (NOTE-03 renderer), `RichTextArea` (editor with toolbar, mentions, file references, dictation) |
 
 ### 8.3 Styling
 
@@ -854,7 +871,7 @@ Verified on 2026-10-23 against the client's workbook: 3,611 leads and 226 archiv
 
 ## 12. Verification
 
-- `npm run typecheck`, `npm run lint`, `npm run build` must pass.
+- `npm run typecheck`, `npm run lint`, `npm run build` must pass. GitHub Actions (`.github/workflows/ci.yml`) runs typecheck, lint, and the unit tests on every push to master and every pull request, then the browser suite through `scripts/e2e.sh` in Docker; screenshots of failed browser tests are kept as a workflow artifact.
 - Unit tests (`tests/unit`, `node:test` on Node 22 type stripping, `npm run test:unit`): the natural-language date parser (working days, relative phrases, weekday names, periods, month names, explicit spellings, times of day), the note follow-up suggestion rules, the status-reason helpers, the trip matching rules, and the needs-attention rule precedence.
 - End-to-end API suite (kept outside the repo during development) covers: first-run setup, bootstrap key lock-out, login and origin checks, seeding, reference data, role permissions for every mutating endpoint, queued review, edit/transfer rules, activities, lead 360 and audit visibility, tasks and checklists, uploads with versioning and type rejection, downloads, soft delete, dashboard, team and own reports, all periods, drill-down, list-value rename propagation and inactive-value rejection, settings, templates and assignment, user updates with extra privileges, bulk archive/restore/reassign, login history, admin and self password changes, SMTP-missing responses, termination cascade and session revocation, last-admin guard, audit action coverage, rate limiting, sign-out.
 - Browser end-to-end suite (`tests/e2e`, Selenium + `node:test`, run with `scripts/e2e.sh` against a production build, an in-memory PostgreSQL, and a Chromium grid in Docker): first-time setup, sign-in, password change, a reset request accepted in stub mail mode, lead life cycle (create, BD action, timeline, note that offers a follow-up task, Emails tab without Gmail configured, follow-up task, document upload, edit, status, search, archive/restore), tasks (including a due date typed in words), user creation, a per-account sign-out time ending an older session, role-limited navigation, queued-lead approval, transfer, termination hand-off, list of values, settings, business-calendar holiday, target templates, report drill-down.
@@ -864,5 +881,6 @@ Verified on 2026-10-23 against the client's workbook: 3,611 leads and 226 archiv
 - Accessibility (NFR-07): `tests/e2e/07-accessibility.test.mjs` runs axe-core (WCAG 2.0/2.1 A and AA) on the sign-in screen, Action Center, lead dialog and timeline, lead list, tasks, reports, settings, list of values, user management, and the trip planner; serious or critical violations fail the test, lesser ones are printed.
 - Status reasons (LEAD-06): `tests/unit/status-reasons.test.mjs` covers the reason-list mapping and the combined label; `02-leads.test.mjs` sets Disqualified with a reason from the lead header, checks the inline reason select and the timeline entry, and returns the lead to Warm.
 - Legacy tracker import (§10.9): `tests/unit/tracker-mapping.test.mjs` covers dates, BD-action prefixes and aliases, statuses, lead types, emails, phones, address detection, city clean-up, and field merging; the script itself is verified with `--dry-run` against the client's workbook (counts in §10.9).
+- Task comments and rich-text notes (TASK-04, NOTE-03/04): `03-tasks.test.mjs` comments on a task with a mention picked from the suggestions, edits the comment, and removes it as an administrator; `02-leads.test.mjs` writes a note with the Bold button, checks the rendered emphasis, and checks that the dictation button is offered in Chromium.
 - Collaboration (COLL-*, NOTE-03): `tests/unit/richtext.test.mjs` covers the inline and block parser, unsafe links, and the plain-text form; `tests/unit/messages.test.mjs` covers mention parsing, group expansion, and input validation; `02-leads.test.mjs` posts a message with bold, a list, and an @admin mention picked from the suggestions, replies with a quote, edits the reply, removes it as an administrator, and checks the tab count; `04-team.test.mjs` mentions the Sales Manager on a transferred lead and finds the mention in their bell; `07-accessibility.test.mjs` audits the Collaboration tab.
 - Sales Trip Planner: `tests/unit/trip-matching.test.mjs` covers the matching rules; `06-trips.test.mjs` plans a trip on the stub provider, checks the recognised lead, the job listings, shortlist and planned visit, filters, the Excel export, and the trip list.

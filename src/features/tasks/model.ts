@@ -1,9 +1,35 @@
+import { parseMessageInput, type Mention, type MessageAttachment } from "@/features/messages/model";
+
 export const taskPriorities = ["low", "normal", "medium", "high"] as const;
 export type TaskPriority = (typeof taskPriorities)[number];
 export const taskStatuses = ["open", "done"] as const;
 export type TaskStatus = (typeof taskStatuses)[number];
 
 export type ChecklistItem = { text: string; done: boolean };
+
+/** A comment on a task (TASK-04): rich text, @mentions, references to the lead's files (COLL-06), own edits, Admin removal. */
+export type TaskComment = {
+  id: number;
+  taskId: number;
+  authorId: number;
+  authorName: string;
+  authorRole: string;
+  /** Empty once the comment is removed. */
+  body: string;
+  mentions: Mention[];
+  attachments: MessageAttachment[];
+  editedAt: string | null;
+  deletedAt: string | null;
+  deletedByName: string | null;
+  createdAt: string;
+};
+
+export type TaskCommentInput = { body: string; attachmentIds: number[] };
+
+export function parseTaskCommentInput(value: unknown): { input: TaskCommentInput; errors: string[] } {
+  const { input, errors } = parseMessageInput(value);
+  return { input: { body: input.body, attachmentIds: input.attachmentIds }, errors };
+}
 
 export type Task = {
   id: number;
@@ -20,6 +46,8 @@ export type Task = {
   status: TaskStatus;
   checklist: ChecklistItem[];
   completedAt: string | null;
+  /** Live comments on the task (TASK-04). */
+  commentCount: number;
   createdAt: string;
   updatedAt: string;
 };

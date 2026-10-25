@@ -56,10 +56,15 @@ describe("Leads", () => {
     await page.toast("Activity recorded");
     await page.wait(By.xpath('//article[contains(@class,"timeline-entry")]//strong[normalize-space()="Intro call with Priya"]'));
     await page.clickButton("Add note");
-    await page.fill("Interaction note", "Client wants profiles for two welders.");
+    const note = await page.fill("Interaction note", "Client wants profiles for two welders. ");
+    // NOTE-03: the toolbar wraps the selection in the rich-text markup; NOTE-04: dictation is offered where the browser supports it.
+    await page.click(By.css('form.activity-form button[aria-label="Bold"]'));
+    assert.match(await note.getAttribute("value"), /\*\*text\*\*$/, "the Bold button inserts the markup");
+    await note.sendKeys(" urgent");
+    assert.equal((await driver.findElements(By.css('form.activity-form button[aria-label="Start dictation"]'))).length, 1, "the dictation button is shown in Chromium");
     await page.click(By.css('form.activity-form button[type="submit"]'));
     await page.toast("Activity recorded");
-    await page.wait(By.xpath('//article[contains(@class,"timeline-entry")]//p[contains(normalize-space(.), "two welders")]'));
+    await page.wait(By.xpath('//article[contains(@class,"timeline-entry")]//div[contains(@class,"timeline-body")]//p[contains(normalize-space(.), "two welders")][.//strong]'));
   });
 
   uiTest("a note with a follow-up instruction offers to create the task", async () => {
