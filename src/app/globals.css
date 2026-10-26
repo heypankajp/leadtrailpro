@@ -1206,3 +1206,18 @@ h1 { margin: 9px 0 5px; color: #242941; font-size: 25px; font-weight: 690; lette
 .task-comments .muted-note { margin: 0; color: #62697b; font-size: 10px; }
 .task-comment-composer { padding: 10px; border: 1px solid #e8eaf0; border-radius: 9px; background: #fbfbfd; }
 .task-card .task-comment-count { display: inline-flex; align-items: center; gap: 3px; }
+
+/* ---- Job listing sources (Settings) ---- */
+.job-source-list { display: grid; gap: 6px; margin-bottom: 10px; }
+.job-source-row { display: grid; grid-template-columns: minmax(0, 1.6fr) auto auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid #f0f1f5; }
+.job-source-row:last-child { border-bottom: 0; }
+.job-source-name { display: grid; gap: 2px; }
+.job-source-name strong { color: #4d5268; font-size: 10px; font-weight: 620; }
+.job-source-note { color: #8a5a1e; font-size: 9px; }
+.job-source-ready { color: #2f6b4f; font-size: 9px; }
+.job-source-usage { color: #62697b; font-size: 9px; }
+.job-source-move { display: inline-flex; gap: 4px; }
+.job-source-row .rule-days input { width: 72px; }
+.jobs-attribution { margin: 8px 0 0; text-align: right; }
+.jobs-attribution a { color: #4f5ed3; }
+@media (max-width: 760px) { .job-source-row { grid-template-columns: 1fr 1fr; } }

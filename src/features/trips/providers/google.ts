@@ -1,19 +1,15 @@
 import { haversineKm } from "../matching";
-import type { JobListing } from "../model";
 import type { CompanyCandidate, CompanySearchInput, GeoPoint, TripProvider } from "./types";
 
 /**
  * Google Maps Platform adapter (Geocoding, Places Text Search, Place Details, Distance Matrix) plus a licensed
- * job-listing aggregator behind a small JSON contract. Needs MAPS_API_KEY; job listings need JOBS_API_URL and
- * JOBS_API_KEY. Written to the documented HTTP APIs and exercised only through the stub in automated tests:
+ * Needs MAPS_API_KEY. Job listings come from the job-sources layer (features/jobs, SPEC §7.13). Written to the documented HTTP APIs and exercised only through the stub in automated tests:
  * verify against a real key before go-live (PRD open questions 9 and 10).
  *
- * Job aggregator contract: GET `${JOBS_API_URL}?company=<name>&website=<domain>&location=<address>` with
- * `Authorization: Bearer <JOBS_API_KEY>` returns `{ "jobs": [{ "title", "source", "location", "posted_at", "employment_type", "url" }] }`.
  * Any licensed source (Adzuna, SerpApi Google Jobs, JSearch, …) is wrapped by a thin service exposing that shape.
  */
 
-type GoogleConfig = { mapsKey: string; jobsUrl: string | undefined; jobsKey: string | undefined };
+type GoogleConfig = { mapsKey: string };
 
 /** Keyword rules per Admin business-type code; unknown codes fall back to the type's display name. */
 const keywords: Record<string, string> = {
@@ -33,7 +29,6 @@ async function getJson(url: string, init?: RequestInit): Promise<Record<string, 
 
 export function createGoogleProvider(config: GoogleConfig): TripProvider {
   const base = "https://maps.googleapis.com/maps/api";
-  const jobsConfigured = Boolean(config.jobsUrl && config.jobsKey);
 
   async function placeDetails(placeId: string): Promise<{ website: string; phone: string }> {
     const data = await getJson(`${base}/place/details/json?place_id=${encodeURIComponent(placeId)}&fields=website,formatted_phone_number&key=${config.mapsKey}`);
@@ -58,7 +53,6 @@ export function createGoogleProvider(config: GoogleConfig): TripProvider {
 
   return {
     name: "google",
-    jobsConfigured,
     async geocode(address) {
       const data = await getJson(`${base}/geocode/json?address=${encodeURIComponent(address)}&key=${config.mapsKey}`);
       const first = (data.results as { geometry?: { location?: { lat: number; lng: number } } }[] | undefined)?.[0];
@@ -96,30 +90,6 @@ export function createGoogleProvider(config: GoogleConfig): TripProvider {
         .slice(0, input.limit);
       const details = await Promise.all(kept.map((place) => placeDetails(place.placeId).catch(() => ({ website: "", phone: "" }))));
       return kept.map((place, index) => ({ ...place, website: details[index].website, phone: details[index].phone }));
-    },
-    async jobs({ companyName, website, address }) {
-      if (!jobsConfigured) return null;
-      const url = new URL(config.jobsUrl!);
-      url.searchParams.set("company", companyName);
-      if (website) url.searchParams.set("website", website);
-      if (address) url.searchParams.set("location", address);
-      const data = await getJson(url.toString(), { headers: { Authorization: `Bearer ${config.jobsKey}` } });
-      const rows = (data.jobs ?? []) as Record<string, unknown>[];
-      const listings: JobListing[] = [];
-      for (const row of rows) {
-        const title = typeof row.title === "string" ? row.title.trim() : "";
-        const link = typeof row.url === "string" ? row.url.trim() : "";
-        if (!title || !/^https?:\/\//i.test(link)) continue;
-        listings.push({
-          title: title.slice(0, 200),
-          source: typeof row.source === "string" && row.source ? row.source.slice(0, 80) : "Job board",
-          location: typeof row.location === "string" ? row.location.slice(0, 160) : "",
-          postedAt: typeof row.posted_at === "string" && /^\d{4}-\d{2}-\d{2}/.test(row.posted_at) ? row.posted_at.slice(0, 10) : null,
-          employmentType: typeof row.employment_type === "string" && row.employment_type ? row.employment_type.slice(0, 60) : null,
-          url: link.slice(0, 2048),
-        });
-      }
-      return listings;
     },
   };
 }

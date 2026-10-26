@@ -1,12 +1,16 @@
 import { getDatabasePool, fromSqlDateTime, insertId, toSqlDateTime, withTransaction, type Queryable } from "@/lib/db";
 import { HttpError } from "@/lib/http";
+import { isCacheFresh } from "@/features/jobs/model";
+import { getCompanyJobs } from "@/features/jobs/repository";
+import { jobSourcesConfigured } from "@/features/jobs/sources";
+import { getSettings } from "@/features/settings/repository";
 import { recordAudit } from "@/features/audit/repository";
 import { statusLabel } from "@/features/list-values/model";
 import { assertListValue, getListValue } from "@/features/list-values/repository";
 import { hasPrivilege } from "@/features/users/model";
 import type { UserAccount } from "@/features/users/model";
 import { actionFor, matchLead, type MatchableLead } from "./matching";
-import { getTripProvider, type CompanyCandidate, type TripProvider } from "./providers";
+import { getTripProvider, type CompanyCandidate } from "./providers";
 import type { ExportScope, JobListing, SalesTrip, TripInput, TripResult } from "./model";
 
 // ---- Row mapping ----
@@ -91,20 +95,24 @@ async function loadMatchableLeads(db: Queryable): Promise<MatchableLead[]> {
   }));
 }
 
-/** Fetches listings for every candidate with a little concurrency; a failing source leaves the count unknown. */
-async function listingsFor(provider: TripProvider, candidates: CompanyCandidate[]): Promise<(JobListing[] | null)[]> {
+/**
+ * Listings for the nearest `prefetch` candidates through the job-sources layer (cache first, then the sources within
+ * their budgets); the rest stay unknown until someone opens them (SPEC §7.13). A failing lookup leaves the count unknown.
+ */
+async function listingsFor(candidates: CompanyCandidate[], prefetch: number, db: Queryable): Promise<(JobListing[] | null)[]> {
   const out: (JobListing[] | null)[] = new Array(candidates.length).fill(null);
-  if (!provider.jobsConfigured) return out;
+  const limit = Math.min(candidates.length, prefetch);
+  if (!limit || !jobSourcesConfigured()) return out;
   let next = 0;
   const worker = async () => {
-    while (next < candidates.length) {
+    while (next < limit) {
       const index = next;
       next += 1;
       const candidate = candidates[index];
-      try { out[index] = await provider.jobs({ companyName: candidate.name, website: candidate.website, address: candidate.address }); } catch { out[index] = null; }
+      try { out[index] = (await getCompanyJobs({ companyName: candidate.name, website: candidate.website, address: candidate.address }, {}, db)).listings; } catch { out[index] = null; }
     }
   };
-  await Promise.all(Array.from({ length: Math.min(4, candidates.length) }, worker));
+  await Promise.all(Array.from({ length: Math.min(4, limit) }, worker));
   return out;
 }
 
@@ -124,7 +132,7 @@ async function runSearch(trip: { address: string; radiusType: TripInput["radiusT
   const origin = await fromProvider(() => provider.geocode(trip.address));
   if (!origin) throw new HttpError(400, "The address could not be located. Try a fuller address or a nearby landmark.");
   const candidates = await fromProvider(() => provider.searchCompanies({ origin, radiusType: trip.radiusType, radius: trip.radius, businessType: businessType ? { code: businessType.code, value: businessType.value } : null, limit: trip.maxResults }));
-  const listings = await listingsFor(provider, candidates);
+  const listings = await listingsFor(candidates, (await getSettings(db)).jobSources.prefetch, db);
   const leads = await loadMatchableLeads(db);
   const rows = candidates.map((candidate, index) => {
     const match = matchLead({ name: candidate.name, website: candidate.website, phone: candidate.phone, address: candidate.address }, leads);
@@ -219,20 +227,20 @@ export async function updateResult(tripId: number, resultId: number, changes: { 
   });
 }
 
-const listingsMaxAgeMs = 24 * 60 * 60 * 1000;
-
-/** Listings for one company, refreshed from the job source when missing or older than a day (TRIP-06). */
+/** Listings for one company, refreshed through the job-sources layer when missing or older than the cache life (TRIP-06). */
 export async function resultJobs(tripId: number, resultId: number, actor: UserAccount): Promise<{ result: TripResult; jobs: JobListing[] | null }> {
   const db = getDatabasePool();
   const { results } = await getTrip(tripId, actor, db);
   const existing = results.find((row) => row.id === resultId);
   if (!existing) throw new HttpError(404, "Company not found on this trip.");
-  const fresh = existing.jobs !== null && existing.jobsFetchedAt !== null && Date.now() - new Date(existing.jobsFetchedAt).getTime() < listingsMaxAgeMs;
-  if (fresh) return { result: existing, jobs: existing.jobs };
-  const provider = getTripProvider();
-  if (!provider.jobsConfigured) return { result: existing, jobs: existing.jobs };
-  const jobs = await provider.jobs({ companyName: existing.companyName, website: existing.website, address: existing.address });
-  if (jobs === null) return { result: existing, jobs: existing.jobs };
+  const { cacheHours } = (await getSettings(db)).jobSources;
+  if (existing.jobs !== null && isCacheFresh(existing.jobsFetchedAt, cacheHours)) return { result: existing, jobs: existing.jobs };
+  if (!jobSourcesConfigured()) return { result: existing, jobs: existing.jobs };
+  const { listings: jobs, reason } = await getCompanyJobs({ companyName: existing.companyName, website: existing.website, address: existing.address }, {}, db);
+  if (jobs === null) {
+    if (existing.jobs === null && reason) throw new HttpError(503, `Job listings are unavailable: ${reason}`);
+    return { result: existing, jobs: existing.jobs };
+  }
   const now = new Date();
   await db.query("UPDATE sales_trip_results SET job_count = ?, jobs = ?, jobs_fetched_at = ? WHERE id = ?", [jobs.length, JSON.stringify(jobs), toSqlDateTime(now), resultId]);
   return { result: { ...existing, jobCount: jobs.length, jobs, jobsFetchedAt: now.toISOString() }, jobs };

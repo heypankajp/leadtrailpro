@@ -1,3 +1,4 @@
+import type { JobSourceSettings } from "@/features/jobs/model";
 import type { SystemRole } from "@/features/users/model";
 
 /** A non-working day in the business calendar (public holiday, company closure). */
@@ -30,6 +31,8 @@ export type AppSettings = {
   roleLabels: Record<SystemRole, string>;
   reminders: ReminderSettings;
   digests: DigestSettings;
+  /** TRIP-06: order, budgets, cache life, and prefetch count of the job-listing sources (SPEC §7.13). */
+  jobSources: JobSourceSettings;
   /** Sorted by date. Used with weekends for "yesterday" in reports and for natural-language due dates. */
   holidays: Holiday[];
 };

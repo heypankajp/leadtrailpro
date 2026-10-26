@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { jobSourcesConfigured } from "@/features/jobs/sources";
 import { handleRouteError, jsonError } from "@/lib/http";
 import { getTrip } from "@/features/trips/repository";
 import { requirePrivilege, requireUser } from "@/features/users/session";
@@ -12,7 +13,7 @@ export async function GET(_request: Request, context: RouteContext) {
     const { id: rawId } = await context.params;
     const id = Number(rawId);
     if (!Number.isSafeInteger(id) || id < 1) return jsonError(400, "Invalid trip ID.");
-    return NextResponse.json(await getTrip(id, user));
+    return NextResponse.json({ ...(await getTrip(id, user)), jobsConfigured: jobSourcesConfigured() });
   } catch (error) {
     return handleRouteError(error, "Load sales trip");
   }

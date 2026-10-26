@@ -46,9 +46,11 @@ const landmarks: [RegExp, GeoPoint][] = [
 ];
 const defaultOrigin: GeoPoint = { latitude: 43.589, longitude: -79.6441 }; // Mississauga
 
+/** The sample listings of a catalogue company, served by the stub job source. */
+export const stubListings = (companyName: string): JobListing[] => catalogue.find((entry) => entry.name === companyName)?.jobs ?? [];
+
 export const stubProvider: TripProvider = {
   name: "stub",
-  jobsConfigured: true,
   async geocode(address) {
     if (!address.trim()) return null;
     if (/^(nowhere|unknown)/i.test(address.trim())) return null;
@@ -71,8 +73,5 @@ export const stubProvider: TripProvider = {
       name: entry.name, address: entry.address, latitude: entry.latitude, longitude: entry.longitude, website: entry.website, phone: entry.phone,
       placeId: `stub-${entry.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`, distanceKm: Math.round(distanceKm * 10) / 10, driveMinutes,
     }));
-  },
-  async jobs({ companyName }) {
-    return catalogue.find((entry) => entry.name === companyName)?.jobs ?? [];
   },
 };

@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { AlertTriangle, CalendarDays, Mail, Plus, RefreshCw, Save, Send, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, BriefcaseBusiness, CalendarDays, Mail, Plus, RefreshCw, Save, Send, X } from "lucide-react";
 import { errorMessage } from "@/lib/api";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { useApp } from "@/features/shell/AppContext";
 import { ErrorText, Field, Loading } from "@/features/shell/components";
 import { maxHolidayNameLength, maxInactivityDays, maxInactivityRules, type AppSettings, type InactivityRule } from "@/features/settings/model";
 import { defaultRoleLabels, systemRoles } from "@/features/users/model";
+import { jobSourceLabels, maxCacheHours, maxPrefetch, type JobSourceId, type JobSourceStatus } from "@/features/jobs/model";
 import { fetchSettings, updateSettings, type MailStatus } from "./client";
 import { runDigestNow } from "@/features/notifications/client";
 import { weekdayNames, type DigestJob } from "@/features/notifications/model";
@@ -16,7 +17,7 @@ export default function SettingsPanel() {
   const { notify, refreshReference, reference, bumpData } = useApp();
   const [sending, setSending] = useState<DigestJob | null>(null);
   const [settings, setSettings] = useState<AppSettings | null>(null);
-  const [meta, setMeta] = useState<{ mailerConfigured: boolean; timeZone: string; mail: MailStatus }>({ mailerConfigured: false, timeZone: "", mail: { provider: "off", outbox: [] } });
+  const [meta, setMeta] = useState<{ mailerConfigured: boolean; timeZone: string; mail: MailStatus; jobSources: JobSourceStatus[] }>({ mailerConfigured: false, timeZone: "", mail: { provider: "off", outbox: [] }, jobSources: [] });
   const [openMail, setOpenMail] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -25,7 +26,7 @@ export default function SettingsPanel() {
   const [holidayError, setHolidayError] = useState("");
 
   const load = useCallback(() => {
-    fetchSettings().then((result) => { setSettings(result.settings); setMeta({ mailerConfigured: result.mailerConfigured, timeZone: result.timeZone, mail: result.mail }); }).catch((caught) => setError(errorMessage(caught)));
+    fetchSettings().then((result) => { setSettings(result.settings); setMeta({ mailerConfigured: result.mailerConfigured, timeZone: result.timeZone, mail: result.mail, jobSources: result.jobSources ?? [] }); }).catch((caught) => setError(errorMessage(caught)));
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -34,7 +35,7 @@ export default function SettingsPanel() {
     if (!settings) return;
     setBusy(true);
     try {
-      const result = await updateSettings({ roleLabels: settings.roleLabels, reminders: settings.reminders, digests: settings.digests, holidays: settings.holidays });
+      const result = await updateSettings({ roleLabels: settings.roleLabels, reminders: settings.reminders, digests: settings.digests, jobSources: settings.jobSources, holidays: settings.holidays });
       setSettings(result.settings);
       await refreshReference();
       notify("Settings saved");
@@ -133,6 +134,43 @@ export default function SettingsPanel() {
                   <button type="button" className="button button-outline button-small" disabled={sending !== null} onClick={() => void sendDigest("weekly")}><Send size={13} /> {sending === "weekly" ? "Sending..." : "Send me the weekly digest"}</button>
                 </div>
                 <small className="field-hint">The schedule applies when you save settings; the buttons send at once.</small>
+              </fieldset>
+              <fieldset className="user-privileges job-sources-editor">
+                <legend><BriefcaseBusiness size={12} /> Job listing sources</legend>
+                <p className="field-hint">The Hiring column of the Sales Trip Planner asks these sources in order, free tiers first, and stops at the first answer. Each source stays within its daily and monthly call budget; listings are cached per company. Keys are set in <code>.env.local</code>.</p>
+                <div className="job-source-list">
+                  {settings.jobSources.order.map((id, index) => {
+                    const status = meta.jobSources.find((entry) => entry.id === id);
+                    const budget = settings.jobSources.budgets[id];
+                    const setBudget = (changes: Partial<typeof budget>) => setSettings({ ...settings, jobSources: { ...settings.jobSources, budgets: { ...settings.jobSources.budgets, [id]: { ...budget, ...changes } } } });
+                    const move = (direction: -1 | 1) => {
+                      const order = [...settings.jobSources.order] as JobSourceId[];
+                      const target = index + direction;
+                      if (target < 0 || target >= order.length) return;
+                      [order[index], order[target]] = [order[target], order[index]];
+                      setSettings({ ...settings, jobSources: { ...settings.jobSources, order } });
+                    };
+                    return (
+                      <div className="job-source-row" key={id}>
+                        <div className="job-source-name">
+                          <label className="checklist-item"><input type="checkbox" aria-label={`${jobSourceLabels[id]} enabled`} checked={budget.enabled} onChange={(event) => setBudget({ enabled: event.target.checked })} /><strong>{jobSourceLabels[id]}</strong></label>
+                          <small className={status?.note ? "job-source-note" : "job-source-ready"}>{status ? (status.note ?? "Ready") : "…"}</small>
+                        </div>
+                        <span className="rule-days"><input aria-label={`${jobSourceLabels[id]} daily budget`} type="number" min={0} value={budget.daily} onChange={(event) => setBudget({ daily: Number(event.target.value) })} /> / day</span>
+                        <span className="rule-days"><input aria-label={`${jobSourceLabels[id]} monthly budget`} type="number" min={0} value={budget.monthly} onChange={(event) => setBudget({ monthly: Number(event.target.value) })} /> / month</span>
+                        <small className="job-source-usage">{status ? `${status.usage.today} today · ${status.usage.month} this month${status.usage.failuresToday ? ` · ${status.usage.failuresToday} failed today` : ""}` : ""}</small>
+                        <span className="job-source-move">
+                          <button type="button" className="icon-button" aria-label={`Move ${jobSourceLabels[id]} up`} disabled={index === 0} onClick={() => move(-1)}><ArrowUp size={12} /></button>
+                          <button type="button" className="icon-button" aria-label={`Move ${jobSourceLabels[id]} down`} disabled={index === settings.jobSources.order.length - 1} onClick={() => move(1)}><ArrowDown size={12} /></button>
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="digest-grid">
+                  <Field label="Keep listings for (hours)" hint={`1 to ${maxCacheHours}. A company is not asked about again within this time.`}><input type="number" min={1} max={maxCacheHours} value={settings.jobSources.cacheHours} onChange={(event) => setSettings({ ...settings, jobSources: { ...settings.jobSources, cacheHours: Number(event.target.value) } })} required /></Field>
+                  <Field label="Companies checked per trip" hint={`0 to ${maxPrefetch}. The nearest ones are checked when a trip is created; the rest on demand.`}><input type="number" min={0} max={maxPrefetch} value={settings.jobSources.prefetch} onChange={(event) => setSettings({ ...settings, jobSources: { ...settings.jobSources, prefetch: Number(event.target.value) } })} required /></Field>
+                </div>
               </fieldset>
               <fieldset className="user-privileges holiday-editor">
                 <legend><CalendarDays size={12} /> Business calendar · public holidays</legend>

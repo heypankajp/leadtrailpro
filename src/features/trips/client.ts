@@ -1,7 +1,7 @@
 import { api, toQuery } from "@/lib/api";
 import type { ExportScope, JobListing, SalesTrip, TripInput, TripProviderStatus, TripResult } from "./model";
 
-export type TripDetail = { trip: SalesTrip; results: TripResult[] };
+export type TripDetail = { trip: SalesTrip; results: TripResult[]; jobsConfigured?: boolean };
 
 export const fetchTrips = () => api<{ trips: SalesTrip[]; provider: TripProviderStatus }>("/api/trips");
 export const createTrip = (input: TripInput) => api<TripDetail>("/api/trips", { method: "POST", json: input });

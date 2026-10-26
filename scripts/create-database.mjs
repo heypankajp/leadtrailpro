@@ -598,6 +598,33 @@ const migrations = [
       await client.query("CREATE INDEX IF NOT EXISTS idx_task_comments_task ON task_comments (task_id, id)");
     },
   },
+  {
+    version: 10,
+    name: "job-listing sources: per-company listing cache and per-source daily usage (TRIP-06, SPEC §7.13)",
+    async run(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS job_listing_cache (
+          id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          company_key VARCHAR(200) NOT NULL,
+          company_name VARCHAR(200) NOT NULL,
+          source VARCHAR(20) NOT NULL,
+          listings JSONB NOT NULL,
+          fetched_at TIMESTAMP(0) NOT NULL,
+          CONSTRAINT uq_job_listing_cache UNIQUE (company_key, source)
+        )
+      `);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_job_listing_cache_key_time ON job_listing_cache (company_key, fetched_at)");
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS job_source_usage (
+          source VARCHAR(20) NOT NULL,
+          day DATE NOT NULL,
+          calls INTEGER NOT NULL DEFAULT 0,
+          failures INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (source, day)
+        )
+      `);
+    },
+  },
 ];
 
 if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port > 65535 || !/^[a-z_][a-z0-9_]*$/.test(databaseName)) {

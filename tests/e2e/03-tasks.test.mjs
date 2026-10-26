@@ -89,9 +89,10 @@ describe("Tasks and reminders", () => {
     await page.clickButton("Create task", { global: true });
     await page.dialogTitle("Create task");
     await page.fill("Title", typed);
-    await page.fill("Type a due date", "next Monday at 10am");
+    // "in two weeks" always lands in Upcoming whatever the weekday or the browser's timezone ("next Monday" is "today" on a Sunday evening).
+    await page.fill("Type a due date", "in two weeks at 10am");
     const hint = await page.wait(By.css(".natural-date-hint.is-resolved"));
-    assert.match(await hint.getText(), /Understood \u201cnext Monday\u201d as .* 10:00 AM/);
+    assert.match(await hint.getText(), /Understood \u201cin two weeks\u201d as .* 10:00 AM/);
     assert.match(await (await page.control("Due date and time")).getAttribute("value"), /^\d{4}-\d{2}-\d{2}T10:00$/, "the resolved date is shown in the date picker for confirmation");
     await page.clickButton("Create task");
     await page.toast("Task created");

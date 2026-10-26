@@ -94,6 +94,19 @@ describe("Administration and reports", () => {
     await page.click(By.css("button.notif-button"), { global: true });
   });
 
+  uiTest("job listing sources show their status and keep a budget change", async () => {
+    const row = By.xpath('//div[contains(@class,"job-source-row")][.//strong[normalize-space()="Sample listings"]]');
+    await page.waitText(row, "Ready");
+    const daily = await page.wait(By.css('input[aria-label="Adzuna daily budget"]'));
+    await page.setValue(daily, "150");
+    await page.clickButton("Save settings", { global: true });
+    await page.toast("Settings saved");
+    await driver.navigate().refresh();
+    await page.heading("Settings");
+    assert.equal(await (await page.wait(By.css('input[aria-label="Adzuna daily budget"]'))).getAttribute("value"), "150");
+    assert.match(await (await page.wait(By.xpath('//div[contains(@class,"job-source-row")][.//strong[normalize-space()="Adzuna"]]'))).getText(), /Not configured/);
+  });
+
   uiTest("adds a holiday to the business calendar", async () => {
     const name = `Company holiday ${runId}`;
     const row = By.xpath(`//li[contains(@class,"holiday-row")][.//span[normalize-space()=${xq(name)}]]`);

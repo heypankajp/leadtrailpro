@@ -1,4 +1,4 @@
-import type { JobListing, RadiusType } from "../model";
+import type { RadiusType } from "../model";
 
 export type GeoPoint = { latitude: number; longitude: number };
 
@@ -17,14 +17,11 @@ export type CompanySearchInput = {
 };
 
 /**
- * The data sources behind the Sales Trip Planner (SPEC §10.8). Implementations: the deterministic stub used for
- * development and tests, and the Google Maps adapter with a licensed job aggregator behind a small JSON contract.
+ * The company data sources behind the Sales Trip Planner (SPEC §10.8): the deterministic stub used for development
+ * and tests, and the Google Maps adapter. Job listings come from the job-sources layer (features/jobs, SPEC §7.13).
  */
 export interface TripProvider {
   readonly name: string;
-  readonly jobsConfigured: boolean;
   geocode(address: string): Promise<GeoPoint | null>;
   searchCompanies(input: CompanySearchInput): Promise<CompanyCandidate[]>;
-  /** Active listings for one company, or null when no job source is configured. */
-  jobs(input: { companyName: string; website: string; address: string }): Promise<JobListing[] | null>;
 }

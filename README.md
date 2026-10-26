@@ -8,10 +8,10 @@ SalesTrackPro is a sales workspace for a staffing and recruitment business, buil
 |---|---|
 | Stack | Next.js 16.4 (App Router, Turbopack), React 19, TypeScript 5, PostgreSQL 17 (14 or newer works), hand-written CSS |
 | Packaging | Docker: hot-reloading development stack, standalone production image, one-shot setup service |
-| Tests | ESLint, `tsc`, production build, unit suites for the date parser, status helpers, trip matching, reminder rules, digests, rich text, mentions, and the tracker import rules, and a 53-test Selenium browser suite with an axe-core accessibility audit, all in Docker; GitHub Actions runs all of it on every push and pull request |
+| Tests | ESLint, `tsc`, production build, unit suites for the date parser, status helpers, trip matching, reminder rules, digests, rich text, mentions, the tracker import rules, and the job-listing sources, and a 54-test Selenium browser suite with an axe-core accessibility audit, all in Docker; GitHub Actions runs all of it on every push and pull request |
 | Notifications | Bell in the top bar for task, lead, queue, and file events; daily and weekly digests by email and in-app, scheduled by the `jobs` service |
 | Email | Password resets, set-password links, and two-factor codes work in stub mode (`MAIL_PROVIDER=stub`, messages recorded under Settings → Email delivery) until `SMTP_*` is configured and `MAIL_PROVIDER=smtp` |
-| Sales trip planner | Built from the October 2026 change note; runs on sample company data until `MAPS_API_KEY` and a job-listing source are configured |
+| Sales trip planner | Built from the October 2026 change note; runs on sample company data until `MAPS_API_KEY` is set. Hiring counts come from a job-sources layer that combines Adzuna, JSearch, and Indeed via HasData behind a cache with per-source budgets (keys optional, set under Settings) |
 | Preview pages | Lead generation and the road visit planner show sample content until data sources are connected |
 
 ## Quick start with Docker
@@ -78,7 +78,11 @@ The setup step writes the database settings and a commented template for the res
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GMAIL_TOKEN_KEY`, `GOOGLE_REDIRECT_URI` | Gmail linking for the lead Emails tab. The token key is any long random string that encrypts stored refresh tokens; the redirect URI defaults to `APP_URL/api/gmail/callback` |
 | `TRIPS_PROVIDER` | `stub` serves sample companies for the sales trip planner (the Docker dev stack sets it); leave empty for live data |
 | `MAPS_API_KEY` | Google Maps Platform key (Geocoding, Places, Distance Matrix) for live trip searches |
-| `JOBS_API_URL`, `JOBS_API_KEY` | Licensed job-listing aggregator behind the JSON contract in SPEC §10.8; without it the Hiring column stays blank |
+| `ADZUNA_APP_ID`, `ADZUNA_APP_KEY` | Adzuna job search (free developer key) for the Hiring column |
+| `JSEARCH_API_KEY` | JSearch on RapidAPI (Google for Jobs) for the Hiring column |
+| `HASDATA_API_KEY`, `HASDATA_INDEED_DOMAIN` | HasData Indeed Jobs Scraper API for the Hiring column; the domain selects a regional Indeed site (`ca`) |
+| `JOBS_API_URL`, `JOBS_API_KEY` | A custom job-listing source behind the JSON contract in SPEC §7.13 |
+| `JOBS_COUNTRY` | Country code for the sources that take one (default `ca`) |
 
 With `MAIL_PROVIDER=stub` the email features work without a mailbox: reset links and sign-in codes appear under Settings → Email delivery, where an administrator can open each message. Switch to `MAIL_PROVIDER=smtp` with the `SMTP_*` settings when a real mailbox is ready; without either, administrators set passwords directly and two-factor cannot be switched on.
 

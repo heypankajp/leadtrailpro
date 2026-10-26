@@ -155,7 +155,9 @@ export default function TripResultsPage({ tripId }: { tripId: number }) {
                     <td>
                       {row.jobCount !== null && row.jobCount > 0
                         ? <button className="text-button hiring-link" aria-label={`Job listings for ${row.companyName}`} onClick={() => setJobsFor(row)}>{hiringLabel(row.jobCount)}</button>
-                        : <span className="muted-cell">{hiringLabel(row.jobCount)}</span>}
+                        : row.jobCount === null && row.jobsFetchedAt === null && data.jobsConfigured
+                          ? <button className="text-button hiring-link print-hide" aria-label={`Check job listings for ${row.companyName}`} onClick={() => setJobsFor(row)}>Check</button>
+                          : <span className="muted-cell">{hiringLabel(row.jobCount)}</span>}
                     </td>
                     <td>
                       <span className={`status-pill ${row.actionCode === "new" ? "status-opportunity" : statusClass(row.actionCode)}`}><i />{row.actionLabel}</span>
@@ -176,7 +178,7 @@ export default function TripResultsPage({ tripId }: { tripId: number }) {
         )}
       </section>
 
-      {jobsFor && <JobsDialog tripId={tripId} result={jobsFor} onClose={() => setJobsFor(null)} />}
+      {jobsFor && <JobsDialog tripId={tripId} result={jobsFor} onClose={() => { setJobsFor(null); reload(); }} />}
     </>
   );
 }
@@ -201,6 +203,7 @@ function JobsDialog({ tripId, result, onClose }: { tripId: number; result: TripR
       <ErrorText message={state.error} />
       {state.loading && !state.jobs && <Loading text="Loading job listings..." />}
       {!state.loading && jobs.length === 0 && <EmptyState icon={<BriefcaseBusiness size={22} />} title="No active listings found" />}
+      {jobs.some((job) => job.source === "Adzuna") && <p className="field-hint jobs-attribution"><a href="https://www.adzuna.ca" target="_blank" rel="noopener noreferrer">Jobs by Adzuna</a></p>}
       {jobs.length > 0 && (
         <div className="table-scroll">
           <table className="lead-table jobs-table">
