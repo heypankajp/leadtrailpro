@@ -3,6 +3,9 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   /* config options here */
   output: "standalone",
+  experimental: {
+    agentUpgrade: "security",
+  },
   // Keep the PostgreSQL driver a plain Node.js package (it is also in Next's default list) so the
   // standalone output ships it and scripts/*.mjs can import it from the production image.
   serverExternalPackages: ["pg", "exceljs", "pdfkit"],
