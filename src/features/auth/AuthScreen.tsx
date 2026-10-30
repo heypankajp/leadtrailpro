@@ -93,7 +93,7 @@ export default function AuthScreen({ checking, needsSetup, initialError, onSigne
         {checking ? (
           <>
             <h1>Checking your session</h1>
-            <p>Connecting securely to your SalesTrackPro workspace.</p>
+            <p>Connecting securely to your LeadTrailPro workspace.</p>
             <div className="login-loading">Verifying session...</div>
           </>
         ) : mode === "login" ? (

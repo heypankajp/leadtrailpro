@@ -15,7 +15,7 @@ import { getDatabasePool, fromSqlDateTime, toSqlDateTime } from "@/lib/db";
  *   SMTP_SECURE=false          # true for implicit TLS on port 465
  *   SMTP_USER=mailer@example.com
  *   SMTP_PASSWORD=...
- *   SMTP_FROM="SalesTrackPro <no-reply@example.com>"
+ *   SMTP_FROM="LeadTrailPro <no-reply@example.com>"
  */
 
 type MailerConfig = { host: string; port: number; secure: boolean; user?: string; password?: string; from: string };
@@ -122,13 +122,13 @@ export async function listOutbox(limit = 20): Promise<OutboxEntry[]> {
 const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char] ?? char));
 
 export function passwordResetEmail(firstName: string, resetUrl: string) {
-  const text = `Hi ${firstName},\n\nUse the link below to set a new SalesTrackPro password. It expires in 30 minutes.\n\n${resetUrl}\n\nIf you did not request this, you can ignore this email.`;
-  const html = `<p>Hi ${escapeHtml(firstName)},</p><p>Use the link below to set a new SalesTrackPro password. It expires in 30 minutes.</p><p><a href="${escapeHtml(resetUrl)}">${escapeHtml(resetUrl)}</a></p><p>If you did not request this, you can ignore this email.</p>`;
-  return { subject: "Reset your SalesTrackPro password", text, html };
+  const text = `Hi ${firstName},\n\nUse the link below to set a new LeadTrailPro password. It expires in 30 minutes.\n\n${resetUrl}\n\nIf you did not request this, you can ignore this email.`;
+  const html = `<p>Hi ${escapeHtml(firstName)},</p><p>Use the link below to set a new LeadTrailPro password. It expires in 30 minutes.</p><p><a href="${escapeHtml(resetUrl)}">${escapeHtml(resetUrl)}</a></p><p>If you did not request this, you can ignore this email.</p>`;
+  return { subject: "Reset your LeadTrailPro password", text, html };
 }
 
 export function twoFactorEmail(firstName: string, code: string) {
-  const text = `Hi ${firstName},\n\nYour SalesTrackPro sign-in code is ${code}. It expires in 10 minutes.\n\nIf you did not try to sign in, change your password.`;
-  const html = `<p>Hi ${escapeHtml(firstName)},</p><p>Your SalesTrackPro sign-in code is <strong style="font-size:20px;letter-spacing:3px">${escapeHtml(code)}</strong>. It expires in 10 minutes.</p><p>If you did not try to sign in, change your password.</p>`;
-  return { subject: "Your SalesTrackPro sign-in code", text, html };
+  const text = `Hi ${firstName},\n\nYour LeadTrailPro sign-in code is ${code}. It expires in 10 minutes.\n\nIf you did not try to sign in, change your password.`;
+  const html = `<p>Hi ${escapeHtml(firstName)},</p><p>Your LeadTrailPro sign-in code is <strong style="font-size:20px;letter-spacing:3px">${escapeHtml(code)}</strong>. It expires in 10 minutes.</p><p>If you did not try to sign in, change your password.</p>`;
+  return { subject: "Your LeadTrailPro sign-in code", text, html };
 }

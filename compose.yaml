@@ -10,13 +10,13 @@
 # Production: docker compose -f compose.yaml -f compose.prod.yaml up -d --build
 # End-to-end tests (profile "test"): scripts/e2e.sh
 
-name: salestrackpro
+name: leadtrailpro
 
 x-dev-image: &dev-image
   build:
     context: .
     target: dev
-  image: salestrackpro-dev
+  image: leadtrailpro-dev
   volumes:
     - .:/app
     - node_modules:/app/node_modules
@@ -103,7 +103,7 @@ services:
     build:
       context: .
       target: runner
-    image: salestrackpro
+    image: leadtrailpro
     profiles: ["test"]
     init: true
     environment:

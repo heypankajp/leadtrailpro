@@ -40,7 +40,7 @@ export async function GET(request: Request, context: RouteContext) {
     }
 
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = "SalesTrackPro";
+    workbook.creator = "LeadTrailPro";
     const sheet = workbook.addWorksheet("Companies");
     sheet.columns = [
       { header: "Company", key: "company", width: 34 },

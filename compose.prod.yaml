@@ -16,7 +16,7 @@ services:
   app:
     build:
       target: runner
-    image: salestrackpro
+    image: leadtrailpro
     restart: unless-stopped
     environment:
       TRIPS_PROVIDER: ${TRIPS_PROVIDER:-}
@@ -30,7 +30,7 @@ services:
   jobs:
     build:
       target: runner
-    image: salestrackpro
+    image: leadtrailpro
     restart: unless-stopped
     environment:
       JOBS_URL: http://app:3000

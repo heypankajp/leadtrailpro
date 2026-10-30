@@ -45,7 +45,7 @@ export async function notifyUsers(db: Queryable, input: NotifyInput): Promise<nu
     for (const user of users) {
       if (!user.active || !user.notificationPrefs.emailEvents) continue;
       try {
-        await sendMail({ to: user.email, subject: `SalesTrackPro: ${input.title}`, text: `${input.title}\n\n${input.body ?? ""}`.trim() });
+        await sendMail({ to: user.email, subject: `LeadTrailPro: ${input.title}`, text: `${input.title}\n\n${input.body ?? ""}`.trim() });
       } catch (error) {
         console.error("Event email failed.", error instanceof Error ? error.message : error);
       }

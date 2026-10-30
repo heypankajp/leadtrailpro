@@ -199,9 +199,9 @@ export default function AppShell({ user, setUser, signOut }: { user: UserAccount
       <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
         {mobileNavOpen && <button className="mobile-scrim" aria-label="Close navigation" onClick={() => setMobileNavOpen(false)} />}
         <aside className={`sidebar ${mobileNavOpen ? "sidebar-open" : ""}`}>
-          <button className="brand-lockup" onClick={() => go("home")} aria-label="SalesTrackPro home">
+          <button className="brand-lockup" onClick={() => go("home")} aria-label="LeadTrailPro home">
             <span className="brand-mark"><span /><span /><span /></span>
-            <span className="brand-name">salestrack<span>pro</span></span>
+            <span className="brand-name">leadtrail<span>pro</span></span>
           </button>
           <div className="workspace-switcher" title={sidebarCollapsed ? "Sales workspace" : undefined}>
             <span className="workspace-icon">{user.firstName[0]}</span>
@@ -278,7 +278,7 @@ export default function AppShell({ user, setUser, signOut }: { user: UserAccount
           </header>
           <div className="main-content" onClick={() => { if (menuOpen) setMenuOpen(false); }}>
             {renderContent()}
-            <footer className="app-footer"><span>© 2026 SalesTrackPro</span><span><ShieldCheck size={13} /> Times shown in your local timezone · business day in {contextValue.reference.timeZone}</span></footer>
+            <footer className="app-footer"><span>© 2026 LeadTrailPro</span><span><ShieldCheck size={13} /> Times shown in your local timezone · business day in {contextValue.reference.timeZone}</span></footer>
           </div>
         </main>
 

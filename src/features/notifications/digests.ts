@@ -36,7 +36,7 @@ async function dailyDigest(user: UserAccount, today: string): Promise<{ title: s
   const dueTodayTasks = dashboard.openTasks.filter((task) => task.dueAt && task.dueAt.slice(0, 10) === today);
   const title = `Daily digest: ${dashboard.followUps.overdue.length} overdue, ${dashboard.followUps.today.length} due today, ${dashboard.openTasks.length} open tasks`;
   const sections = [
-    `Hi ${user.firstName}, here is your SalesTrackPro day for ${today}.`,
+    `Hi ${user.firstName}, here is your LeadTrailPro day for ${today}.`,
     `Follow-ups overdue (${dashboard.followUps.overdue.length})${dashboard.followUps.overdue.length ? ":\n" + list(dashboard.followUps.overdue.map((lead) => `${lead.clientName} (${lead.statusLabel}, due ${formatDate(lead.followUpDate)}, ${lead.bdAction ?? "no BD action"})`)) : ""}`,
     `Follow-ups today (${dashboard.followUps.today.length})${dashboard.followUps.today.length ? ":\n" + list(dashboard.followUps.today.map((lead) => `${lead.clientName} (${lead.statusLabel}${lead.clientExecutive ? `, ${lead.clientExecutive}` : ""})`)) : ""}`,
     `Follow-ups tomorrow (${dashboard.followUps.tomorrow.length})${dashboard.followUps.tomorrow.length ? ":\n" + list(dashboard.followUps.tomorrow.map((lead) => lead.clientName)) : ""}`,
@@ -56,7 +56,7 @@ async function weeklyDigest(user: UserAccount, today: string): Promise<{ title: 
     ? `Weekly digest: ${row.calls} calls, ${row.emails} emails, ${row.visits} visits, ${row.leadsCreated} leads last week`
     : "Weekly digest";
   const sections = [
-    `Hi ${user.firstName}, here is your SalesTrackPro week (week of ${startOfWeekYmd(today)}).`,
+    `Hi ${user.firstName}, here is your LeadTrailPro week (week of ${startOfWeekYmd(today)}).`,
     row ? `Last week (${own.range.startYmd} to ${own.range.endExclusiveYmd}, exclusive): ${row.calls} calls, ${row.emails} emails, ${row.visits} visits, ${row.notes} notes, ${row.leadsCreated} leads created, ${row.leadsUpdated} leads updated, ${row.conversions} conversions, ${row.tasksCompleted} tasks completed${row.targetPercent === null ? "" : `, ${row.targetPercent}% of target`}.` : "No activity was recorded for you last week.",
     `This week: ${dashboard.followUps.overdue.length} overdue follow-ups, ${dashboard.followUps.today.length} due today, ${dashboard.openTasks.length} open tasks, ${dashboard.inactiveLeads.length} leads needing attention.`,
     dashboard.targets.template ? `Targets (${dashboard.targets.template.name}): ${dashboard.targets.leads.achieved}/${dashboard.targets.leads.target} leads, ${dashboard.targets.visits.achieved}/${dashboard.targets.visits.target} visits, ${dashboard.targets.conversions.achieved}/${dashboard.targets.conversions.target} conversions.` : "",
@@ -74,7 +74,7 @@ async function sendDigest(job: DigestJob, user: UserAccount, today: string, db: 
   const digest = job === "daily" ? await dailyDigest(user, today) : await weeklyDigest(user, today);
   await notifyUsers(db, { userIds: [user.id], type: job === "daily" ? "daily_digest" : "weekly_digest", title: digest.title, body: digest.text, email: false });
   if (isMailerConfigured()) {
-    await sendMail({ to: user.email, subject: job === "daily" ? `Your daily SalesTrackPro digest for ${today}` : "Your weekly SalesTrackPro digest", text: digest.text });
+    await sendMail({ to: user.email, subject: job === "daily" ? `Your daily LeadTrailPro digest for ${today}` : "Your weekly LeadTrailPro digest", text: digest.text });
   }
 }
 

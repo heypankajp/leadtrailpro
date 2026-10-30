@@ -1,4 +1,4 @@
-# SalesTrackPro — Technical Specification (SPEC)
+# LeadTrailPro — Technical Specification (SPEC)
 
 | | |
 |---|---|
@@ -93,13 +93,13 @@ Next.js 16 (App Router) — route handlers under src/app/api/**            Node.
 | Service (`compose.yaml`) | Image | Role |
 |---|---|---|
 | `db` | `postgres:17-alpine` | Development database, volume `postgres_data`, published on `127.0.0.1:${DB_PORT:-5433}`, superuser `postgres` with password `${POSTGRES_PASSWORD:-salestrackpro}`; the healthcheck uses `pg_isready -h 127.0.0.1` so it only passes once first-run initialisation is complete |
-| `app` | `salestrackpro-dev` (target `dev`) | Dev server on `${APP_PORT:-3000}`; volumes `node_modules` and `next_cache` shadow the host directories |
-| `jobs` | `salestrackpro-dev` (prod: `salestrackpro` runner) | Runs `scripts/jobs.mjs` against `http://app:3000` with the shared `JOBS_KEY` |
-| `setup` (profile `setup`) | `salestrackpro-dev` | One shot: `create-database.mjs` + `create-app-user.mjs` as `postgres`; writes `.env.local` with `PGHOST=db` into the bind mount |
+| `app` | `leadtrailpro-dev` (target `dev`) | Dev server on `${APP_PORT:-3000}`; volumes `node_modules` and `next_cache` shadow the host directories |
+| `jobs` | `leadtrailpro-dev` (prod: `leadtrailpro` runner) | Runs `scripts/jobs.mjs` against `http://app:3000` with the shared `JOBS_KEY` |
+| `setup` (profile `setup`) | `leadtrailpro-dev` | One shot: `create-database.mjs` + `create-app-user.mjs` as `postgres`; writes `.env.local` with `PGHOST=db` into the bind mount |
 | `db-test` (profile `test`) | `postgres:17-alpine` | Throwaway database on tmpfs, password `test`, not published |
-| `app-test` (profile `test`) | `salestrackpro` (target `runner`) | Applies migrations then serves the production build; `APP_URL=http://app-test:3000`, `USER_MANAGEMENT_KEY=e2e-user-management-key`; healthcheck on `/api/auth/session` |
+| `app-test` (profile `test`) | `leadtrailpro` (target `runner`) | Applies migrations then serves the production build; `APP_URL=http://app-test:3000`, `USER_MANAGEMENT_KEY=e2e-user-management-key`; healthcheck on `/api/auth/session` |
 | `selenium` (profile `test`) | `selenium/standalone-chromium:4` | Chromium grid, 2 GB shm, 1600×1200 screen, noVNC on `127.0.0.1:7900` |
-| `e2e` (profile `test`) | `salestrackpro-dev` | Runs `npm run test:e2e` once `app-test` is healthy |
+| `e2e` (profile `test`) | `leadtrailpro-dev` | Runs `npm run test:e2e` once `app-test` is healthy |
 
 `compose.prod.yaml` overrides `app` with the `runner` target, `env_file: .env.local`, an `attachments` volume at `/app/storage/attachments`, `restart: unless-stopped`, and removes the database port; it requires `POSTGRES_PASSWORD` in `.env`.
 

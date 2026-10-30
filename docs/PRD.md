@@ -1,4 +1,4 @@
-# SalesTrackPro — Product Requirements Document (PRD)
+# LeadTrailPro — Product Requirements Document (PRD)
 
 | | |
 |---|---|
@@ -15,7 +15,7 @@ Requirement IDs are stable and are referenced from `SPEC.md`. Each requirement k
 
 ### 1.1 Purpose
 
-SalesTrackPro is a web (and later mobile) sales-management application for a staffing/recruitment business. It manages leads from first prospecting through client conversion, records every interaction, links client email activity, supports collaboration and tasks, offers AI-assisted summaries and guidance, manages sales targets, and gives management reporting. (BRD §1)
+LeadTrailPro is a web (and later mobile) sales-management application for a staffing/recruitment business. It manages leads from first prospecting through client conversion, records every interaction, links client email activity, supports collaboration and tasks, offers AI-assisted summaries and guidance, manages sales targets, and gives management reporting. (BRD §1)
 
 ### 1.2 Goals
 

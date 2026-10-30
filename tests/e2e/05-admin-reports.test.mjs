@@ -64,7 +64,7 @@ describe("Administration and reports", () => {
     await page.toast("set-password link was emailed");
     await page.nav("Settings");
     await page.heading("Settings");
-    const row = await page.wait(By.xpath('//table[contains(@class,"outbox-table")]//tr[.//strong[normalize-space()="Reset your SalesTrackPro password"]]'));
+    const row = await page.wait(By.xpath('//table[contains(@class,"outbox-table")]//tr[.//strong[normalize-space()="Reset your LeadTrailPro password"]]'));
     assert.ok((await row.getText()).includes(admin.email), "the newest outbox row is addressed to the administrator");
     await page.click(By.css(`button[aria-label="Show message to ${admin.email}"]`), { global: true });
     const body = await (await page.wait(By.css(".outbox-body"))).getText();
@@ -86,7 +86,7 @@ describe("Administration and reports", () => {
   uiTest("sends the daily digest on demand to the outbox and the bell", async () => {
     await page.clickButton("Send me today's digest", { global: true });
     await page.toast("Daily digest sent");
-    await page.wait(By.xpath(`//table[contains(@class,"outbox-table")]//tr[.//strong[starts-with(normalize-space(.), "Your daily SalesTrackPro digest")]]`));
+    await page.wait(By.xpath(`//table[contains(@class,"outbox-table")]//tr[.//strong[starts-with(normalize-space(.), "Your daily LeadTrailPro digest")]]`));
     const bell = await page.wait(By.css("button.notif-button"));
     await driver.wait(async () => /\d+ unread/.test(await bell.getAttribute("aria-label")), 15000, "unread badge after the digest");
     await bell.click();

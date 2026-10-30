@@ -9,7 +9,7 @@ import {
 } from "./lib/tracker-mapping.mjs";
 
 /**
- * Imports the client's legacy lead tracker (Google Sheets export, one row per interaction) into SalesTrackPro (SPEC §10.9).
+ * Imports the client's legacy lead tracker (Google Sheets export, one row per interaction) into LeadTrailPro (SPEC §10.9).
  *
  *   node scripts/import-tracker.mjs "docs/Sales Leads 2026.xlsx" [--dry-run] [--skip-archive] [--keep-action-names] [--force]
  *        [--default-owner email] [--actor email] [--owner "Name=email"]... [--sheet LeadsDec25] [--archive-sheet ArchiveSales] [--report import-report.txt]
@@ -448,7 +448,7 @@ try {
   else { await query("COMMIT"); await query("ANALYZE leads, lead_activities, audit_log, list_values, users"); console.log("Import committed; planner statistics refreshed."); }
 
   const lines = [
-    `SalesTrackPro tracker import ${dryRun ? "(DRY RUN, nothing written) " : ""}— ${new Date().toISOString()}`,
+    `LeadTrailPro tracker import ${dryRun ? "(DRY RUN, nothing written) " : ""}— ${new Date().toISOString()}`,
     `File: ${file} (hash ${fileHash}); database ${databaseName}; actor ${actor.email}; default owner ${defaultOwner.email}; ${((Date.now() - started) / 1000).toFixed(1)} s`,
     "",
     "== Summary", ...Object.entries(report.counts).map(([key, value]) => `${value.toString().padStart(6)}  ${key}`),

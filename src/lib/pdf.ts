@@ -17,7 +17,7 @@ export type PdfTable = {
 };
 
 export async function renderTablePdf(table: PdfTable): Promise<Buffer> {
-  const doc = new PDFDocument({ size: "A4", layout: table.landscape ? "landscape" : "portrait", margin: 36, bufferPages: true, info: { Title: table.title, Author: "SalesTrackPro" } });
+  const doc = new PDFDocument({ size: "A4", layout: table.landscape ? "landscape" : "portrait", margin: 36, bufferPages: true, info: { Title: table.title, Author: "LeadTrailPro" } });
   const chunks: Buffer[] = [];
   doc.on("data", (chunk: Buffer) => chunks.push(chunk));
   const finished = new Promise<Buffer>((resolve, reject) => { doc.on("end", () => resolve(Buffer.concat(chunks))); doc.on("error", reject); });
@@ -78,7 +78,7 @@ export async function renderTablePdf(table: PdfTable): Promise<Buffer> {
     // Writing below the bottom margin would make pdfkit start a new page; lift the margin while the footer is drawn.
     const savedBottom = doc.page.margins.bottom;
     doc.page.margins.bottom = 0;
-    doc.font("Helvetica").fontSize(7.5).fillColor("#777").text(`SalesTrackPro · ${table.title} · page ${index - range.start + 1} of ${range.count}`, left, doc.page.height - savedBottom + 2, { width: pageWidth, align: "right", lineBreak: false });
+    doc.font("Helvetica").fontSize(7.5).fillColor("#777").text(`LeadTrailPro · ${table.title} · page ${index - range.start + 1} of ${range.count}`, left, doc.page.height - savedBottom + 2, { width: pageWidth, align: "right", lineBreak: false });
     doc.page.margins.bottom = savedBottom;
   }
   doc.end();

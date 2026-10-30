@@ -1,4 +1,4 @@
-// Shared Selenium helpers for the SalesTrackPro end-to-end suite (tests/e2e).
+// Shared Selenium helpers for the LeadTrailPro end-to-end suite (tests/e2e).
 // The browser runs in the `selenium` compose service and talks to the `app-test` service.
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";

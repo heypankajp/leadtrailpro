@@ -42,11 +42,11 @@ export async function GET(request: Request) {
         meta: [["Scope", filterText], ["Totals", `${totals.leads} leads · ${totals.calls} calls · ${totals.emails} emails · ${totals.visits} visits · ${totals.conversions} conversions`], ["Exported", new Date().toISOString()]],
         columns, rows, landscape: true, emptyText: "No people to report on.",
       });
-      return pdfResponse(buffer, `salestrackpro-${period}-${report.range.startYmd}.pdf`);
+      return pdfResponse(buffer, `leadtrailpro-${period}-${report.range.startYmd}.pdf`);
     }
 
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = "SalesTrackPro";
+    workbook.creator = "LeadTrailPro";
     const sheet = workbook.addWorksheet("Performance");
     sheet.columns = [
       { header: "Name", key: "name", width: 26 }, { header: "Role", key: "role", width: 16 }, { header: "Stage", key: "stage", width: 16 }, { header: "Template", key: "template", width: 18 },
@@ -70,7 +70,7 @@ export async function GET(request: Request) {
     return new Response(new Uint8Array(buffer), {
       headers: {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename="salestrackpro-${period}-${report.range.startYmd}.xlsx"`,
+        "Content-Disposition": `attachment; filename="leadtrailpro-${period}-${report.range.startYmd}.xlsx"`,
         "Cache-Control": "no-store",
       },
     });

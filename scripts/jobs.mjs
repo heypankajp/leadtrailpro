@@ -1,5 +1,5 @@
 /**
- * Scheduler for SalesTrackPro's timed jobs (daily and weekly digests, TASK-06). Every JOBS_INTERVAL_SECONDS (default
+ * Scheduler for LeadTrailPro's timed jobs (daily and weekly digests, TASK-06). Every JOBS_INTERVAL_SECONDS (default
  * 60) it asks the app to run whatever is due; the app decides and never sends a digest twice for one period.
  *
  *   JOBS_URL=http://localhost:3000 JOBS_KEY=<same value as the app's JOBS_KEY> node scripts/jobs.mjs
@@ -34,6 +34,6 @@ async function tick() {
   }
 }
 
-console.log(`SalesTrackPro jobs: polling ${url} every ${every / 1000}s`);
+console.log(`LeadTrailPro jobs: polling ${url} every ${every / 1000}s`);
 await tick();
 setInterval(() => { void tick(); }, every);

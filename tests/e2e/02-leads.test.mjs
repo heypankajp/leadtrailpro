@@ -15,7 +15,7 @@ describe("Leads", () => {
     await waitForServices();
     await ensureAdmin();
     await mkdir(outputDir, { recursive: true });
-    await writeFile(uploadPath, "SalesTrackPro end-to-end upload\n");
+    await writeFile(uploadPath, "LeadTrailPro end-to-end upload\n");
     driver = await createDriver();
     page = new Page(driver);
     await page.signIn(admin);

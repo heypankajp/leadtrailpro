@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-# SalesTrackPro container image.
+# LeadTrailPro container image.
 #
 #   dev    – hot-reloading `next dev` with the project bind-mounted (used by compose.yaml)
 #   runner – minimal production image built from Next.js standalone output (compose.prod.yaml)

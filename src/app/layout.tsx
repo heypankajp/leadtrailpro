@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "SalesTrackPro | Sales workspace",
+  title: "LeadTrailPro | Sales workspace",
   description: "A clear, connected workspace for managing leads, follow-ups, and sales performance.",
 };
 

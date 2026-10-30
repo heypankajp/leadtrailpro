@@ -61,7 +61,7 @@ export default function ReportsPage() {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `salestrackpro-${period}-${report.range.startYmd}.csv`;
+    anchor.download = `leadtrailpro-${period}-${report.range.startYmd}.csv`;
     anchor.click();
     URL.revokeObjectURL(url);
   };
