@@ -1,6 +1,6 @@
-# SalesTrackPro
+# leadtrail.pro
 
-SalesTrackPro is a sales workspace for a staffing and recruitment business, built from the Sales Tracker BRD/SRS. Leads, interactions, tasks, documents, candidate profiles, targets, reports, users, and the full audit trail live in PostgreSQL behind a Next.js application. Phase 1 (the core workspace), notifications, and collaboration threads are implemented; the external integrations are planned. The requirements with their status are in [docs/PRD.md](docs/PRD.md) and the technical design in [docs/SPEC.md](docs/SPEC.md).
+leadtrail.pro is a sales workspace for a staffing and recruitment business, built from the Sales Tracker BRD/SRS. Leads, interactions, tasks, documents, candidate profiles, targets, reports, users, and the full audit trail live in PostgreSQL behind a Next.js application. Phase 1 (the core workspace), notifications, and collaboration threads are implemented; the external integrations are planned. The requirements with their status are in [docs/PRD.md](docs/PRD.md) and the technical design in [docs/SPEC.md](docs/SPEC.md).
 
 ## At a glance
 
@@ -36,7 +36,7 @@ Everyday commands:
 | Import the legacy tracker (needs an administrator; `--dry-run` first) | `docker compose run --rm setup node scripts/import-tracker.mjs "docs/Sales Leads 2026.xlsx" --dry-run` |
 | Schema upgrade after pulling code | `docker compose run --rm setup node scripts/create-database.mjs` |
 | Add a dependency | `docker compose exec app npm install <package>`, then `docker compose build` |
-| PostgreSQL from a desktop tool | `127.0.0.1:5433`, database `salestrackpro`, user `postgres`, password `salestrackpro` (unless overridden) |
+| PostgreSQL from a desktop tool | `127.0.0.1:5433`, database `leadtrail.pro`, user `postgres`, password `leadtrail.pro` (unless overridden) |
 
 Notes:
 
@@ -95,7 +95,7 @@ Each user connects their own Google account from a lead's **Emails** tab (read-o
 
 Until these exist the Emails tab explains that Gmail is not configured, and emails are logged by hand on the Timeline.
 
-The setup scripts read `.env.setup.local` (administrator credentials) instead; it also accepts `PGAPPUSER` (the name of the restricted application role, default `salestrackpro_app`) and `PGDATABASE` (default `salestrackpro`).
+The setup scripts read `.env.setup.local` (administrator credentials) instead; it also accepts `PGAPPUSER` (the name of the restricted application role, default `leadtrail.pro_app`) and `PGDATABASE` (default `leadtrail.pro`).
 
 ## Production
 
