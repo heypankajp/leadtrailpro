@@ -6,15 +6,15 @@ import { Client } from "pg";
  *   npm run db:seed
  * Requires the schema (npm run db:create) and at least one administrator account created
  * through the sign-in screen. Sample leads are owned by the demo Sales Managers this script
- * creates (password: SalesTrackPro-demo-2026). Safe to re-run: it does nothing once sample data exists.
+ * creates (password: leadtrailpro-demo-2026). Safe to re-run: it does nothing once sample data exists.
  */
 
-const databaseName = process.env.PGDATABASE || "salestrackpro";
+const databaseName = process.env.PGDATABASE || "leadtrailpro";
 const host = process.env.PGHOST;
 const user = process.env.PGADMIN_USER || process.env.PGUSER;
 const password = process.env.PGADMIN_PASSWORD || process.env.PGPASSWORD;
 const port = Number(process.env.PGPORT || "5432");
-const demoPassword = "SalesTrackPro-demo-2026";
+const demoPassword = "leadtrailpro-demo-2026";
 
 const sql = (date) => date.toISOString().slice(0, 19).replace("T", " ");
 const ymd = (date) => date.toISOString().slice(0, 10);

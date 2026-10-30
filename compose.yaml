@@ -26,7 +26,7 @@ services:
   db:
     image: postgres:17-alpine
     environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-salestrackpro}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-leadtrailpro}
     ports:
       - "127.0.0.1:${DB_PORT:-5433}:5432"
     volumes:
@@ -75,7 +75,7 @@ services:
       PGHOST: db
       PGPORT: "5432"
       PGUSER: postgres
-      PGPASSWORD: ${POSTGRES_PASSWORD:-salestrackpro}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-leadtrailpro}
     depends_on:
       db:
         condition: service_healthy

@@ -36,7 +36,7 @@ Everyday commands:
 | Import the legacy tracker (needs an administrator; `--dry-run` first) | `docker compose run --rm setup node scripts/import-tracker.mjs "docs/Sales Leads 2026.xlsx" --dry-run` |
 | Schema upgrade after pulling code | `docker compose run --rm setup node scripts/create-database.mjs` |
 | Add a dependency | `docker compose exec app npm install <package>`, then `docker compose build` |
-| PostgreSQL from a desktop tool | `127.0.0.1:5433`, database `salestrackpro`, user `postgres`, password `salestrackpro` (unless overridden) |
+| PostgreSQL from a desktop tool | `127.0.0.1:5433`, database `leadtrailpro`, user `postgres`, password `leadtrailpro` (unless overridden) |
 
 Notes:
 
@@ -95,7 +95,7 @@ Each user connects their own Google account from a lead's **Emails** tab (read-o
 
 Until these exist the Emails tab explains that Gmail is not configured, and emails are logged by hand on the Timeline.
 
-The setup scripts read `.env.setup.local` (administrator credentials) instead; it also accepts `PGAPPUSER` (the name of the restricted application role, default `salestrackpro_app`) and `PGDATABASE` (default `salestrackpro`).
+The setup scripts read `.env.setup.local` (administrator credentials) instead; it also accepts `PGAPPUSER` (the name of the restricted application role, default `leadtrailpro_app`) and `PGDATABASE` (default `leadtrailpro`).
 
 ## Production
 

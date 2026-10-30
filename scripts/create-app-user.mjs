@@ -10,12 +10,12 @@ import { Client } from "pg";
  * Re-running rotates the password and the bootstrap key; other settings already in .env.local are kept.
  */
 
-const databaseName = process.env.PGDATABASE || "salestrackpro";
+const databaseName = process.env.PGDATABASE || "leadtrailpro";
 const host = process.env.PGHOST;
 const adminUser = process.env.PGADMIN_USER || process.env.PGUSER;
 const adminPassword = process.env.PGADMIN_PASSWORD || process.env.PGPASSWORD;
 const port = Number(process.env.PGPORT || "5432");
-const appUser = process.env.PGAPPUSER || "salestrackpro_app";
+const appUser = process.env.PGAPPUSER || "leadtrailpro_app";
 
 const envTemplate = (dbLines) => [
   ...dbLines,

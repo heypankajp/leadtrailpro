@@ -1,7 +1,7 @@
 import { Client } from "pg";
 
 /**
- * Creates or upgrades the salestrackpro schema on PostgreSQL (14 or newer).
+ * Creates or upgrades the leadtrailpro schema on PostgreSQL (14 or newer).
  *
  * Run with the PostgreSQL administrator credentials in .env.setup.local:
  *   npm run db:create
@@ -10,7 +10,7 @@ import { Client } from "pg";
  * schema_migrations, so re-running after a code update applies only what is new.
  */
 
-const databaseName = process.env.PGDATABASE || "salestrackpro";
+const databaseName = process.env.PGDATABASE || "leadtrailpro";
 const maintenanceDatabase = process.env.PGADMIN_DATABASE || "postgres";
 const host = process.env.PGHOST;
 const user = process.env.PGADMIN_USER || process.env.PGUSER;

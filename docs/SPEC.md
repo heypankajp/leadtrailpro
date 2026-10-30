@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Source | `Sales_Tracker_App_BRD_SRS.docx` v1.0 (October 13, 2026) and its updated PDF of October 19, 2026 (adds BRD §25, PRD §3.23), the change note `SalesTrackPro_Sales_Trip_Planner_Requirement_Change.docx` (October 21, 2026, local and untracked), and the current codebase |
+| Source | `Sales_Tracker_App_BRD_SRS.docx` v1.0 (October 13, 2026) and its updated PDF of October 19, 2026 (adds BRD §25, PRD §3.23), the change note `leadtrailpro_Sales_Trip_Planner_Requirement_Change.docx` (October 21, 2026, local and untracked), and the current codebase |
 | SPEC version | 1.9 — October 26, 2026: job-listing sources layer as built (§7.13, §3.21). 1.8 — October 25, 2026: HasData Indeed API adapter design (§10.8, §10.10). 1.7 — October 25, 2026: shared rich-text editor with dictation (§7.12), task comments (§3.20, §6.12), CI workflow (§12). 1.6 — October 23, 2026: legacy tracker import as built (§10.9). 1.5 — October 22, 2026 (1.4: October 22, 2026; 1.3 and 1.2: October 21, 2026; 1.1: October 18, 2026; 1.0: October 17, 2026) |
 | Changes in 1.4 | In-app notifications, preferences, digests, and the jobs scheduler (TASK-06, NTF-*: migration 7, §3.17–3.18, §6.10, §7.11, `scripts/jobs.mjs`, compose `jobs` service). Opportunity Recommendation design sketch (§10.10) for the updated BRD's §25. Mail provider switch with a stub outbox (`MAIL_PROVIDER`, migration 6, §3.16, §6.2). Needs-attention rules per status / BD action (TASK-05: `reminders.rules`, §3.12, §7.9), report stage and template filters (RPT-05, §6.6), PDF exports with `pdfkit` (RPT-06, `src/lib/pdf.ts`, §6.6, §6.9), axe-core accessibility audit in the browser suite (NFR-07, §12) |
 | Changes in 1.3 | Sales Trip Planner built (TRIP-01..11: migration 5, provider interface with stub and Google adapters, lead matching, trips API §6.9, screen A16, Excel export) and report Excel export (RPT-06). Lead status reasons implemented (LEAD-06/07: migration 4, `status_reason_id`, reason lists, status prompt, filters). PostgreSQL replaces MySQL: `pg` driver and `?`→`$n` query layer (§1, §2), PG* settings and `postgres:17` containers (§2), identity columns, JSONB, TIMESTAMP(0) UTC and the updated_at trigger (§3), SQLSTATE error mapping (§6) |
@@ -51,7 +51,7 @@ Next.js 16 (App Router) — route handlers under src/app/api/**            Node.
 
 | Variable | Required | Purpose |
 |---|---|---|
-| `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` | yes | Runtime database role (written by `npm run db:user:create`); the database defaults to `salestrackpro` |
+| `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` | yes | Runtime database role (written by `npm run db:user:create`); the database defaults to `leadtrailpro` |
 | `USER_MANAGEMENT_KEY` | first run | Bootstrap key for the first administrator (AUTH-01) |
 | `APP_URL` | behind a proxy | Public origin; used for the same-origin check and reset links. An `http://` value turns off the Secure cookie flag (plain-http deployments, the e2e stack) |
 | `TRUSTED_ORIGINS` | optional | Extra allowed origins, comma separated |
@@ -76,9 +76,9 @@ Next.js 16 (App Router) — route handlers under src/app/api/**            Node.
 
 | Command | Script | Behaviour |
 |---|---|---|
-| `npm run db:create` | `scripts/create-database.mjs` | Connects to the maintenance database `postgres`, creates `salestrackpro` when missing, then applies numbered migrations recorded in `schema_migrations`, each in its own transaction. Migration 1 creates all tables, the `set_updated_at` trigger function, and seeds list values, target templates, and settings. Idempotent. |
-| `npm run db:user:create` | `scripts/create-app-user.mjs` | Creates the `salestrackpro_app` role with LOGIN, CONNECT, USAGE on `public`, and SELECT/INSERT/UPDATE/DELETE on all current and future tables plus USAGE on sequences (identity columns), then writes `.env.local` (mode 0600). Re-running rotates the password and bootstrap key and keeps every other line already in the file. |
-| `npm run db:seed` | `scripts/seed-sample-data.mjs` | Requires an administrator. Creates demo users (two Sales Managers, one Recruiter, password `SalesTrackPro-demo-2026`), eleven leads across states and statuses (including one Lost Lead – Pricing and one archived Disqualified – Not Interested), activities, tasks. No-op when leads exist. |
+| `npm run db:create` | `scripts/create-database.mjs` | Connects to the maintenance database `postgres`, creates `leadtrailpro` when missing, then applies numbered migrations recorded in `schema_migrations`, each in its own transaction. Migration 1 creates all tables, the `set_updated_at` trigger function, and seeds list values, target templates, and settings. Idempotent. |
+| `npm run db:user:create` | `scripts/create-app-user.mjs` | Creates the `leadtrailpro_app` role with LOGIN, CONNECT, USAGE on `public`, and SELECT/INSERT/UPDATE/DELETE on all current and future tables plus USAGE on sequences (identity columns), then writes `.env.local` (mode 0600). Re-running rotates the password and bootstrap key and keeps every other line already in the file. |
+| `npm run db:seed` | `scripts/seed-sample-data.mjs` | Requires an administrator. Creates demo users (two Sales Managers, one Recruiter, password `leadtrailpro-demo-2026`), eleven leads across states and statuses (including one Lost Lead – Pricing and one archived Disqualified – Not Interested), activities, tasks. No-op when leads exist. |
 | `npm run dev` / `build` / `start` | Next.js | Development server / production build / production server |
 | `npm run lint` / `typecheck` | ESLint (next/core-web-vitals + typescript + react-hooks) / `tsc --noEmit` | |
 | `npm run jobs` | `scripts/jobs.mjs` | Scheduler: every `JOBS_INTERVAL_SECONDS` (60) it POSTs to `JOBS_URL/api/jobs/run` with `JOBS_KEY`; the app runs whatever digest is due, once per period |
@@ -92,7 +92,7 @@ Next.js 16 (App Router) — route handlers under src/app/api/**            Node.
 
 | Service (`compose.yaml`) | Image | Role |
 |---|---|---|
-| `db` | `postgres:17-alpine` | Development database, volume `postgres_data`, published on `127.0.0.1:${DB_PORT:-5433}`, superuser `postgres` with password `${POSTGRES_PASSWORD:-salestrackpro}`; the healthcheck uses `pg_isready -h 127.0.0.1` so it only passes once first-run initialisation is complete |
+| `db` | `postgres:17-alpine` | Development database, volume `postgres_data`, published on `127.0.0.1:${DB_PORT:-5433}`, superuser `postgres` with password `${POSTGRES_PASSWORD:-leadtrailpro}`; the healthcheck uses `pg_isready -h 127.0.0.1` so it only passes once first-run initialisation is complete |
 | `app` | `leadtrailpro-dev` (target `dev`) | Dev server on `${APP_PORT:-3000}`; volumes `node_modules` and `next_cache` shadow the host directories |
 | `jobs` | `leadtrailpro-dev` (prod: `leadtrailpro` runner) | Runs `scripts/jobs.mjs` against `http://app:3000` with the shared `JOBS_KEY` |
 | `setup` (profile `setup`) | `leadtrailpro-dev` | One shot: `create-database.mjs` + `create-app-user.mjs` as `postgres`; writes `.env.local` with `PGHOST=db` into the bind mount |
@@ -109,7 +109,7 @@ Next.js 16 (App Router) — route handlers under src/app/api/**            Node.
 
 ER summary: `users` own `leads`; `leads` have many `lead_activities`, `tasks`, `lead_attachments`; `list_values` are referenced by seven lead columns; `target_templates` are referenced by `users`; `audit_log` references everything loosely by `(entity_type, entity_id)`.
 
-All tables live in the `public` schema of the `salestrackpro` database. Ids are `GENERATED ALWAYS AS IDENTITY`; instants are `TIMESTAMP(0)` holding UTC; JSON is `JSONB`; every table with `updated_at` has a `BEFORE UPDATE` trigger calling `set_updated_at()`. Comparisons are case-sensitive (unlike MySQL's collation), so emails are lower-cased before storage and lookup, and keyword search applies `LOWER()`.
+All tables live in the `public` schema of the `leadtrailpro` database. Ids are `GENERATED ALWAYS AS IDENTITY`; instants are `TIMESTAMP(0)` holding UTC; JSON is `JSONB`; every table with `updated_at` has a `BEFORE UPDATE` trigger calling `set_updated_at()`. Comparisons are case-sensitive (unlike MySQL's collation), so emails are lower-cased before storage and lookup, and keyword search applies `LOWER()`.
 
 ### 3.1 `users`
 
@@ -253,9 +253,9 @@ id BIGINT · lead_id FK (CASCADE) · parent_id FK self NULL (CASCADE; replies ar
 | Topic | Design |
 |---|---|
 | Password hashing | Node `scrypt`, 16-byte random salt, 64-byte key, constant-time compare. Unknown accounts hash a dummy value so timing does not reveal existence (AUTH-01). |
-| Session | 32 random bytes (base64url) in cookie `salestrackpro_session` (httpOnly, SameSite=Lax, Secure in production unless `APP_URL` is `http://`, 8 h). Only the SHA-256 hash is stored. Sessions are deleted on sign-out, password change (other sessions), termination, and deactivation. |
+| Session | 32 random bytes (base64url) in cookie `leadtrailpro_session` (httpOnly, SameSite=Lax, Secure in production unless `APP_URL` is `http://`, 8 h). Only the SHA-256 hash is stored. Sessions are deleted on sign-out, password change (other sessions), termination, and deactivation. |
 | Auto sign-out (AUTH-07) | On every request, if the account has `auto_logout_enabled` and the session was created before the latest occurrence of the account's `auto_logout_time` (default 23:00) in the business timezone, the session is deleted and the request is treated as signed out. |
-| Two-factor (AUTH-06) | Password OK + `two_factor_enabled` → create `email_tokens` row (purpose `two_factor`, hash of a 6-digit code, hash of a random challenge), set cookie `salestrackpro_2fa` (10 min), email the code, respond `{requiresTwoFactor:true}`. `POST /api/auth/two-factor` matches cookie + code, max 5 attempts, then creates the session and clears the challenge cookie. Requires SMTP; sign-in explains when it is missing. |
+| Two-factor (AUTH-06) | Password OK + `two_factor_enabled` → create `email_tokens` row (purpose `two_factor`, hash of a 6-digit code, hash of a random challenge), set cookie `leadtrailpro_2fa` (10 min), email the code, respond `{requiresTwoFactor:true}`. `POST /api/auth/two-factor` matches cookie + code, max 5 attempts, then creates the session and clears the challenge cookie. Requires SMTP; sign-in explains when it is missing. |
 | Password reset (AUTH-05) | `POST /api/auth/forgot-password` always returns 200 when SMTP exists (503 "not configured" otherwise); creates a 30-minute token (max 3 per 15 min per user) and emails `${APP_URL}/?reset=<token>`. The SPA reads `?reset=`, shows the reset form, and calls `POST /api/auth/reset-password`, which consumes the token and revokes all sessions. Admins can trigger the same email per user (invitation). |
 | Rate limiting (AUTH-11) | `login_history` counts failures in the last 15 minutes (`NOW() AT TIME ZONE 'UTC'` minus an interval): ≥10 per email or ≥50 per address → 429. Works across instances and restarts. |
 | CSRF | Every state-changing request must carry an `Origin` equal to the request origin, `APP_URL`, `TRUSTED_ORIGINS`, or the `X-Forwarded-Proto/Host` pair. Cookies are SameSite=Lax. |
@@ -396,7 +396,7 @@ LEAD-06/07: `LeadInput.statusReasonId` is required when the status code is `lost
 |---|---|---|
 | `GET /api/gmail` | session | `{ configured, connectedEmail, allMailboxes }` (allMailboxes = view_team_reports) |
 | `DELETE /api/gmail` | session + same origin | removes the link and its token; audit `gmail.disconnected` |
-| `GET /api/gmail/connect` | session | sets a 10-minute `salestrackpro_gmail_state` cookie (path `/api/gmail`) and redirects to Google consent (scope `gmail.readonly openid email`, offline access) |
+| `GET /api/gmail/connect` | session | sets a 10-minute `leadtrailpro_gmail_state` cookie (path `/api/gmail`) and redirects to Google consent (scope `gmail.readonly openid email`, offline access) |
 | `GET /api/gmail/callback` | session | verifies `state`, exchanges the code, stores the encrypted refresh token and the Google email, audit `gmail.connected`; redirects to `/?gmail=connected\|denied\|failed`, which the shell shows as a toast |
 | `GET /api/leads/{id}/emails` | view_leads | `{ emails (newest 25 across mailboxes), failures }` for the lead's `client_emails`; the viewer's mailbox, or every connected mailbox for view_team_reports. Each mailbox is queried live (`from:/to:/cc:` search, ten messages per mailbox); a mailbox whose token no longer works counts as a failure instead of breaking the response |
 

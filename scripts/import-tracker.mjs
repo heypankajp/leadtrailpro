@@ -47,7 +47,7 @@ for (let index = 0; index < args.length; index += 1) {
   }
 }
 
-const databaseName = process.env.PGDATABASE || "salestrackpro";
+const databaseName = process.env.PGDATABASE || "leadtrailpro";
 const host = process.env.PGHOST;
 const user = process.env.PGADMIN_USER || process.env.PGUSER;
 const password = process.env.PGADMIN_PASSWORD || process.env.PGPASSWORD;

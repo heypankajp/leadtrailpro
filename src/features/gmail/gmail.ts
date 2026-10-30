@@ -12,7 +12,7 @@ import type { LeadEmail } from "./model";
 export type { LeadEmail } from "./model";
 
 export const gmailScope = "https://www.googleapis.com/auth/gmail.readonly openid email";
-export const gmailStateCookie = "salestrackpro_gmail_state";
+export const gmailStateCookie = "leadtrailpro_gmail_state";
 
 export function googleConfig() {
   const clientId = process.env.GOOGLE_CLIENT_ID;

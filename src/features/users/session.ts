@@ -10,8 +10,8 @@ import type { UserAccount, UserPrivilege } from "./model";
 
 const scrypt = promisify(scryptCallback);
 
-export const sessionCookieName = "salestrackpro_session";
-export const twoFactorCookieName = "salestrackpro_2fa";
+export const sessionCookieName = "leadtrailpro_session";
+export const twoFactorCookieName = "leadtrailpro_2fa";
 const sessionLifetimeSeconds = 8 * 60 * 60;
 const twoFactorLifetimeSeconds = 10 * 60;
 const passwordResetLifetimeSeconds = 30 * 60;

@@ -6,7 +6,7 @@ import { Pool, types, type PoolClient } from "pg";
  * convert between those strings and ISO 8601.
  */
 
-const databaseName = "salestrackpro";
+const databaseName = "leadtrailpro";
 let pool: Pool | undefined;
 
 // Return dates and timestamps as the text PostgreSQL sends ('YYYY-MM-DD', 'YYYY-MM-DD HH:MM:SS') rather than
