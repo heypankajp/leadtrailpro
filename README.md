@@ -262,13 +262,25 @@ Only for a machine that ran the old stack; a fresh clone needs none of this.
 The compose project is now `leadtrailpro`, so Docker creates new volumes (`leadtrailpro_postgres_data`, `leadtrailpro_node_modules`, `leadtrailpro_next_cache`) and new images (`leadtrailpro-dev`, `leadtrailpro`); the old `salestrackpro_*` volumes and images are left as they are. The database and the app role now default to `leadtrailpro` and `leadtrailpro_app`, and the session cookies have new names, so everyone signs in again after the upgrade. On a machine that ran the old stack, pick one:
 
 - **Start fresh.** `docker compose run --rm setup` creates the new database and rewrites the database lines of `.env.local` (every other setting is kept); then `docker compose up -d`, complete first-time setup again, and optionally seed sample data.
-- **Keep the old data.** Let compose create the new volume, stop the database, copy the old cluster over it, and start again. The database inside keeps its old name, role, and superuser password, which the existing `.env.local` still points at:
+- **Keep the old data.** Stop the old stack, let compose create the new volume, stop the database, copy the old cluster over it, and start the database again:
 
   ```bash
+  docker compose -p salestrackpro down            # old containers only; volumes stay
   docker compose up -d db && docker compose stop db
   docker run --rm -v salestrackpro_postgres_data:/from -v leadtrailpro_postgres_data:/to alpine sh -c "rm -rf /to/* && cp -a /from/. /to/"
-  docker compose up -d
+  docker compose up -d db
   ```
+
+  The copied cluster still has the old database name, role, and superuser password, so the documented defaults (and `docker compose run --rm setup node scripts/create-database.mjs` for upgrades) would not match it. Rename them, then change the two lines in `.env.local` and start the rest:
+
+  ```bash
+  docker compose exec -e PGPASSWORD=salestrackpro db psql -U postgres -c "ALTER DATABASE salestrackpro RENAME TO leadtrailpro" \
+    -c "ALTER ROLE salestrackpro_app RENAME TO leadtrailpro_app" -c "ALTER ROLE postgres WITH PASSWORD 'leadtrailpro'"
+  sed -i.bak -e 's/^PGUSER=salestrackpro_app$/PGUSER=leadtrailpro_app/' -e 's/^PGDATABASE=salestrackpro$/PGDATABASE=leadtrailpro/' .env.local && rm .env.local.bak
+  docker compose up -d && docker compose run --rm app npm run db:check
+  ```
+
+  (If you had set `POSTGRES_PASSWORD` in `.env`, use that value instead of `salestrackpro` and keep it.) The app role keeps its password through the rename, so `.env.local` needs no other change.
 
 - **Git remote.** The GitHub repository is now `heypankajp/leadtrailpro`. The old address keeps redirecting; `git remote set-url origin https://github.com/heypankajp/leadtrailpro.git` updates a clone.
 - **Clean up** once the new stack works: `docker volume rm salestrackpro_postgres_data salestrackpro_node_modules salestrackpro_next_cache` (and `salestrackpro_attachments` if the production stack ran here) and `docker rmi salestrackpro-dev salestrackpro`.
