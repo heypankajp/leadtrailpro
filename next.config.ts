@@ -6,9 +6,9 @@ const nextConfig: NextConfig = {
   experimental: {
     agentUpgrade: "security",
   },
-  // Keep the PostgreSQL driver a plain Node.js package (it is also in Next's default list) so the
-  // standalone output ships it and scripts/*.mjs can import it from the production image.
-  serverExternalPackages: ["pg", "exceljs", "pdfkit"],
+  // Keep these plain Node.js packages out of the server bundle so the standalone output ships them under
+  // node_modules and scripts/*.mjs (migrations, db-check, mail-test) can import them from the production image.
+  serverExternalPackages: ["pg", "exceljs", "pdfkit", "nodemailer"],
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {

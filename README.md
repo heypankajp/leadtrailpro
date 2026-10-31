@@ -19,11 +19,15 @@ LeadTrailPro (renamed from SalesTrackPro on October 30, 2026) is a sales workspa
 Requires Docker Desktop, or Docker Engine with the Compose plugin. Nothing else is installed on the machine: Node 22 and PostgreSQL run in containers, and the project directory is mounted into the app container so edits hot-reload as usual.
 
 ```bash
-docker compose run --rm setup   # once: creates the schema, the restricted app user, and .env.local
-docker compose up -d            # dev server at http://localhost:3000
+git clone https://github.com/heypankajp/leadtrailpro.git
+cd leadtrailpro
+docker compose run --rm setup   # once: builds the dev image (a few minutes the first time), creates the schema, the app user, and .env.local
+docker compose up -d            # dev server at http://localhost:3000; `docker compose ps` shows db healthy, app and jobs up
 ```
 
 Open [http://localhost:3000](http://localhost:3000), choose **First time setup**, and paste the `USER_MANAGEMENT_KEY` from `.env.local` to create the first administrator. That option disappears once an account exists.
+
+Step-by-step instructions for a laptop (with or without Docker) and for a server, including what to click and how to read a failed database connection, are in [docs/TESTING.md](docs/TESTING.md).
 
 Everyday commands:
 
@@ -35,6 +39,7 @@ Everyday commands:
 | Sample data (needs an administrator) | `docker compose run --rm setup node scripts/seed-sample-data.mjs` |
 | Import the legacy tracker (needs an administrator; `--dry-run` first) | `docker compose run --rm setup node scripts/import-tracker.mjs "docs/Sales Leads 2026.xlsx" --dry-run` |
 | Schema upgrade after pulling code | `docker compose run --rm setup node scripts/create-database.mjs` |
+| Check the database connection the app will use | `docker compose run --rm app npm run db:check` |
 | Add a dependency | `docker compose exec app npm install <package>`, then `docker compose build` |
 | PostgreSQL from a desktop tool | `127.0.0.1:5433`, database `leadtrailpro`, user `postgres`, password `leadtrailpro` (unless overridden) |
 
@@ -45,32 +50,18 @@ Notes:
 - Optional overrides go in an ignored `.env` next to `compose.yaml`: `POSTGRES_PASSWORD`, `APP_PORT` (default 3000), `DB_PORT` (default 5433, loopback only). Next.js reads `.env` too, so keep application settings in `.env.local`.
 - If `docker` is not on your PATH (Docker Desktop without the CLI link), call it by its full path under `/Applications/Docker.app/Contents/Resources/bin/`. `scripts/e2e.sh` finds it on its own.
 
-### After the rename from SalesTrackPro (October 30, 2026)
-
-The compose project is now `leadtrailpro`, so Docker creates new volumes (`leadtrailpro_postgres_data`, `leadtrailpro_node_modules`, `leadtrailpro_next_cache`) and new images (`leadtrailpro-dev`, `leadtrailpro`); the old `salestrackpro_*` volumes and images are left as they are. The database and the app role now default to `leadtrailpro` and `leadtrailpro_app`, and the session cookies have new names, so everyone signs in again after the upgrade. On a machine that ran the old stack, pick one:
-
-- **Start fresh.** `docker compose run --rm setup` creates the new database and rewrites the database lines of `.env.local` (every other setting is kept); then `docker compose up -d`, complete first-time setup again, and optionally seed sample data.
-- **Keep the old data.** Let compose create the new volume, stop the database, copy the old cluster over it, and start again. The database inside keeps its old name, role, and superuser password, which the existing `.env.local` still points at:
-
-  ```bash
-  docker compose up -d db && docker compose stop db
-  docker run --rm -v salestrackpro_postgres_data:/from -v leadtrailpro_postgres_data:/to alpine sh -c "rm -rf /to/* && cp -a /from/. /to/"
-  docker compose up -d
-  ```
-
-- **Git remote.** The GitHub repository is now `heypankajp/leadtrailpro`. The old address keeps redirecting; `git remote set-url origin https://github.com/heypankajp/leadtrailpro.git` updates a clone.
-- **Clean up** once the new stack works: `docker volume rm salestrackpro_postgres_data salestrackpro_node_modules salestrackpro_next_cache` (and `salestrackpro_attachments` if the production stack ran here) and `docker rmi salestrackpro-dev salestrackpro`.
-
 ## Running without Docker
 
-- Node.js 20.9 or newer (`node --version`)
+- Node.js 22, at least 22.9 (`node --version`; the check scripts use `--env-file-if-exists`)
 - PostgreSQL 14 or newer with a superuser (or database-owner) account for setup
 
 ```bash
-npm install
+git clone https://github.com/heypankajp/leadtrailpro.git && cd leadtrailpro
+npm ci
 cp .env.setup.local.example .env.setup.local   # PostgreSQL administrator credentials, kept out of Git
 npm run db:create                               # creates or upgrades the schema and reference data
 npm run db:user:create                          # restricted app account + .env.local with the bootstrap key
+npm run db:check                                # confirms the app can reach the database with .env.local
 npm run dev
 ```
 
@@ -118,10 +109,14 @@ The setup scripts read `.env.setup.local` (administrator credentials) instead; i
 `compose.prod.yaml` overrides the development stack with a standalone Next.js image (about 460 MB), no bind mounts, uploads in the `attachments` volume, and PostgreSQL not published on the host.
 
 ```bash
-echo "POSTGRES_PASSWORD=<strong password>" > .env
-docker compose -f compose.yaml -f compose.prod.yaml run --rm setup       # first time only
+printf 'POSTGRES_PASSWORD=%s\nJOBS_KEY=%s\n' "$(openssl rand -base64 36)" "$(openssl rand -base64 36)" > .env   # both are required
+docker compose -f compose.yaml -f compose.prod.yaml run --rm setup       # first time only; writes .env.local
+#   now edit .env.local: APP_URL=https://sales.example.com, and the SMTP_* lines or MAIL_PROVIDER=stub
 docker compose -f compose.yaml -f compose.prod.yaml up -d --build
+docker compose -f compose.yaml -f compose.prod.yaml run --rm app npm run db:check
 ```
+
+The full server walk-through, including the reverse proxy and the first sign-in, is [docs/TESTING.md, path C](docs/TESTING.md#c-server).
 
 - The app container takes its configuration from `.env.local`. Behind a reverse proxy, set `APP_URL` to the public origin and terminate TLS at the proxy.
 - The image carries the database scripts, so later schema upgrades can run from it:
@@ -131,6 +126,7 @@ docker compose -f compose.yaml -f compose.prod.yaml up -d --build
     -e PGUSER=postgres -e PGPASSWORD=<postgres password> app node scripts/create-database.mjs
   ```
 
+- Sample companies for the Sales Trip Planner on a server: put `TRIPS_PROVIDER=stub` in `.env` (compose passes it to the container; a value in `.env.local` is overridden there).
 - Database files live in the `postgres_data` volume and uploads in `attachments`; back up both.
 - Without Docker: `npm run build` then `npm run start`, or run `node .next/standalone/server.js` after copying `public/` and `.next/static/` next to it, as the Next.js standalone output expects.
 
@@ -141,9 +137,9 @@ src/app/                 Next.js App Router: page.tsx (client shell) and api/** 
 src/features/<area>/     model.ts (types, validation) · repository.ts (SQL, rules) · client.ts (fetch) · React components
 src/lib/                 database pool, dates and timezone, HTTP helpers, mailer, async-data hook
 scripts/                 create-database.mjs (migrations), create-app-user.mjs, seed-sample-data.mjs, import-tracker.mjs (+ lib/tracker-mapping.mjs),
-                         docker-entrypoint.sh (dev container), e2e.sh (browser suite runner)
+                         db-check.mjs (connection diagnosis), mail-test.mjs (SMTP check), docker-entrypoint.sh (dev container), e2e.sh (browser suite runner)
 tests/e2e/               Selenium end-to-end suite (node:test) with helpers/ui.mjs and helpers/data.mjs
-docs/                    PRD.md (requirements with IDs and status), SPEC.md (design, API, data model, screens),
+docs/                    PRD.md (requirements with IDs and status), SPEC.md (design, API, data model, screens), TESTING.md (set up and test on a laptop or a server),
                          Sales_Tracker_App_BRD_SRS_Updated.pdf (the updated BRD/SRS; its new section 25 is tracked as OPP-01..22 in PRD.md)
 Dockerfile               targets: dev (hot reload) and runner (standalone production image)
 compose.yaml             db, app, jobs (digest scheduler), setup, and the `test` profile (db-test, app-test, selenium, e2e)
@@ -218,6 +214,25 @@ scripts/e2e.sh tests/e2e/02-leads.test.mjs   # one or more files
 - **"Password reset emails are not configured yet"** or two-factor cannot be enabled: fill in the `SMTP_*` settings and restart the app. `npm run mail:test` shows whether the server accepts the sign-in; a `534` ("Application-specific password required") or `535` from Google means it wants an App Password, not the account password.
 - **"Request origin rejected"** behind a proxy: set `APP_URL` (or `TRUSTED_ORIGINS`) to the public origin, and make sure the proxy forwards `X-Forwarded-Host` and `X-Forwarded-Proto`.
 - **Port already in use**: set `APP_PORT` or `DB_PORT` in `.env` and run `docker compose up -d` again.
-- **"database \"salestrackpro\" does not exist"** or a sign-in that fails right after pulling the rename: the stack started on a new, empty volume while `.env.local` still names the old database. Follow "After the rename from SalesTrackPro" above.
+- **PostgreSQL does not connect**: run `npm run db:check` (in Docker: `docker compose run --rm app npm run db:check`); it names the cause and the fix. The table in [docs/TESTING.md](docs/TESTING.md#when-postgresql-does-not-connect) covers each message.
+- **"database \"salestrackpro\" does not exist"** or a sign-in that fails right after pulling the rename: the stack started on a new, empty volume while `.env.local` still names the old database. Follow "After the rename from SalesTrackPro" below.
 - **Everyone was signed out after a deploy**: expected once, when the rename changed the cookie names.
 - **Stale dependencies after switching branches**: restart the app container; it reinstalls when the lockfile changed. Run `docker compose build` to refresh the image as well.
+
+### After the rename from SalesTrackPro (October 30, 2026)
+
+Only for a machine that ran the old stack; a fresh clone needs none of this.
+
+The compose project is now `leadtrailpro`, so Docker creates new volumes (`leadtrailpro_postgres_data`, `leadtrailpro_node_modules`, `leadtrailpro_next_cache`) and new images (`leadtrailpro-dev`, `leadtrailpro`); the old `salestrackpro_*` volumes and images are left as they are. The database and the app role now default to `leadtrailpro` and `leadtrailpro_app`, and the session cookies have new names, so everyone signs in again after the upgrade. On a machine that ran the old stack, pick one:
+
+- **Start fresh.** `docker compose run --rm setup` creates the new database and rewrites the database lines of `.env.local` (every other setting is kept); then `docker compose up -d`, complete first-time setup again, and optionally seed sample data.
+- **Keep the old data.** Let compose create the new volume, stop the database, copy the old cluster over it, and start again. The database inside keeps its old name, role, and superuser password, which the existing `.env.local` still points at:
+
+  ```bash
+  docker compose up -d db && docker compose stop db
+  docker run --rm -v salestrackpro_postgres_data:/from -v leadtrailpro_postgres_data:/to alpine sh -c "rm -rf /to/* && cp -a /from/. /to/"
+  docker compose up -d
+  ```
+
+- **Git remote.** The GitHub repository is now `heypankajp/leadtrailpro`. The old address keeps redirecting; `git remote set-url origin https://github.com/heypankajp/leadtrailpro.git` updates a clone.
+- **Clean up** once the new stack works: `docker volume rm salestrackpro_postgres_data salestrackpro_node_modules salestrackpro_next_cache` (and `salestrackpro_attachments` if the production stack ran here) and `docker rmi salestrackpro-dev salestrackpro`.

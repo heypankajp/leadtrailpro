@@ -1,0 +1,2 @@
+# Shell scripts run inside Linux containers: keep LF endings on every checkout (a CRLF entrypoint makes the dev container fail to start on Windows).
+*.sh text eol=lf

@@ -9,12 +9,13 @@
     "db:user:create": "node --env-file=.env.setup.local scripts/create-app-user.mjs",
     "db:seed": "node --env-file=.env.setup.local scripts/seed-sample-data.mjs",
     "db:import": "node --env-file=.env.setup.local scripts/import-tracker.mjs",
+    "db:check": "node --env-file-if-exists=.env.local scripts/db-check.mjs",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test:unit": "node --test tests/unit/*.test.mjs",
     "jobs": "node scripts/jobs.mjs",
-    "mail:test": "node --env-file=.env.local scripts/mail-test.mjs",
+    "mail:test": "node --env-file-if-exists=.env.local scripts/mail-test.mjs",
     "test:e2e": "node --test --test-concurrency=1 --test-timeout=120000 tests/e2e/*.test.mjs"
   },
   "dependencies": {
