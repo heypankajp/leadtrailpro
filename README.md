@@ -83,15 +83,29 @@ The setup step writes the database settings and a commented template for the res
 | `MAIL_PROVIDER` | `stub` records every email in the Settings outbox instead of sending (the default the setup writes); `smtp` sends through the settings below; `off` disables email |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Outbound email for password resets, set-password links, and two-factor codes |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GMAIL_TOKEN_KEY`, `GOOGLE_REDIRECT_URI` | Gmail linking for the lead Emails tab. The token key is any long random string that encrypts stored refresh tokens; the redirect URI defaults to `APP_URL/api/gmail/callback` |
-| `TRIPS_PROVIDER` | `stub` serves sample companies for the sales trip planner (the Docker dev stack sets it); leave empty for live data |
+| `TRIPS_PROVIDER` | `stub` serves sample companies for the sales trip planner (the Docker dev stack sets it), and their Hiring counts then come from the sample job source so no live job-source budget is spent on fictional names; leave empty for live data |
 | `MAPS_API_KEY` | Google Maps Platform key (Geocoding, Places, Distance Matrix) for live trip searches |
 | `ADZUNA_APP_ID`, `ADZUNA_APP_KEY` | Adzuna job search (free developer key) for the Hiring column |
 | `JSEARCH_API_KEY` | JSearch on RapidAPI (Google for Jobs) for the Hiring column |
-| `HASDATA_API_KEY`, `HASDATA_INDEED_DOMAIN` | HasData Indeed Jobs Scraper API for the Hiring column; the domain selects a regional Indeed site (`ca`) |
+| `HASDATA_API_KEY`, `HASDATA_INDEED_DOMAIN` | HasData Indeed Jobs Scraper API for the Hiring column; the domain selects a regional Indeed site: a country code such as `ca` (expanded to `ca.indeed.com`) or the full host name |
 | `JOBS_API_URL`, `JOBS_API_KEY` | A custom job-listing source behind the JSON contract in SPEC §7.13 |
 | `JOBS_COUNTRY` | Country code for the sources that take one (default `ca`) |
 
 With `MAIL_PROVIDER=stub` the email features work without a mailbox: reset links and sign-in codes appear under Settings → Email delivery, where an administrator can open each message. Switch to `MAIL_PROVIDER=smtp` with the `SMTP_*` settings when a real mailbox is ready; without either, administrators set passwords directly and two-factor cannot be switched on. `npm run mail:test` checks the connection and sign-in with those settings, and `npm run mail:test -- --send` also delivers a test message to `SMTP_USER` (inside Docker: `docker compose run --rm app npm run mail:test -- --send`). A Gmail or Google Workspace mailbox needs an App Password (2-Step Verification turned on) in `SMTP_PASSWORD`; the account password is rejected.
+
+Job-source keys can be tried without a trip: `npm run jobs:test -- "OceanMD" Toronto` (in Docker: `docker compose run --rm app npm run jobs:test -- "OceanMD" Toronto`) calls every configured source for that company and prints what each returns. It spends one call per source, so use it sparingly on a test plan. With `TRIPS_PROVIDER=stub` the trip planner itself never calls the live sources, because its companies are fictional.
+
+### Job-source keys for testers
+
+The keys live only in `.env.local`, which Git ignores; never put them in `.env.setup.local.example` or any other committed file. Two ways to give testers access:
+
+- **Share your keys privately** (password manager, a disappearing message; not email or chat history): the four lines `ADZUNA_APP_ID`, `ADZUNA_APP_KEY`, `HASDATA_API_KEY`, `HASDATA_INDEED_DOMAIN`. The tester pastes them into their `.env.local`, restarts the app (`docker compose restart app`), and checks Settings → Job sources or runs `npm run jobs:test`. Everyone then shares one quota, and Adzuna's test plan allows only 25 calls a day until the application is activated.
+- **Each tester creates free keys** (a few minutes each, no card):
+  1. Adzuna: developer.adzuna.com → register → create an application → copy the Application ID and Key. New applications start as "pending activation" with 25 calls a day until Adzuna reviews them; set the source's budget under Settings → Job sources to 20 a day and 25 a month meanwhile.
+  2. HasData: hasdata.com → sign up → account settings → copy the API key. The free plan is 1,000 credits a month; an Indeed lookup costs 10. Set `HASDATA_INDEED_DOMAIN=ca` (the app expands it to `ca.indeed.com`).
+  3. JSearch (optional): rapidapi.com → the JSearch listing → subscribe to the free Basic plan → copy the `X-RapidAPI-Key` into `JSEARCH_API_KEY`.
+
+With `TRIPS_PROVIDER=stub` the trip planner never calls these sources (its companies are fictional); `npm run jobs:test -- "<company>" <city>` is the way to see them answer for a real company.
 
 ### Gmail linking
 

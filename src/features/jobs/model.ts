@@ -98,6 +98,15 @@ export function eligibleSources(settings: JobSourceSettings, statuses: { id: Job
   });
 }
 
+/**
+ * With the sample trip provider (TRIPS_PROVIDER=stub) every company is fictional, so the sample job source answers
+ * first and the live sources, which would only spend their budgets on names that exist nowhere, are never reached.
+ */
+export function orderForSampleCompanies(order: JobSourceId[], sampleCompanies: boolean): JobSourceId[] {
+  if (!sampleCompanies || !order.includes("stub")) return order;
+  return ["stub", ...order.filter((id) => id !== "stub")];
+}
+
 export function sourceNote(id: JobSourceId, settings: JobSourceSettings, status: { configured: boolean; usage: JobSourceUsage }): string | null {
   const budget = settings.budgets[id];
   if (!status.configured) return `Not configured: set ${jobSourceEnvHints[id]}.`;

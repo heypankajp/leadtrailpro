@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { defaultJobSources, eligibleSources, employmentTypeFrom, isCacheFresh, keepCompanyListings, normalizeJobSources, sourceNote } from "../../src/features/jobs/model.ts";
+import { defaultJobSources, eligibleSources, employmentTypeFrom, isCacheFresh, keepCompanyListings, normalizeJobSources, orderForSampleCompanies, sourceNote } from "../../src/features/jobs/model.ts";
 import { mapAdzuna } from "../../src/features/jobs/sources/adzuna.ts";
-import { mapHasData } from "../../src/features/jobs/sources/hasdata.ts";
+import { hasDataDomain, mapHasData } from "../../src/features/jobs/sources/hasdata.ts";
 import { mapJSearch } from "../../src/features/jobs/sources/jsearch.ts";
 import { cityOf } from "../../src/features/jobs/sources/types.ts";
 
@@ -77,5 +77,25 @@ describe("job-listing sources (TRIP-06, SPEC §7.13)", () => {
       { title: "No link", company: "Acme Robotics", url: "" },
     ] }, "Acme Robotics");
     assert.deepEqual(hasdata, [{ title: "CNC Machinist", source: "Indeed", location: "Mississauga, ON", postedAt: "2026-10-18", employmentType: "Contract", url: "https://ca.indeed.com/viewjob?jk=2" }]);
+  });
+});
+
+describe("HasData domain", () => {
+  test("expands a country code to the Indeed host the API validates against, and passes a host through", () => {
+    assert.equal(hasDataDomain("ca"), "ca.indeed.com");
+    assert.equal(hasDataDomain(" CA "), "ca.indeed.com");
+    assert.equal(hasDataDomain("us"), "www.indeed.com");
+    assert.equal(hasDataDomain("ca.indeed.com"), "ca.indeed.com");
+    assert.equal(hasDataDomain(""), null);
+    assert.equal(hasDataDomain(null), null);
+  });
+});
+
+describe("sample companies", () => {
+  test("the sample source answers first when the trip provider is the stub, and the order is untouched otherwise", () => {
+    assert.deepEqual(orderForSampleCompanies(["adzuna", "hasdata", "stub"], true), ["stub", "adzuna", "hasdata"]);
+    assert.deepEqual(orderForSampleCompanies(["adzuna", "hasdata", "stub"], false), ["adzuna", "hasdata", "stub"]);
+    assert.deepEqual(orderForSampleCompanies(["adzuna", "hasdata"], true), ["adzuna", "hasdata"]);
+    assert.deepEqual(orderForSampleCompanies([], true), []);
   });
 });

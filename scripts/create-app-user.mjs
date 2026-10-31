@@ -57,7 +57,7 @@ const envTemplate = (dbLines) => [
   "ADZUNA_APP_KEY=",
   "JSEARCH_API_KEY=",
   "HASDATA_API_KEY=",
-  "# HASDATA_INDEED_DOMAIN=ca",
+  "# HASDATA_INDEED_DOMAIN=ca            # country code (expanded to ca.indeed.com) or the full Indeed host",
   "# JOBS_COUNTRY=ca",
   "# A custom source behind the JSON contract of SPEC §7.13:",
   "JOBS_API_URL=",

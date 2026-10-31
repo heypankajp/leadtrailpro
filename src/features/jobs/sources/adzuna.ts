@@ -3,8 +3,12 @@ import { employmentTypeFrom, keepCompanyListings, plainName } from "../model.ts"
 import { fetchJson, httpUrl, text, ymd, type CompanyJobsInput, type JobSourceAdapter } from "./types.ts";
 
 /**
- * Adzuna Job Search API (developer.adzuna.com): free developer keys, 25 calls a minute and 250 a day by default,
- * "Jobs by Adzuna" attribution required. `GET /v1/api/jobs/{country}/search/1?app_id&app_key&company&where&…`.
+ * Adzuna Job Search API (developer.adzuna.com): free developer keys (a new application starts as "pending activation"
+ * with 25 calls a day until Adzuna reviews it; 25 a minute and 250 a day afterwards), "Jobs by Adzuna" attribution
+ * required. `GET /v1/api/jobs/{country}/search/1?app_id&app_key&what_phrase&where&…`: the company name goes in
+ * `what_phrase` (exact phrase over title and description) and the results are then narrowed to that company by
+ * `keepCompanyListings`. Checked with a live key on November 1, 2026: the `company` filter returned nothing for
+ * one company and an HTML 400 page for another, while `what_phrase` returned every listing of the same company.
  */
 export type AdzunaConfig = { appId: string; appKey: string };
 
@@ -37,7 +41,7 @@ export function createAdzunaSource(config: AdzunaConfig | null): JobSourceAdapte
       url.searchParams.set("app_id", config!.appId);
       url.searchParams.set("app_key", config!.appKey);
       url.searchParams.set("results_per_page", "50");
-      url.searchParams.set("company", input.companyName);
+      url.searchParams.set("what_phrase", input.companyName);
       url.searchParams.set("max_days_old", "30");
       if (input.city) url.searchParams.set("where", input.city);
       url.searchParams.set("content-type", "application/json");

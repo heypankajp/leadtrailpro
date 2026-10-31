@@ -2,7 +2,7 @@ import { getDatabasePool, fromSqlDateTime, toSqlDateTime, type Queryable } from 
 import { getSettings } from "@/features/settings/repository";
 import { normalizeCompanyName } from "@/features/trips/matching";
 import type { JobListing } from "@/features/trips/model";
-import { eligibleSources, isCacheFresh, jobSourceLabels, sourceNote, type JobSourceId, type JobSourceStatus, type JobSourceUsage } from "./model";
+import { eligibleSources, isCacheFresh, jobSourceLabels, orderForSampleCompanies, sourceNote, type JobSourceId, type JobSourceStatus, type JobSourceUsage } from "./model";
 import { jobsCountry, listSourceAdapters, type CompanyJobsInput, type JobSourceAdapter } from "./sources";
 import { cityOf } from "./sources/types";
 
@@ -83,7 +83,10 @@ export async function getCompanyJobs(company: { companyName: string; website?: s
   }
   const adapters = listSourceAdapters();
   const usage = await sourceUsage(db);
-  const order = eligibleSources(settings, adapters.map((adapter) => ({ id: adapter.id, configured: adapter.configured, usage: usage[adapter.id] ?? emptyUsage() })));
+  const order = orderForSampleCompanies(
+    eligibleSources(settings, adapters.map((adapter) => ({ id: adapter.id, configured: adapter.configured, usage: usage[adapter.id] ?? emptyUsage() }))),
+    (process.env.TRIPS_PROVIDER ?? "").trim().toLowerCase() === "stub",
+  );
   if (!order.length) {
     const configured = adapters.filter((adapter) => adapter.configured);
     return { listings: null, source: null, fromCache: false, fetchedAt: null, reason: configured.length ? "Every job source is switched off or over budget." : "No job source is configured." };
