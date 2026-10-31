@@ -88,8 +88,8 @@ export default function AuthScreen({ checking, needsSetup, initialError, onSigne
   return (
     <main className="login-shell">
       <section className={`login-card ${mode === "setup" ? "login-card-wide" : ""}`}>
-        <div className="login-brand"><span className="brand-mark"><span /><span /><span /></span><span className="brand-name">salestrack<span>pro</span></span></div>
-        <span className="eyebrow">SALES WORKSPACE</span>
+        <div className="login-brand"><span className="brand-mark"><span /><span /><span /></span><span className="brand-name">LeadTrail<span>Pro</span></span></div>
+        <span className="eyebrow">LEADTRAILPRO WORKSPACE</span>
         {checking ? (
           <>
             <h1>Checking your session</h1>
