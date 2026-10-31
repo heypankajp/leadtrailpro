@@ -1,12 +1,12 @@
 # LeadTrailPro
 
-LeadTrailPro is a sales workspace for a staffing and recruitment business, built from the Sales Tracker BRD/SRS. Leads, interactions, tasks, documents, candidate profiles, targets, reports, users, and the full audit trail live in PostgreSQL behind a Next.js application. Phase 1 (the core workspace), notifications, and collaboration threads are implemented; the external integrations are planned. The requirements with their status are in [docs/PRD.md](docs/PRD.md) and the technical design in [docs/SPEC.md](docs/SPEC.md).
+LeadTrailPro (renamed from SalesTrackPro on October 30, 2026) is a sales workspace for a staffing and recruitment business, built from the Sales Tracker BRD/SRS. Leads, interactions, tasks, documents, candidate profiles, targets, reports, users, and the full audit trail live in PostgreSQL behind a Next.js application. Phase 1 (the core workspace), notifications, and collaboration threads are implemented; the external integrations are planned. The requirements with their status are in [docs/PRD.md](docs/PRD.md) and the technical design in [docs/SPEC.md](docs/SPEC.md).
 
 ## At a glance
 
 | | |
 |---|---|
-| Stack | Next.js 16.4 (App Router, Turbopack), React 19, TypeScript 5, PostgreSQL 17 (14 or newer works), hand-written CSS |
+| Stack | Next.js 16.4.3 (App Router, Turbopack; the October 30, 2026 security release), React 19, TypeScript 5, PostgreSQL 17 (14 or newer works), hand-written CSS |
 | Packaging | Docker: hot-reloading development stack, standalone production image, one-shot setup service |
 | Tests | ESLint, `tsc`, production build, unit suites for the date parser, status helpers, trip matching, reminder rules, digests, rich text, mentions, the tracker import rules, and the job-listing sources, and a 54-test Selenium browser suite with an axe-core accessibility audit, all in Docker; GitHub Actions runs all of it on every push and pull request |
 | Notifications | Bell in the top bar for task, lead, queue, and file events; daily and weekly digests by email and in-app, scheduled by the `jobs` service |
@@ -44,6 +44,22 @@ Notes:
 - Dependencies live in a Docker volume seeded from the image. The container reinstalls automatically whenever `package-lock.json` differs from what is installed.
 - Optional overrides go in an ignored `.env` next to `compose.yaml`: `POSTGRES_PASSWORD`, `APP_PORT` (default 3000), `DB_PORT` (default 5433, loopback only). Next.js reads `.env` too, so keep application settings in `.env.local`.
 - If `docker` is not on your PATH (Docker Desktop without the CLI link), call it by its full path under `/Applications/Docker.app/Contents/Resources/bin/`. `scripts/e2e.sh` finds it on its own.
+
+### After the rename from SalesTrackPro (October 30, 2026)
+
+The compose project is now `leadtrailpro`, so Docker creates new volumes (`leadtrailpro_postgres_data`, `leadtrailpro_node_modules`, `leadtrailpro_next_cache`) and new images (`leadtrailpro-dev`, `leadtrailpro`); the old `salestrackpro_*` volumes and images are left as they are. The database and the app role now default to `leadtrailpro` and `leadtrailpro_app`, and the session cookies have new names, so everyone signs in again after the upgrade. On a machine that ran the old stack, pick one:
+
+- **Start fresh.** `docker compose run --rm setup` creates the new database and rewrites the database lines of `.env.local` (every other setting is kept); then `docker compose up -d`, complete first-time setup again, and optionally seed sample data.
+- **Keep the old data.** Let compose create the new volume, stop the database, copy the old cluster over it, and start again. The database inside keeps its old name, role, and superuser password, which the existing `.env.local` still points at:
+
+  ```bash
+  docker compose up -d db && docker compose stop db
+  docker run --rm -v salestrackpro_postgres_data:/from -v leadtrailpro_postgres_data:/to alpine sh -c "rm -rf /to/* && cp -a /from/. /to/"
+  docker compose up -d
+  ```
+
+- **Git remote.** The GitHub repository is now `heypankajp/leadtrailpro`. The old address keeps redirecting; `git remote set-url origin https://github.com/heypankajp/leadtrailpro.git` updates a clone.
+- **Clean up** once the new stack works: `docker volume rm salestrackpro_postgres_data salestrackpro_node_modules salestrackpro_next_cache` (and `salestrackpro_attachments` if the production stack ran here) and `docker rmi salestrackpro-dev salestrackpro`.
 
 ## Running without Docker
 
@@ -84,7 +100,7 @@ The setup step writes the database settings and a commented template for the res
 | `JOBS_API_URL`, `JOBS_API_KEY` | A custom job-listing source behind the JSON contract in SPEC §7.13 |
 | `JOBS_COUNTRY` | Country code for the sources that take one (default `ca`) |
 
-With `MAIL_PROVIDER=stub` the email features work without a mailbox: reset links and sign-in codes appear under Settings → Email delivery, where an administrator can open each message. Switch to `MAIL_PROVIDER=smtp` with the `SMTP_*` settings when a real mailbox is ready; without either, administrators set passwords directly and two-factor cannot be switched on.
+With `MAIL_PROVIDER=stub` the email features work without a mailbox: reset links and sign-in codes appear under Settings → Email delivery, where an administrator can open each message. Switch to `MAIL_PROVIDER=smtp` with the `SMTP_*` settings when a real mailbox is ready; without either, administrators set passwords directly and two-factor cannot be switched on. `npm run mail:test` checks the connection and sign-in with those settings, and `npm run mail:test -- --send` also delivers a test message to `SMTP_USER` (inside Docker: `docker compose run --rm app npm run mail:test -- --send`). A Gmail or Google Workspace mailbox needs an App Password (2-Step Verification turned on) in `SMTP_PASSWORD`; the account password is rejected.
 
 ### Gmail linking
 
@@ -170,6 +186,8 @@ Inside Docker, prefix each with `docker compose exec app`.
 
 `.github/workflows/ci.yml` runs on every push to `master` and every pull request: typecheck, lint, and the unit tests on Node 22, then the browser suite through `scripts/e2e.sh` on the GitHub runner's Docker. Screenshots of failed browser tests are attached to the run as the `e2e-failures` artifact.
 
+As of October 31, 2026 the checks job passes but the browser job fails on every run (its logs have not been examined yet), so the browser suite is verified locally with `scripts/e2e.sh`, where all 54 tests passed on October 31, 2026. The repository moved to `github.com/heypankajp/leadtrailpro` with the rename; the old address redirects.
+
 ### Browser end-to-end tests (Selenium)
 
 `scripts/e2e.sh` runs the suite in `tests/e2e/` entirely in Docker (compose profile `test`): a production build of the app with a fresh schema, a throwaway PostgreSQL kept in memory, a Selenium Chromium grid, and the test runner. Nothing is needed on the host besides Docker. A full run takes about two minutes including container start.
@@ -197,7 +215,9 @@ scripts/e2e.sh tests/e2e/02-leads.test.mjs   # one or more files
 ## Troubleshooting
 
 - **"Could not load the workspace" right after signing in** on an `http://` host other than localhost: the browser dropped the Secure session cookie. Set `APP_URL` to that `http://` origin, or serve the app over HTTPS.
-- **"Password reset emails are not configured yet"** or two-factor cannot be enabled: fill in the `SMTP_*` settings and restart the app.
+- **"Password reset emails are not configured yet"** or two-factor cannot be enabled: fill in the `SMTP_*` settings and restart the app. `npm run mail:test` shows whether the server accepts the sign-in; a `534` ("Application-specific password required") or `535` from Google means it wants an App Password, not the account password.
 - **"Request origin rejected"** behind a proxy: set `APP_URL` (or `TRUSTED_ORIGINS`) to the public origin, and make sure the proxy forwards `X-Forwarded-Host` and `X-Forwarded-Proto`.
 - **Port already in use**: set `APP_PORT` or `DB_PORT` in `.env` and run `docker compose up -d` again.
+- **"database \"salestrackpro\" does not exist"** or a sign-in that fails right after pulling the rename: the stack started on a new, empty volume while `.env.local` still names the old database. Follow "After the rename from SalesTrackPro" above.
+- **Everyone was signed out after a deploy**: expected once, when the rename changed the cookie names.
 - **Stale dependencies after switching branches**: restart the app container; it reinstalls when the lockfile changed. Run `docker compose build` to refresh the image as well.
