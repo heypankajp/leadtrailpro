@@ -210,14 +210,50 @@ scripts/e2e.sh tests/e2e/02-leads.test.mjs   # one or more files
 
 ## Troubleshooting
 
-- **"Could not load the workspace" right after signing in** on an `http://` host other than localhost: the browser dropped the Secure session cookie. Set `APP_URL` to that `http://` origin, or serve the app over HTTPS.
-- **"Password reset emails are not configured yet"** or two-factor cannot be enabled: fill in the `SMTP_*` settings and restart the app. `npm run mail:test` shows whether the server accepts the sign-in; a `534` ("Application-specific password required") or `535` from Google means it wants an App Password, not the account password.
+### Find the cause first
+
+Run these where the app runs. For the Docker stack use the commands as written; on a server add `-f compose.yaml -f compose.prod.yaml` after `docker compose`; without Docker drop the `docker compose run --rm app` prefix and run the `npm` commands in the project directory.
+
+```bash
+docker compose ps                                  # db must be "healthy", app and jobs "Up"
+docker compose logs --tail 50 db app               # last lines of both; an app that cannot reach PostgreSQL says so here
+docker compose run --rm app npm run db:check       # connects exactly as the app does, then names the cause and the fix
+docker compose run --rm app npm run mail:test      # the same for the SMTP mailbox (add -- --send to deliver a test email)
+```
+
+`db:check` prints the host, port, user, and database it is trying on its first line; that alone settles most cases. On success it reports the PostgreSQL version, the number of tables and migrations, the number of accounts, and `Database check passed.`
+
+### Database connection messages
+
+| What you see | Cause | Fix |
+|---|---|---|
+| `Configure PGHOST, PGPORT, PGUSER, and PGPASSWORD in .env.local.` (app) or `Missing PGHOST, …` (db:check) | No `.env.local` next to `package.json`: the setup never ran, or ran in another directory | `docker compose run --rm setup`, or `npm run db:create` then `npm run db:user:create` |
+| `getaddrinfo ENOTFOUND db` | `.env.local` was written by the Docker setup (`PGHOST=db`) but the app or a script runs on the host | Run it inside Docker (`docker compose run --rm app …`), or for a host process set `PGHOST=127.0.0.1` and `PGPORT=5433` |
+| `connect ECONNREFUSED 127.0.0.1:5432` on the host | The Docker database is published on 5433, not 5432; or the `db` container is not running | `docker compose ps`; use port 5433 (or your `DB_PORT`) |
+| `connect ECONNREFUSED 127.0.0.1:5432` inside a container | `.env.local` points at the host's PostgreSQL | Inside the compose network the database is `PGHOST=db`, `PGPORT=5432` |
+| `password authentication failed for user "leadtrailpro_app"` | `.env.local` and the database disagree: the setup ran again elsewhere, the file was copied from another machine, or the volume was recreated | Re-run the setup; it sets a new password and rewrites `.env.local` |
+| `password authentication failed for user "postgres"` during the setup | `POSTGRES_PASSWORD` in `.env` changed after the database volume was first created | PostgreSQL keeps the password it was initialised with: restore the old value, or `docker compose down -v` and start over |
+| `database "salestrackpro" does not exist` | `.env.local` predates the rename of October 30, 2026 | See "After the rename from SalesTrackPro" below |
+| `database "leadtrailpro" does not exist` | PostgreSQL is running but the schema was never created there | `docker compose run --rm setup`, or `npm run db:create` |
+| `role "leadtrailpro_app" does not exist` | The schema exists but `npm run db:user:create` (or the setup service) never ran | Run it |
+| `dependency failed to start: container leadtrailpro-db-1 is unhealthy`, or `Bind for 127.0.0.1:5433 failed: port is already allocated` | Another PostgreSQL, or the old `salestrackpro` stack, holds the port | `docker compose -p salestrackpro down`, stop the other server, or set `DB_PORT` in `.env` |
+| `the database system is starting up` (`57P03`) | PostgreSQL is still initialising | Wait a few seconds and retry |
+| `exec /usr/local/bin/docker-entrypoint: no such file or directory` when the app container starts (Windows) | Git converted `scripts/docker-entrypoint.sh` to CRLF line endings | `.gitattributes` now forces LF for `*.sh`; on an older clone run `git config core.autocrlf false`, re-clone, and `docker compose build` |
+
+### Application messages
+
+- **"Could not load the workspace" right after signing in** on an `http://` host other than localhost: the browser dropped the Secure session cookie. Set `APP_URL` to that `http://` origin in `.env.local`, or serve the app over HTTPS.
 - **"Request origin rejected"** behind a proxy: set `APP_URL` (or `TRUSTED_ORIGINS`) to the public origin, and make sure the proxy forwards `X-Forwarded-Host` and `X-Forwarded-Proto`.
+- **"Password reset emails are not configured yet"** or two-factor cannot be enabled: fill in the `SMTP_*` settings (or set `MAIL_PROVIDER=stub`) and restart the app. `npm run mail:test` shows whether the server accepts the sign-in; a `534` ("Application-specific password required") or `535` from Google means it wants an App Password, not the account password.
+- **"The Sales Trip Planner is not configured"**: no `MAPS_API_KEY` and no stub. The Docker dev stack sets `TRIPS_PROVIDER=stub`; on a server put it in `.env`, without Docker in `.env.local`.
 - **Port already in use**: set `APP_PORT` or `DB_PORT` in `.env` and run `docker compose up -d` again.
-- **PostgreSQL does not connect**: run `npm run db:check` (in Docker: `docker compose run --rm app npm run db:check`); it names the cause and the fix. The table in [docs/TESTING.md](docs/TESTING.md#when-postgresql-does-not-connect) covers each message.
-- **"database \"salestrackpro\" does not exist"** or a sign-in that fails right after pulling the rename: the stack started on a new, empty volume while `.env.local` still names the old database. Follow "After the rename from SalesTrackPro" below.
-- **Everyone was signed out after a deploy**: expected once, when the rename changed the cookie names.
-- **Stale dependencies after switching branches**: restart the app container; it reinstalls when the lockfile changed. Run `docker compose build` to refresh the image as well.
+- **Everyone was signed out after a deploy**: expected once, when the rename of October 30, 2026 changed the cookie names.
+- **The app container keeps restarting or shows an old version** after a `git pull`: it reinstalls dependencies when `package-lock.json` changed, which takes a minute; `docker compose logs -f app` shows the progress. `docker compose build` refreshes the image itself.
+- **A page is blank or an action fails without a message**: `docker compose logs --tail 100 app` has the server-side error; the browser's console (F12) has the client-side one. Both are safe to paste into a report.
+
+### Still stuck
+
+Send the full output of `npm run db:check` and of `docker compose logs --tail 100 db app`, the exact message from the screen, and which path you followed (Docker, without Docker, or server). The step-by-step guide with the expected output of every step is [docs/TESTING.md](docs/TESTING.md).
 
 ### After the rename from SalesTrackPro (October 30, 2026)
 

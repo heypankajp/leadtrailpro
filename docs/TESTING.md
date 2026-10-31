@@ -170,21 +170,6 @@ GitHub Actions runs the same checks on every push and pull request. As of Octobe
 
 ## When PostgreSQL does not connect
 
-Run `npm run db:check` where the app runs (`docker compose run --rm app npm run db:check` for the Docker stack, with `-f compose.yaml -f compose.prod.yaml` on a server). Its first line tells you which host, port, user, and database are being tried, and that alone resolves most cases. The messages:
+Run `npm run db:check` where the app runs (`docker compose run --rm app npm run db:check` for the Docker stack, with `-f compose.yaml -f compose.prod.yaml` on a server). Its first line tells you which host, port, user, and database are being tried, and that alone resolves most cases; on failure it prints the cause and the fix. The full table of connection messages, the application messages, and the commands to run first are in the README under [Troubleshooting](../README.md#troubleshooting).
 
-| What you see | Cause | Fix |
-|---|---|---|
-| `Configure PGHOST, PGPORT, PGUSER, and PGPASSWORD in .env.local.` (app) or `Missing PGHOST, …` (db:check) | No `.env.local` next to `package.json`: the setup never ran, or ran in another directory | Path A step 2 or path B step 2 |
-| `getaddrinfo ENOTFOUND db` | `.env.local` was written by the Docker setup (`PGHOST=db`) but the app or a script runs on the host | Run it inside Docker (`docker compose run --rm app …`), or for a host process set `PGHOST=127.0.0.1` and `PGPORT=5433` |
-| `connect ECONNREFUSED 127.0.0.1:5432` on the host | The Docker database is published on 5433, not 5432; or the `db` container is not running | `docker compose ps`; use 5433 (or your `DB_PORT`) |
-| `connect ECONNREFUSED 127.0.0.1:5432` inside a container | `.env.local` points at the host's PostgreSQL | Inside the compose network the database is `PGHOST=db`, `PGPORT=5432` |
-| `password authentication failed for user "leadtrailpro_app"` | `.env.local` and the database disagree: the setup ran again elsewhere, the file was copied from another machine, or the volume was recreated | Re-run the setup; it sets a new password and rewrites `.env.local` |
-| `password authentication failed for user "postgres"` during the setup | `POSTGRES_PASSWORD` in `.env` changed after the database volume was first created | PostgreSQL keeps the password it was initialised with: restore the old value, or `docker compose down -v` and start over |
-| `database "salestrackpro" does not exist` | `.env.local` predates the rename of October 30, 2026 | README, "After the rename from SalesTrackPro" |
-| `role "leadtrailpro_app" does not exist` | The schema exists but `npm run db:user:create` (or the setup service) never ran | Run it |
-| `dependency failed to start: container leadtrailpro-db-1 is unhealthy`, or `Bind for 127.0.0.1:5433 failed: port is already allocated` | Another PostgreSQL, or the old `salestrackpro` stack, holds the port | `docker compose -p salestrackpro down`, stop the other server, or set `DB_PORT` in `.env` |
-| `exec /usr/local/bin/docker-entrypoint: no such file or directory` when the app container starts (Windows) | Git converted `scripts/docker-entrypoint.sh` to CRLF line endings | `.gitattributes` now forces LF for `*.sh`; on an older clone run `git config core.autocrlf false`, re-clone, and `docker compose build` |
-| `Could not load the workspace` right after signing in on a server reached over plain http | The browser dropped the Secure session cookie | Set `APP_URL=http://<host>:<port>` in `.env.local`, or serve over HTTPS |
-| `The Sales Trip Planner is not configured` | No `MAPS_API_KEY` and no stub | The dev stack sets `TRIPS_PROVIDER=stub`; on a server put it in `.env`, on a laptop without Docker in `.env.local` |
-
-If the message is not in the table, send the full output of `npm run db:check` and of `docker compose logs db app` with your report.
+If the message is not in that table, send the full output of `npm run db:check` and of `docker compose logs --tail 100 db app` with your report.
