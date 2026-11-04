@@ -14,6 +14,19 @@ export type { LeadEmail } from "./model";
 export const gmailScope = "https://www.googleapis.com/auth/gmail.readonly openid email";
 export const gmailStateCookie = "leadtrailpro_gmail_state";
 
+/**
+ * Google endpoints, overridable from the environment (the OAuth client JSON lists them as auth_uri and token_uri).
+ * GOOGLE_PROJECT_ID is informational only; the certificate URL in that file is not used because the app never
+ * verifies an ID token itself.
+ */
+export function googleEndpoints() {
+  return {
+    authUri: process.env.GOOGLE_AUTH_URI?.trim() || "https://accounts.google.com/o/oauth2/v2/auth",
+    tokenUri: process.env.GOOGLE_TOKEN_URI?.trim() || "https://oauth2.googleapis.com/token",
+    projectId: process.env.GOOGLE_PROJECT_ID?.trim() || null,
+  };
+}
+
 export function googleConfig() {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -47,7 +60,7 @@ function decryptToken(value: string, secret: string) {
 export async function exchangeCode(code: string, request: Request) {
   const config = googleConfig();
   if (!config) throw new Error("Gmail is not configured.");
-  const response = await fetch("https://oauth2.googleapis.com/token", {
+  const response = await fetch(googleEndpoints().tokenUri, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -75,7 +88,7 @@ export function emailFromIdToken(idToken: string | undefined) {
 async function accessTokenFor(refreshToken: string) {
   const config = googleConfig();
   if (!config) throw new Error("Gmail is not configured.");
-  const response = await fetch("https://oauth2.googleapis.com/token", {
+  const response = await fetch(googleEndpoints().tokenUri, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({

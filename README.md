@@ -83,6 +83,7 @@ The setup step writes the database settings and a commented template for the res
 | `MAIL_PROVIDER` | `stub` records every email in the Settings outbox instead of sending (the default the setup writes); `smtp` sends through the settings below; `off` disables email |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Outbound email for password resets, set-password links, and two-factor codes |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GMAIL_TOKEN_KEY`, `GOOGLE_REDIRECT_URI` | Gmail linking for the lead Emails tab. The token key is any long random string that encrypts stored refresh tokens; the redirect URI defaults to `APP_URL/api/gmail/callback` |
+| `GOOGLE_AUTH_URI`, `GOOGLE_TOKEN_URI`, `GOOGLE_PROJECT_ID` | Optional, from the same OAuth client JSON (`auth_uri`, `token_uri`, `project_id`); the endpoints default to Google's standard ones and the project id is informational |
 | `TRIPS_PROVIDER` | `stub` serves sample companies for the sales trip planner (the Docker dev stack sets it), and their Hiring counts then come from the sample job source so no live job-source budget is spent on fictional names; leave empty for live data |
 | `MAPS_API_KEY` | Google Maps Platform key (Geocoding, Places, Distance Matrix) for live trip searches |
 | `ADZUNA_APP_ID`, `ADZUNA_APP_KEY` | Adzuna job search (free developer key) for the Hiring column |

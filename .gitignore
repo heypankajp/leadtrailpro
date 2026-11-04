@@ -51,3 +51,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Google OAuth client downloads and service-account files must never be committed; the app reads the values from .env.local.
+client_secret*.json
+*credentials*.json
+*service-account*.json
