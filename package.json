@@ -17,6 +17,7 @@
     "jobs": "node scripts/jobs.mjs",
     "mail:test": "node --env-file-if-exists=.env.local scripts/mail-test.mjs",
     "jobs:test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --env-file-if-exists=.env.local scripts/jobs-test.mjs",
+    "maps:test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --env-file-if-exists=.env.local scripts/maps-test.mjs",
     "test:e2e": "node --test --test-concurrency=1 --test-timeout=120000 tests/e2e/*.test.mjs"
   },
   "dependencies": {
