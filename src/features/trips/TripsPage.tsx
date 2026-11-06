@@ -6,6 +6,7 @@ import { errorMessage } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import { useAsyncData } from "@/lib/useAsyncData";
 import { useApp } from "@/features/shell/AppContext";
+import MapsUsageCard from "@/features/maps/MapsUsageCard";
 import { EmptyState, ErrorText, Field, Loading } from "@/features/shell/components";
 import { createTrip, fetchTrips } from "./client";
 import { maxRadius, maxTripResults, radiusLabel, type RadiusType, type SalesTrip, type TripProviderStatus } from "./model";
@@ -51,6 +52,7 @@ export default function TripsPage() {
       <div className="page-heading"><div><div className="eyebrow">PLAN A SALES TRIP</div><h1>Sales trip planner</h1><p>Find companies around an address, see who is hiring and who is already in the CRM, then shortlist the ones to visit.</p></div></div>
       {provider && !provider.configured && <div className="integration-note"><ShieldCheck size={16} /><span><strong>Not configured.</strong> {provider.message}</span></div>}
       {provider && provider.configured && provider.message && <div className="integration-note"><ShieldCheck size={16} /><span>{provider.message}</span></div>}
+      {provider?.name === "google" && <MapsUsageCard />}
 
       <section className="panel trip-panel">
         <div className="panel-heading"><div><h2>New trip</h2><p>Up to {maxTripResults} companies within a distance or a driving time of the address.</p></div></div>

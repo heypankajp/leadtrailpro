@@ -7,7 +7,8 @@
  *   npm run maps:test -- --at 43.656,-79.380                      # skip geocoding, search from coordinates
  *
  * The project behind the key must have the Geocoding API, Places API (New), and Routes API enabled; a refusal names
- * the missing one. Needs the source tree (dev container or laptop), not the production image.
+ * the missing one. Needs the source tree (dev container or laptop), not the production image. The script talks to
+ * Google directly, so its calls are not counted by the app's usage meter (Settings → Google Maps usage).
  */
 import { createGoogleProvider } from "../src/features/trips/providers/google.ts";
 
@@ -17,10 +18,10 @@ const address = args.filter((arg, index) => !arg.startsWith("--") && !["--at", "
 const at = option("--at");
 const km = option("--km");
 const minutes = option("--minutes");
-const key = process.env.MAPS_API_KEY?.trim();
+const key = (process.env.MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || "").trim();
 
 if (!key) {
-  console.error("MAPS_API_KEY is empty in .env.local. Create a key in Google Cloud (APIs & Services → Credentials) with the Geocoding API, Places API (New), and Routes API enabled, paste it, and run again.");
+  console.error("MAPS_API_KEY (or GOOGLE_MAPS_API_KEY) is empty in .env.local. Create a key in Google Cloud (APIs & Services → Credentials) with the Geocoding API, Places API (New), and Routes API enabled, paste it, and run again.");
   process.exit(1);
 }
 if (!address && !at) {
@@ -49,7 +50,7 @@ try {
   for (const company of companies) {
     console.log(`  ${company.name} · ${company.address || "no address"} · ${company.distanceKm} km${company.driveMinutes !== null ? ` · ${company.driveMinutes} min` : ""}${company.website ? ` · ${company.website}` : ""}${company.phone ? ` · ${company.phone}` : ""}`);
   }
-  console.log("Maps check passed.");
+  console.log("Maps check passed. (These calls bypass the app's usage meter under Settings → Google Maps usage.)");
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
   console.error(`Failed: ${message}`);

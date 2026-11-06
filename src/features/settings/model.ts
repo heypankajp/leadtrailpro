@@ -1,4 +1,5 @@
 import type { JobSourceSettings } from "@/features/jobs/model";
+import type { MapsSettings } from "@/features/maps/model";
 import type { OpportunitySettings } from "@/features/opportunities/model";
 import type { SystemRole } from "@/features/users/model";
 
@@ -50,6 +51,8 @@ export type AppSettings = {
   opportunities: OpportunitySettings;
   /** The mailbox system email is sent from (a user with a connected Gmail) and the switch for report emails. */
   email: EmailSettings;
+  /** Monthly budgets per Google Maps SKU and the warning level for administrators (SPEC §10.8). */
+  maps: MapsSettings;
   /** Sorted by date. Used with weekends for "yesterday" in reports and for natural-language due dates. */
   holidays: Holiday[];
 };

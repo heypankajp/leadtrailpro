@@ -92,7 +92,7 @@ After a `git pull`: `docker compose run --rm setup node scripts/create-database.
 
 3. Sign in with **Sign in with Google** as one of the accounts in `seed/accounts.csv` (edit the file and run `npm run db:seed:users` again to add people). Sample data (`npm run db:seed`) is the same as in path A.
 
-Extras on this path: `TRIPS_PROVIDER=stub` in `.env.local` gives the Sales Trip Planner sample companies (the Docker stack sets it for you); the digest scheduler is `npm run jobs` with the same `JOBS_KEY` in `.env.local` and in its environment.
+Extras on this path: `TRIPS_PROVIDER=stub` in `.env.local` gives the Sales Trip Planner sample companies (in Docker put it in `.env`; the dev stack uses Google when a Maps key is present); the digest scheduler is `npm run jobs` with the same `JOBS_KEY` in `.env.local` and in its environment.
 
 ## C. Server
 

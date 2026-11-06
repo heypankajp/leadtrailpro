@@ -43,8 +43,9 @@ services:
     <<: *dev-image
     init: true
     environment:
-      # Sample company data for the Sales Trip Planner; set TRIPS_PROVIDER= (empty) in .env to use the real providers.
-      TRIPS_PROVIDER: ${TRIPS_PROVIDER:-stub}
+      # The Sales Trip Planner uses Google when MAPS_API_KEY (or GOOGLE_MAPS_API_KEY) is in .env.local; put
+      # TRIPS_PROVIDER=stub in .env for sample companies instead (the end-to-end stack below always uses them).
+      TRIPS_PROVIDER: ${TRIPS_PROVIDER:-}
       # Shared secret between the app and the jobs service (override in .env).
       JOBS_KEY: ${JOBS_KEY:-dev-jobs-key}
     ports:

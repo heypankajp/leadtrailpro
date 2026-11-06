@@ -4,6 +4,7 @@ import { isCacheFresh } from "@/features/jobs/model";
 import { getCompanyJobs } from "@/features/jobs/repository";
 import { jobSourcesConfigured } from "@/features/jobs/sources";
 import { listMatchableLeads } from "@/features/leads/repository";
+import { MapsBudgetError } from "@/features/maps/model";
 import { getSettings } from "@/features/settings/repository";
 import { recordAudit } from "@/features/audit/repository";
 import { assertListValue, getListValue } from "@/features/list-values/repository";
@@ -103,20 +104,23 @@ async function listingsFor(candidates: CompanyCandidate[], prefetch: number, db:
   return out;
 }
 
-/** Provider failures become a 502 with the provider's message instead of the generic database error. */
+/** Provider failures become a 502 with the provider's message instead of the generic database error; a spent Google Maps budget a 503. */
 async function fromProvider<T>(work: () => Promise<T>): Promise<T> {
   try {
     return await work();
   } catch (error) {
     if (error instanceof HttpError) throw error;
+    if (error instanceof MapsBudgetError) throw new HttpError(503, error.message);
     throw new HttpError(502, `The company data provider failed: ${error instanceof Error ? error.message : "unknown error"}`);
   }
 }
 
-async function runSearch(trip: { address: string; radiusType: TripInput["radiusType"]; radius: number; businessTypeId: number | null; maxResults: number }, db: Queryable) {
-  const provider = getTripProvider();
+async function runSearch(trip: { address: string; radiusType: TripInput["radiusType"]; radius: number; businessTypeId: number | null; maxResults: number; provider?: string; latitude?: number | null; longitude?: number | null }, db: Queryable) {
+  const provider = getTripProvider(db);
   const businessType = trip.businessTypeId ? await getListValue(trip.businessTypeId, db) : null;
-  const origin = await fromProvider(() => provider.geocode(trip.address));
+  // A re-run keeps the coordinates the same provider found for this address, which saves a Geocoding call.
+  const stored = trip.provider === provider.name && typeof trip.latitude === "number" && typeof trip.longitude === "number" ? { latitude: trip.latitude, longitude: trip.longitude } : null;
+  const origin = stored ?? await fromProvider(() => provider.geocode(trip.address));
   if (!origin) throw new HttpError(400, "The address could not be located. Try a fuller address or a nearby landmark.");
   const candidates = await fromProvider(() => provider.searchCompanies({ origin, radiusType: trip.radiusType, radius: trip.radius, businessType: businessType ? { code: businessType.code, value: businessType.value } : null, limit: trip.maxResults }));
   const listings = await listingsFor(candidates, (await getSettings(db)).jobSources.prefetch, db);

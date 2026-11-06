@@ -2,7 +2,7 @@
 
 export const notificationTypes = [
   "task_assigned", "task_updated", "task_completed", "lead_status", "lead_transferred", "queued_lead", "queued_reviewed", "file_uploaded", "mention", "message", "task_comment", "daily_digest", "weekly_digest",
-  "opportunities_found", "listing_found",
+  "opportunities_found", "listing_found", "maps_usage",
 ] as const;
 export type NotificationType = (typeof notificationTypes)[number];
 

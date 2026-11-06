@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { handleRouteError, jsonError, readJsonBody, requireSameOrigin } from "@/lib/http";
+import { mapsBudgetNote } from "@/features/maps/repository";
 import { parseTripInput } from "@/features/trips/model";
 import { tripProviderStatus } from "@/features/trips/providers";
 import { createTrip, listTrips } from "@/features/trips/repository";
@@ -10,7 +11,12 @@ export async function GET() {
   try {
     const user = await requireUser();
     requirePrivilege(user, "plan_trips", "You do not have permission to plan sales trips.");
-    return NextResponse.json({ trips: await listTrips(user), provider: tripProviderStatus() });
+    const provider = tripProviderStatus();
+    if (provider.configured && provider.name === "google") {
+      const note = await mapsBudgetNote();
+      if (note) provider.message = [provider.message, note].filter(Boolean).join(" ");
+    }
+    return NextResponse.json({ trips: await listTrips(user), provider });
   } catch (error) {
     return handleRouteError(error, "List sales trips");
   }

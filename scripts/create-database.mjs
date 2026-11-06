@@ -734,6 +734,26 @@ const migrations = [
       );
     },
   },
+  {
+    version: 13,
+    name: "Google Maps usage meter: per-SKU daily counters, monthly budgets under the free allowance, administrator alerts (SPEC §10.8)",
+    async run(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS maps_usage (
+          sku VARCHAR(40) NOT NULL,
+          day DATE NOT NULL,
+          calls INTEGER NOT NULL DEFAULT 0,
+          units INTEGER NOT NULL DEFAULT 0,
+          failures INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (sku, day)
+        )
+      `);
+      await client.query(
+        "INSERT INTO app_settings (setting_key, value_json) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        ["maps", JSON.stringify({ budgets: { geocoding: 9000, places_text_search: 900, route_matrix: 9000 }, warnAtPercent: 80 })],
+      );
+    },
+  },
 ];
 
 if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port > 65535 || !/^[a-z_][a-z0-9_]*$/.test(databaseName)) {

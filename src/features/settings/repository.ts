@@ -4,6 +4,7 @@ import { HttpError } from "@/lib/http";
 import { noteSenderChosen } from "@/lib/mail-state";
 import { recordAudit } from "@/features/audit/repository";
 import { defaultJobSources, normalizeJobSources } from "@/features/jobs/model";
+import { defaultMapsSettings, normalizeMapsSettings } from "@/features/maps/model";
 import { defaultOpportunitySettings, normalizeOpportunitySettings } from "@/features/opportunities/model";
 import { assertListValue } from "@/features/list-values/repository";
 import { defaultRoleLabels, systemRoles } from "@/features/users/model";
@@ -11,7 +12,7 @@ import type { SystemRole } from "@/features/users/model";
 
 import { defaultDigests, defaultEmailSettings, maxHolidayNameLength, maxHolidays, normalizeDigests, normalizeEmailSettings, normalizeInactivityRules, type AppSettings, type Holiday, type InactivityRule } from "./model";
 
-const defaults: AppSettings = { roleLabels: { ...defaultRoleLabels }, reminders: { inactivityDays: 7, rules: [] }, digests: { ...defaultDigests }, jobSources: defaultJobSources, opportunities: { ...defaultOpportunitySettings }, email: { ...defaultEmailSettings }, holidays: [] };
+const defaults: AppSettings = { roleLabels: { ...defaultRoleLabels }, reminders: { inactivityDays: 7, rules: [] }, digests: { ...defaultDigests }, jobSources: defaultJobSources, opportunities: { ...defaultOpportunitySettings }, email: { ...defaultEmailSettings }, maps: defaultMapsSettings, holidays: [] };
 
 /** Keeps well-formed, unique holidays sorted by date; returns the first problem found (for input validation). */
 function normalizeHolidays(value: unknown): { holidays: Holiday[]; error: string | null } {
@@ -47,6 +48,7 @@ export async function getSettings(db: Queryable = getDatabasePool()): Promise<Ap
   const jobSources = normalizeJobSources(await readSetting<unknown>(db, "job_sources", {}));
   const opportunities = normalizeOpportunitySettings(await readSetting<unknown>(db, "opportunities", {}));
   const email = normalizeEmailSettings(await readSetting<unknown>(db, "email", {}));
+  const maps = normalizeMapsSettings(await readSetting<unknown>(db, "maps", {}));
   noteSenderChosen(!email.error && email.email.senderUserId !== null);
   const { holidays, error } = normalizeHolidays(calendar.holidays ?? []);
   return {
@@ -56,6 +58,7 @@ export async function getSettings(db: Queryable = getDatabasePool()): Promise<Ap
     jobSources: jobSources.error ? defaultJobSources : jobSources.jobSources,
     opportunities: opportunities.error ? { ...defaultOpportunitySettings } : opportunities.settings,
     email: email.error ? { ...defaultEmailSettings } : email.email,
+    maps: maps.error ? defaultMapsSettings : maps.maps,
     holidays: error ? [] : holidays,
   };
 }
@@ -65,7 +68,7 @@ export async function listHolidayDates(db: Queryable = getDatabasePool()): Promi
   return (await getSettings(db)).holidays.map((holiday) => holiday.date);
 }
 
-export async function updateSettings(changes: { roleLabels?: Partial<Record<SystemRole, string>>; reminders?: { inactivityDays?: number; rules?: unknown }; digests?: unknown; jobSources?: unknown; opportunities?: unknown; email?: unknown; holidays?: unknown }, actorId: number): Promise<AppSettings> {
+export async function updateSettings(changes: { roleLabels?: Partial<Record<SystemRole, string>>; reminders?: { inactivityDays?: number; rules?: unknown }; digests?: unknown; jobSources?: unknown; opportunities?: unknown; email?: unknown; maps?: unknown; holidays?: unknown }, actorId: number): Promise<AppSettings> {
   return withTransaction(async (connection) => {
     const current = await getSettings(connection);
     if (changes.roleLabels) {
@@ -149,6 +152,17 @@ export async function updateSettings(changes: { roleLabels?: Partial<Record<Syst
       noteSenderChosen(email.senderUserId !== null);
       if (JSON.stringify(current.email) !== JSON.stringify(email)) {
         await recordAudit(connection, { actorId, action: "setting.updated", entityType: "setting", before: { ...current.email }, after: { ...email }, details: "Updated email delivery settings" });
+      }
+    }
+    if (changes.maps !== undefined) {
+      const { maps, error } = normalizeMapsSettings(changes.maps);
+      if (error) throw new HttpError(400, error);
+      await connection.query(
+        "INSERT INTO app_settings (setting_key, value_json) VALUES ('maps', ?) ON CONFLICT (setting_key) DO UPDATE SET value_json = EXCLUDED.value_json",
+        [JSON.stringify(maps)],
+      );
+      if (JSON.stringify(current.maps) !== JSON.stringify(maps)) {
+        await recordAudit(connection, { actorId, action: "setting.updated", entityType: "setting", before: { ...current.maps }, after: { ...maps }, details: "Updated the Google Maps budgets" });
       }
     }
     if (changes.holidays !== undefined) {

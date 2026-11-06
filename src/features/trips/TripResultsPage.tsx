@@ -6,6 +6,7 @@ import { errorMessage } from "@/lib/api";
 import { formatDate, formatDateTime, statusClass } from "@/lib/format";
 import { useAsyncData } from "@/lib/useAsyncData";
 import { useApp } from "@/features/shell/AppContext";
+import MapsUsageCard from "@/features/maps/MapsUsageCard";
 import { Dialog, EmptyState, ErrorText, Loading } from "@/features/shell/components";
 import { fetchResultJobs, fetchTrip, rerunTrip, tripExportUrl, updateTripResult, type TripDetail } from "./client";
 import { exportScopeLabels, formatDistance, hiringLabel, radiusLabel, type ExportScope, type JobListing, type TripResult } from "./model";
@@ -34,6 +35,7 @@ export default function TripResultsPage({ tripId }: { tripId: number }) {
   const [jobsFor, setJobsFor] = useState<TripResult | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [rerunning, setRerunning] = useState(false);
+  const [runs, setRuns] = useState(0);
 
   const results = useMemo(() => data?.results ?? [], [data]);
   const actionOptions = useMemo(() => [...new Set(results.map((row) => row.actionLabel))].sort((a, b) => a.localeCompare(b)), [results]);
@@ -69,6 +71,7 @@ export default function TripResultsPage({ tripId }: { tripId: number }) {
     try {
       const next = await rerunTrip(tripId);
       reload();
+      setRuns((value) => value + 1);
       notify(`${next.results.length} ${next.results.length === 1 ? "company" : "companies"} found`);
     } catch (caught) {
       notify(errorMessage(caught), "error");
@@ -102,6 +105,8 @@ export default function TripResultsPage({ tripId }: { tripId: number }) {
           <button className="button button-primary" onClick={() => window.print()}><Printer size={15} /> Print</button>
         </div>
       </div>
+
+      {trip.provider === "google" && <MapsUsageCard compact refreshKey={runs} />}
 
       <div className="trip-print-header">
         <h1>Field visit report: {trip.title}</h1>

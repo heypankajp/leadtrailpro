@@ -1,11 +1,12 @@
 import { haversineKm } from "../matching.ts";
 import type { CompanyCandidate, CompanySearchInput, GeoPoint, TripProvider } from "./types.ts";
+import { MapsBudgetError, type MapsMeter, type MapsSkuId } from "../../maps/model.ts";
 
 /**
  * Google Maps Platform adapter on the current (non-legacy) services, needs MAPS_API_KEY with these APIs enabled on
  * the Cloud project: Geocoding API, Places API (New), Routes API.
  *
- *   geocode          GET  maps.googleapis.com/maps/api/geocode/json                (Geocoding SKU, 10,000 free a month)
+ *   geocode          GET  maps.googleapis.com/maps/api/geocode/json?key=          (Geocoding SKU, 10,000 free a month; legacy service, key in the query)
  *   searchCompanies  POST places.googleapis.com/v1/places:searchText              (Text Search; the field mask asks for
  *                    website and phone, which makes each page an Enterprise call, 1,000 free a month, but saves one
  *                    Place Details call per company)
@@ -16,9 +17,13 @@ import type { CompanyCandidate, CompanySearchInput, GeoPoint, TripProvider } fro
  * enabled on Google Cloud projects created after October 2026. The mapping functions are pure and unit-tested with
  * responses shaped like Google's documentation; the live calls are exercised with `npm run maps:test`.
  * Job listings come from the job-sources layer (features/jobs, SPEC §7.13).
+ *
+ * Every call runs through the optional usage meter (features/maps): refused when the month's budget for its SKU cannot
+ * cover it, counted afterwards. The first places page, the geocode, and the whole route matrix are checked before
+ * anything is spent; later places pages are optional and simply stop when the budget runs out.
  */
 
-type GoogleConfig = { mapsKey: string };
+type GoogleConfig = { mapsKey: string; /** Counts and limits the calls per month; absent in `npm run maps:test`. */ meter?: MapsMeter | null };
 
 /** Keyword rules per Admin business-type code; unknown codes fall back to the type's display name. */
 const keywords: Record<string, string> = {
@@ -84,16 +89,39 @@ async function googleJson(url: string, init: RequestInit & { fieldMask?: string 
 }
 
 export function createGoogleProvider(config: GoogleConfig): TripProvider {
+  /** Runs one Google call inside the usage meter: refused when the month's budget cannot cover `units`, counted afterwards (failures too). */
+  async function metered<T>(sku: MapsSkuId, units: number, work: () => Promise<T>): Promise<T> {
+    const meter = config.meter;
+    if (!meter) return work();
+    const { remaining, budget } = await meter.remaining(sku);
+    if (remaining < units) throw new MapsBudgetError(sku, units, remaining, budget);
+    let failed = false;
+    try {
+      return await work();
+    } catch (error) {
+      failed = true;
+      throw error;
+    } finally {
+      await meter.record(sku, units, failed).catch(() => undefined);
+    }
+  }
+
   async function driveMinutes(origin: GeoPoint, targets: GeoPoint[]): Promise<(number | null)[]> {
     const out: (number | null)[] = [];
+    if (!targets.length) return out;
+    // The whole matrix is checked against the budget first, so a search never spends part of it and then stops.
+    if (config.meter) {
+      const { remaining, budget } = await config.meter.remaining("route_matrix");
+      if (remaining < targets.length) throw new MapsBudgetError("route_matrix", targets.length, remaining, budget);
+    }
     const waypoint = (point: GeoPoint) => ({ waypoint: { location: { latLng: { latitude: point.latitude, longitude: point.longitude } } } });
     for (let start = 0; start < targets.length; start += routeMatrixBatch) {
       const batch = targets.slice(start, start + routeMatrixBatch);
-      const data = await googleJson("https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix", {
+      const data = await metered("route_matrix", batch.length, () => googleJson("https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix", {
         method: "POST",
         fieldMask: routeMatrixFieldMask,
         body: JSON.stringify({ origins: [waypoint(origin)], destinations: batch.map(waypoint), travelMode: "DRIVE", routingPreference: "TRAFFIC_UNAWARE" }),
-      }, config.mapsKey);
+      }, config.mapsKey));
       out.push(...mapRouteMatrix(data, batch.length));
     }
     return out;
@@ -102,7 +130,8 @@ export function createGoogleProvider(config: GoogleConfig): TripProvider {
   return {
     name: "google",
     async geocode(address) {
-      const data = (await googleJson(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}`, {}, config.mapsKey)) as Record<string, unknown>;
+      // The Geocoding API is a legacy web service: it reads the key only from the `key` parameter, not the header the newer APIs accept.
+      const data = (await metered("geocoding", 1, () => googleJson(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${encodeURIComponent(config.mapsKey)}`, {}, config.mapsKey))) as Record<string, unknown>;
       if (data.status && data.status !== "OK" && data.status !== "ZERO_RESULTS") throw new Error(`Geocoding failed: ${String(data.error_message ?? data.status)}`);
       const first = (data.results as { geometry?: { location?: { lat: number; lng: number } } }[] | undefined)?.[0];
       const location = first?.geometry?.location;
@@ -122,7 +151,14 @@ export function createGoogleProvider(config: GoogleConfig): TripProvider {
           locationBias: { circle: { center: { latitude: input.origin.latitude, longitude: input.origin.longitude }, radius: radiusMetres } },
         };
         if (pageToken) body.pageToken = pageToken;
-        const data = (await googleJson("https://places.googleapis.com/v1/places:searchText", { method: "POST", fieldMask: placesFieldMask, body: JSON.stringify(body) }, config.mapsKey)) as Record<string, unknown>;
+        let data: Record<string, unknown>;
+        try {
+          data = (await metered("places_text_search", 1, () => googleJson("https://places.googleapis.com/v1/places:searchText", { method: "POST", fieldMask: placesFieldMask, body: JSON.stringify(body) }, config.mapsKey))) as Record<string, unknown>;
+        } catch (error) {
+          // Later pages are optional: when the budget cannot cover another one, the companies found so far are used.
+          if (page > 0 && error instanceof MapsBudgetError) break;
+          throw error;
+        }
         const mapped = mapPlacesSearch(data);
         found.push(...mapped.places);
         pageToken = mapped.nextPageToken;

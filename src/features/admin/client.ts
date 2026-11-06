@@ -1,6 +1,7 @@
 import type { EmailSettings } from "@/features/settings/model";
 import type { OpportunitySettings } from "@/features/opportunities/model";
 import type { JobSourceSettings, JobSourceStatus } from "@/features/jobs/model";
+import type { MapsOverview, MapsSettings } from "@/features/maps/model";
 import { api, toQuery } from "@/lib/api";
 import type { AuditEntry } from "@/features/audit/model";
 import type { ListKey, ListValue, ListValuesByKey } from "@/features/list-values/model";
@@ -19,8 +20,8 @@ export const updateTargetTemplate = (id: number, input: Partial<TargetTemplateIn
 export const assignTargetTemplate = (id: number, userIds: number[]) => api<{ ok: true }>(`/api/target-templates/${id}/assign`, { method: "POST", json: { userIds } });
 
 export type MailStatus = { senders: { userId: number; name: string; email: string }[]; provider: "gmail" | "stub" | "smtp" | "off"; outbox: { id: number; to: string; subject: string; status: "stubbed" | "sent" | "failed"; error: string | null; text: string | null; createdAt: string }[] };
-export const fetchSettings = () => api<{ settings: AppSettings; mailerConfigured: boolean; mail: MailStatus; jobSources: JobSourceStatus[]; timeZone: string }>("/api/settings");
-export const updateSettings = (changes: { roleLabels?: Partial<Record<SystemRole, string>>; reminders?: { inactivityDays: number; rules?: InactivityRule[] }; digests?: DigestSettings; jobSources?: JobSourceSettings; opportunities?: OpportunitySettings; email?: EmailSettings; holidays?: Holiday[] }) =>
+export const fetchSettings = () => api<{ settings: AppSettings; mailerConfigured: boolean; mail: MailStatus; jobSources: JobSourceStatus[]; maps: MapsOverview | null; timeZone: string }>("/api/settings");
+export const updateSettings = (changes: { roleLabels?: Partial<Record<SystemRole, string>>; reminders?: { inactivityDays: number; rules?: InactivityRule[] }; digests?: DigestSettings; jobSources?: JobSourceSettings; opportunities?: OpportunitySettings; email?: EmailSettings; maps?: MapsSettings; holidays?: Holiday[] }) =>
   api<{ settings: AppSettings }>("/api/settings", { method: "PATCH", json: changes });
 
 export const fetchAudit = (query: { entityType?: string; entityId?: number; actorId?: number; limit?: number } = {}) => api<{ entries: AuditEntry[] }>(`/api/audit${toQuery(query)}`);

@@ -1271,3 +1271,35 @@ h1 { margin: 9px 0 5px; color: #242941; font-size: 25px; font-weight: 690; lette
 .custom-range { display: inline-flex; align-items: center; gap: 6px; margin-left: 6px; }
 .custom-range input { height: 28px; padding: 0 6px; border: 1px solid #e5e7ef; border-radius: 6px; font-size: 11px; }
 .stalled-table .opp-details { max-width: 420px; }
+
+/* Settings → Google Maps usage (SPEC §10.8): one row per SKU with its monthly budget and a meter. */
+.maps-usage-list { display: grid; gap: 6px; margin-bottom: 10px; }
+.maps-usage-row { display: grid; grid-template-columns: minmax(0, 1.6fr) auto minmax(0, 1.2fr); gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid #f0f1f5; }
+.maps-usage-row:last-child { border-bottom: 0; }
+.maps-usage-row .rule-days input { width: 84px; }
+.maps-usage-meter { display: grid; gap: 2px; }
+.maps-usage-meter .progress-track { margin-top: 4px; }
+.maps-usage-meter .progress-track i.is-warn { background: linear-gradient(90deg, #d99a2b, #e5b45a); }
+.maps-usage-meter .progress-track i.is-spent { background: linear-gradient(90deg, #c94f4f, #de7b7b); }
+@media (max-width: 760px) { .maps-usage-row { grid-template-columns: 1fr 1fr; } }
+
+/* Live Google Maps usage card on the planner pages (SPEC §10.8), one tile per allowance. */
+.maps-usage-card { margin-top: 14px; }
+.maps-usage-card .panel-heading h2 { display: inline-flex; align-items: center; gap: 6px; }
+.maps-usage-pill { display: inline-block; margin-left: 4px; padding: 1px 7px; border-radius: 10px; font-size: 8px; font-weight: 620; letter-spacing: 0.03em; text-transform: uppercase; }
+.maps-usage-pill.is-ok { color: #2f6b4f; background: #e9f6ee; }
+.maps-usage-pill.is-warn { color: #8a5a1e; background: #fbf1e2; }
+.maps-usage-pill.is-spent { color: #9a3b3b; background: #fbe9e9; }
+.maps-usage-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.maps-usage-tile { display: grid; gap: 4px; padding: 9px 11px; border: 1px solid #eceef3; border-radius: 7px; background: #fbfbfd; }
+.maps-usage-tile-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.maps-usage-tile-head strong { color: #4d5268; font-size: 10px; font-weight: 620; }
+.maps-usage-tile-head span { color: #62697b; font-size: 9px; font-weight: 600; }
+.maps-usage-tile small { color: #62697b; font-size: 9px; }
+.maps-usage-tile .progress-track { margin-top: 2px; }
+.maps-usage-tile.is-warn .progress-track i { background: linear-gradient(90deg, #d99a2b, #e5b45a); }
+.maps-usage-tile.is-spent .progress-track i { background: linear-gradient(90deg, #c94f4f, #de7b7b); }
+.maps-usage-summary { margin: 10px 0 0; color: #616d64; font-size: 9px; line-height: 1.55; }
+.maps-usage-card.is-compact .maps-usage-tile { padding: 7px 9px; }
+@media (max-width: 760px) { .maps-usage-grid { grid-template-columns: 1fr; } }
+@media print { .maps-usage-card { display: none; } }

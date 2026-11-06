@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { AlertTriangle, ArrowDown, ArrowUp, Briefcase, BriefcaseBusiness, CalendarDays, Mail, Plus, RefreshCw, Save, Send, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, Briefcase, BriefcaseBusiness, CalendarDays, Mail, MapPinned, Plus, RefreshCw, Save, Send, X } from "lucide-react";
 import { errorMessage } from "@/lib/api";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { useApp } from "@/features/shell/AppContext";
@@ -9,6 +9,7 @@ import { ErrorText, Field, Loading } from "@/features/shell/components";
 import { maxHolidayNameLength, maxInactivityDays, maxInactivityRules, type AppSettings, type InactivityRule } from "@/features/settings/model";
 import { defaultRoleLabels, systemRoles } from "@/features/users/model";
 import { jobSourceLabels, maxCacheHours, maxPrefetch, type JobSourceId, type JobSourceStatus } from "@/features/jobs/model";
+import { mapsSkuHints, mapsSkuIds, mapsSkuLabels, mapsSkuUnits, maxMapsBudget, type MapsOverview } from "@/features/maps/model";
 import { maxMaxListings, minMaxListings, opportunitySourceIds } from "@/features/opportunities/model";
 import { fetchSettings, updateSettings, type MailStatus } from "./client";
 import { runDigestNow } from "@/features/notifications/client";
@@ -18,7 +19,7 @@ export default function SettingsPanel() {
   const { notify, refreshReference, reference, bumpData } = useApp();
   const [sending, setSending] = useState<DigestJob | null>(null);
   const [settings, setSettings] = useState<AppSettings | null>(null);
-  const [meta, setMeta] = useState<{ mailerConfigured: boolean; timeZone: string; mail: MailStatus; jobSources: JobSourceStatus[] }>({ mailerConfigured: false, timeZone: "", mail: { provider: "off", outbox: [], senders: [] }, jobSources: [] });
+  const [meta, setMeta] = useState<{ mailerConfigured: boolean; timeZone: string; mail: MailStatus; jobSources: JobSourceStatus[]; maps: MapsOverview | null }>({ mailerConfigured: false, timeZone: "", mail: { provider: "off", outbox: [], senders: [] }, jobSources: [], maps: null });
   const [openMail, setOpenMail] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -27,7 +28,7 @@ export default function SettingsPanel() {
   const [holidayError, setHolidayError] = useState("");
 
   const load = useCallback(() => {
-    fetchSettings().then((result) => { setSettings(result.settings); setMeta({ mailerConfigured: result.mailerConfigured, timeZone: result.timeZone, mail: result.mail, jobSources: result.jobSources ?? [] }); }).catch((caught) => setError(errorMessage(caught)));
+    fetchSettings().then((result) => { setSettings(result.settings); setMeta({ mailerConfigured: result.mailerConfigured, timeZone: result.timeZone, mail: result.mail, jobSources: result.jobSources ?? [], maps: result.maps ?? null }); }).catch((caught) => setError(errorMessage(caught)));
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -36,7 +37,7 @@ export default function SettingsPanel() {
     if (!settings) return;
     setBusy(true);
     try {
-      const result = await updateSettings({ roleLabels: settings.roleLabels, reminders: settings.reminders, digests: settings.digests, jobSources: settings.jobSources, opportunities: settings.opportunities, email: settings.email, holidays: settings.holidays });
+      const result = await updateSettings({ roleLabels: settings.roleLabels, reminders: settings.reminders, digests: settings.digests, jobSources: settings.jobSources, opportunities: settings.opportunities, email: settings.email, maps: settings.maps, holidays: settings.holidays });
       setSettings(result.settings);
       await refreshReference();
       notify("Settings saved");
@@ -185,6 +186,40 @@ export default function SettingsPanel() {
                   <Field label="Keep listings for (hours)" hint={`1 to ${maxCacheHours}. A company is not asked about again within this time.`}><input type="number" min={1} max={maxCacheHours} value={settings.jobSources.cacheHours} onChange={(event) => setSettings({ ...settings, jobSources: { ...settings.jobSources, cacheHours: Number(event.target.value) } })} required /></Field>
                   <Field label="Companies checked per trip" hint={`0 to ${maxPrefetch}. The nearest ones are checked when a trip is created; the rest on demand.`}><input type="number" min={0} max={maxPrefetch} value={settings.jobSources.prefetch} onChange={(event) => setSettings({ ...settings, jobSources: { ...settings.jobSources, prefetch: Number(event.target.value) } })} required /></Field>
                 </div>
+              </fieldset>
+              <fieldset className="user-privileges maps-usage-editor">
+                <legend><MapPinned size={12} /> Google Maps usage</legend>
+                <p className="field-hint">
+                  The Sales Trip Planner&apos;s Google calls are counted per month and stop at these budgets, which default to 90% of Google&apos;s free allowance per SKU (Geocoding and Route matrix 10,000, Places text search 1,000 a month). The counters and the allowance start over on the 1st of each month{meta.maps ? ` (next reset ${formatDate(meta.maps.resetsOn)})` : ""}; administrators are notified at the warning level and when a budget is spent.
+                  {meta.maps && (meta.maps.configured ? ` Key: ${meta.maps.keyVariable}${meta.maps.live ? "" : " (the sample provider is active, so no live call is made)"}.` : " No key yet: set MAPS_API_KEY in .env.local.")}
+                </p>
+                <div className="maps-usage-list">
+                  {mapsSkuIds.map((id) => {
+                    const status = meta.maps?.skus.find((entry) => entry.id === id);
+                    const budget = settings.maps.budgets[id];
+                    const percent = status?.percent ?? 0;
+                    return (
+                      <div className="maps-usage-row" key={id}>
+                        <div className="job-source-name">
+                          <strong>{mapsSkuLabels[id]}</strong>
+                          <small className="field-hint">{mapsSkuHints[id]}</small>
+                          <small className={status?.note ? "job-source-note" : "job-source-ready"}>{status ? (status.note ?? "Ready") : "…"}</small>
+                        </div>
+                        <span className="rule-days"><input aria-label={`${mapsSkuLabels[id]} monthly budget`} type="number" min={0} max={maxMapsBudget} value={budget} onChange={(event) => setSettings({ ...settings, maps: { ...settings.maps, budgets: { ...settings.maps.budgets, [id]: Number(event.target.value) } } })} /> / month</span>
+                        <div className="maps-usage-meter">
+                          <small className="job-source-usage">{status ? `${status.usage.month} of ${status.budget} ${mapsSkuUnits[id]} this month (${percent}%) · ${status.usage.today} today${status.usage.failuresToday ? ` · ${status.usage.failuresToday} failed today` : ""} · free allowance ${status.freeCap.toLocaleString()}` : ""}</small>
+                          <div className="progress-track" role="progressbar" aria-label={`${mapsSkuLabels[id]} budget used`} aria-valuenow={Math.min(100, percent)} aria-valuemin={0} aria-valuemax={100}>
+                            <i className={percent >= 100 ? "is-spent" : percent >= settings.maps.warnAtPercent ? "is-warn" : undefined} style={{ width: `${Math.min(100, percent)}%` }} />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="digest-grid">
+                  <Field label="Warn administrators at (%)" hint="One in-app notification (and an email to those who opted in) per allowance and month at this level, and again when the budget is spent."><input type="number" min={1} max={100} value={settings.maps.warnAtPercent} onChange={(event) => setSettings({ ...settings, maps: { ...settings.maps, warnAtPercent: Number(event.target.value) } })} required /></Field>
+                </div>
+                <small className="field-hint">The surest guard is on Google&apos;s side: cap each API&apos;s requests per day in the Cloud console (APIs &amp; Services → Quotas &amp; System Limits) and set a Cloud Billing budget alert. The app&apos;s counters are a second line and can trail Google&apos;s by a little.</small>
               </fieldset>
               <fieldset className="user-privileges digest-editor opportunity-editor">
                 <legend><Briefcase size={12} /> Opportunity searches</legend>
