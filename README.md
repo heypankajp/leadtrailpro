@@ -85,7 +85,7 @@ The setup step writes the database settings and a commented template for the res
 | `ALLOWED_DEV_ORIGINS` | Only for `next dev` on a public host: extra hostnames the development server may serve to, comma separated. `leadtrail.pro` and `www.leadtrail.pro` are built in (`next.config.ts`); the production image does not need this |
 | `BUSINESS_TIMEZONE` | Business day for follow-ups, weekly targets, reports, and each account's daily auto sign-out time (default `America/Toronto`) |
 | `ATTACHMENT_DIR` | Where uploaded documents and profiles are stored (default `./storage/attachments`) |
-| `JOBS_KEY` | Shared secret between the app and the digest scheduler (`npm run jobs` or the `jobs` compose service); Docker passes it from `.env`, default `dev-jobs-key` |
+| `JOBS_KEY` | Shared secret between the app and the scheduler that runs the summary emails, the opportunity searches, and the weekly report (`npm run jobs` or the `jobs` compose service); Docker passes it from `.env`. Required in production |
 | `MAIL_PROVIDER` | `gmail` sends through the Google app from the mailbox chosen under Settings → Email delivery (the default when the Google client is set); `stub` records every email under Settings → Email log instead of sending; `smtp` (legacy) sends through the settings below; `off` disables email |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Legacy SMTP mailer, used only with `MAIL_PROVIDER=smtp`; not needed with the Google app |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GMAIL_TOKEN_KEY`, `GOOGLE_REDIRECT_URI` | One OAuth client for **Sign in with Google** and the Gmail link on the lead Emails tab. The token key is any long random string that encrypts stored refresh tokens; the redirect URI defaults to `APP_URL/api/auth/google/callback` and is the only one to register |
@@ -94,7 +94,7 @@ The setup step writes the database settings and a commented template for the res
 | `MAPS_API_KEY` | Google Maps Platform key for live trip searches. Enable the **Geocoding API**, **Places API (New)**, and **Routes API** on the Cloud project (the legacy Places and Distance Matrix services are not used; Distance Matrix cannot be enabled on projects created after October 2026). `npm run maps:test -- "<address>"` checks a key with three calls |
 | `ADZUNA_APP_ID`, `ADZUNA_APP_KEY` | Adzuna job search (free developer key) for the Hiring column |
 | `JSEARCH_API_KEY` | JSearch on RapidAPI (Google for Jobs) for the Hiring column |
-| `HASDATA_API_KEY`, `HASDATA_INDEED_DOMAIN` | HasData Indeed Jobs Scraper API for the Hiring column; the domain selects a regional Indeed site: a country code such as `ca` (expanded to `ca.indeed.com`) or the full host name |
+| `HASDATA_API_KEY`, `HASDATA_INDEED_DOMAIN` | HasData Indeed Jobs Scraper API for the Hiring column and the opportunity searches; the domain selects a regional Indeed site (`ca` → `ca.indeed.com`). Ten credits a call, about fifteen listings a call |
 | `JOBS_API_URL`, `JOBS_API_KEY` | A custom job-listing source behind the JSON contract in SPEC §7.13 |
 | `JOBS_COUNTRY` | Country code for the sources that take one (default `ca`) |
 
@@ -142,6 +142,21 @@ sales@example.com,Sam,Seller,sales_manager,full_productive
 ```
 
 Roles are `admin`, `sales_manager`, and `recruiter`; the stage column (`onboarding`, `training`, `full_productive`; default `full_productive`) is optional. No password is stored: everyone signs in with Google using that address. Every row is checked before anything is written, existing emails are never changed, and from then on administrators manage everyone under **Admin → Users**. The file holds real addresses, so keep the repository private.
+
+#### Scheduling the Indeed run (for example every Monday morning)
+
+Nothing is installed on the server for this: the `jobs` container (part of `docker compose up -d`, also in production) asks the app once a minute whether a search is due, and the app runs it once on the chosen days after the chosen time.
+
+1. `.env.local` on the server: `HASDATA_API_KEY`, `HASDATA_INDEED_DOMAIN=ca`, and `BUSINESS_TIMEZONE` set to the client's zone (`America/Toronto`), so the time below is their local time. `.env` must have `JOBS_KEY`, which the production steps create.
+2. Check that the `jobs` container is up: `docker compose -f compose.yaml -f compose.prod.yaml ps`.
+3. As an administrator: Settings → Opportunity searches, tick Monday only, set the time (06:00), keep Indeed as the source, set the listings cap, save. Under Job sources, Indeed must be enabled with a budget.
+4. Opportunities → Searches & runs: add the search terms (keyword, location) and keep them active. Click **Run searches now** once to confirm the key and budget; the result and any HasData error show under Recent runs.
+
+Every run also appears in the container log, `docker compose -f compose.yaml -f compose.prod.yaml logs --since 24h jobs`. If you would rather use the operating system's scheduler (Windows Task Scheduler, cron), stop the `jobs` container and post to the app instead, as often as once a minute or once an hour; the app still runs each search only once per day:
+
+```
+curl -X POST -H "X-Jobs-Key: <JOBS_KEY from .env>" -H "Content-Type: application/json" -d "{}" http://localhost:3000/api/jobs/run
+```
 
 ### Analytics
 

@@ -98,6 +98,15 @@ Extras on this path: `TRIPS_PROVIDER=stub` in `.env.local` gives the Sales Trip 
 
 Tested shape: a Linux host with Docker Engine and the Compose plugin, the app on port 3000 behind a reverse proxy that terminates TLS. The database is not published on the host at all.
 
+On a Windows server with Docker Desktop the same commands work from PowerShell; only the two shell lines below differ. Create `.env` with any long random strings, for example:
+
+```powershell
+$rand = { -join ((48..57 + 65..90 + 97..122) | Get-Random -Count 40 | ForEach-Object { [char]$_ }) }
+"POSTGRES_PASSWORD=$(& $rand)`nJOBS_KEY=$(& $rand)`nTRIPS_PROVIDER=stub" | Set-Content -Encoding ascii .env
+```
+
+Keep Git's line endings as they are (`git config core.autocrlf false` before cloning) so the shell scripts in the image stay LF; the README's troubleshooting table has the symptom if they do not.
+
 1. Clone and create `.env` with the two required secrets (any long random strings) and the optional sample-data switch:
 
    ```bash
@@ -140,6 +149,7 @@ Later on the server:
 
 - Backup: `docker compose -f compose.yaml -f compose.prod.yaml exec db pg_dump -U postgres leadtrailpro > leadtrailpro-$(date +%F).sql`, plus the `leadtrailpro_attachments` volume for uploads.
 - New people: add them to `seed/accounts.csv`, commit, `git pull` on the server, then `docker compose -f compose.yaml -f compose.prod.yaml run --rm setup node scripts/seed-users.mjs` (only missing emails are created; existing ones are never changed). Or add them under User management in the app, which needs no redeploy.
+- The Indeed search on a schedule (for example every Monday at 06:00): the `jobs` container does it; set the day, time, source, and cap under Settings → Opportunity searches, enable Indeed with a budget under Job sources, put `HASDATA_API_KEY` and `BUSINESS_TIMEZONE` in `.env.local`, and add the searches under Opportunities → Searches & runs. Full steps in the README under “Scheduling the Indeed run”, including the curl line for Windows Task Scheduler if you prefer it to the container.
 - Logs: `docker compose -f compose.yaml -f compose.prod.yaml logs --since 1h app jobs`.
 
 ## What to test in the app
