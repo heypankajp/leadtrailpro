@@ -10,7 +10,7 @@ LeadTrailPro (renamed from SalesTrackPro on October 30, 2026) is a sales workspa
 | Packaging | Docker: hot-reloading development stack, standalone production image, one-shot setup service |
 | Tests | ESLint, `tsc`, production build, unit suites for the date parser, status helpers, trip matching, reminder rules, digests, rich text, mentions, the tracker import rules, and the job-listing sources, and a 54-test Selenium browser suite with an axe-core accessibility audit, all in Docker; GitHub Actions runs all of it on every push and pull request |
 | Notifications | Bell in the top bar for task, lead, queue, and file events; daily and weekly digests by email and in-app, scheduled by the `jobs` service |
-| Email | Password resets, set-password links, and two-factor codes work in stub mode (`MAIL_PROVIDER=stub`, messages recorded under Settings → Email delivery) until `SMTP_*` is configured and `MAIL_PROVIDER=smtp` |
+| Email | Sent through the Google app from the mailbox an administrator chooses under Settings → Email delivery (`MAIL_PROVIDER=gmail`, the default once the Google client is set). `MAIL_PROVIDER=stub` records messages under Settings → Email log instead of sending (test stacks). No SMTP account is needed |
 | Sales trip planner | Built from the October 2026 change note; runs on sample company data until `MAPS_API_KEY` is set. Hiring counts come from a job-sources layer that combines Adzuna, JSearch, and Indeed via HasData behind a cache with per-source budgets (keys optional, set under Settings) |
 | Preview pages | Lead generation and the road visit planner show sample content until data sources are connected |
 
@@ -18,14 +18,17 @@ LeadTrailPro (renamed from SalesTrackPro on October 30, 2026) is a sales workspa
 
 Requires Docker Desktop, or Docker Engine with the Compose plugin. Nothing else is installed on the machine: Node 22 and PostgreSQL run in containers, and the project directory is mounted into the app container so edits hot-reload as usual.
 
+Before the setup step, open `seed/accounts.csv` and make sure the people who may sign in are listed, the administrator first (format and rules under [Seed accounts](#seed-accounts)). Then:
+
 ```bash
 git clone https://github.com/heypankajp/leadtrailpro.git
 cd leadtrailpro
-docker compose run --rm setup   # once: builds the dev image (a few minutes the first time), creates the schema, the app user, and .env.local
+#  edit seed/accounts.csv if the people on it are not the right ones
+docker compose run --rm setup   # once: builds the dev image (a few minutes the first time), creates the schema, the app user, .env.local, and the accounts from seed/accounts.csv
 docker compose up -d            # dev server at http://localhost:3000; `docker compose ps` shows db healthy, app and jobs up
 ```
 
-Open [http://localhost:3000](http://localhost:3000), choose **First time setup**, and paste the `USER_MANAGEMENT_KEY` from `.env.local` to create the first administrator. That option disappears once an account exists.
+Open [http://localhost:3000](http://localhost:3000) and sign in with **Sign in with Google** as one of the accounts in `seed/accounts.csv`. (With an empty accounts file the screen offers **First time setup** instead, which creates the first administrator with the `USER_MANAGEMENT_KEY` from `.env.local`.) The administrator signs in with **Sign in with Google** (see [Sign in with Google](#sign-in-with-google)); the password column of the seed file matters only on a stack without a Google client.
 
 Step-by-step instructions for a laptop (with or without Docker) and for a server, including what to click and how to read a failed database connection, are in [docs/TESTING.md](docs/TESTING.md).
 
@@ -37,6 +40,7 @@ Everyday commands:
 | Lint, typecheck, build | `docker compose exec app npm run lint` (likewise `typecheck`, `build`) |
 | Browser end-to-end tests | `scripts/e2e.sh` (see [Checks and tests](#checks-and-tests)) |
 | Sample data (needs an administrator) | `docker compose run --rm setup node scripts/seed-sample-data.mjs` |
+| Seed accounts again after editing `seed/accounts.csv` | `docker compose run --rm setup node scripts/seed-users.mjs` (adds new emails only) |
 | Import the legacy tracker (needs an administrator; `--dry-run` first) | `docker compose run --rm setup node scripts/import-tracker.mjs "docs/Sales Leads 2026.xlsx" --dry-run` |
 | Schema upgrade after pulling code | `docker compose run --rm setup node scripts/create-database.mjs` |
 | Check the database connection the app will use | `docker compose run --rm app npm run db:check` |
@@ -61,6 +65,7 @@ npm ci
 cp .env.setup.local.example .env.setup.local   # PostgreSQL administrator credentials, kept out of Git
 npm run db:create                               # creates or upgrades the schema and reference data
 npm run db:user:create                          # restricted app account + .env.local with the bootstrap key
+npm run db:seed:users                           # the accounts in seed/accounts.csv (edit the file first)
 npm run db:check                                # confirms the app can reach the database with .env.local
 npm run dev
 ```
@@ -77,12 +82,13 @@ The setup step writes the database settings and a commented template for the res
 | `USER_MANAGEMENT_KEY` | One-time key for creating the first administrator |
 | `APP_URL` | Public URL. Required behind a reverse proxy, and used in password-reset links. An `http://` value also turns off the Secure flag on session cookies, for deployments without TLS |
 | `TRUSTED_ORIGINS` | Extra allowed origins for state-changing requests, comma separated |
+| `ALLOWED_DEV_ORIGINS` | Only for `next dev` on a public host: extra hostnames the development server may serve to, comma separated. `leadtrail.pro` and `www.leadtrail.pro` are built in (`next.config.ts`); the production image does not need this |
 | `BUSINESS_TIMEZONE` | Business day for follow-ups, weekly targets, reports, and each account's daily auto sign-out time (default `America/Toronto`) |
 | `ATTACHMENT_DIR` | Where uploaded documents and profiles are stored (default `./storage/attachments`) |
 | `JOBS_KEY` | Shared secret between the app and the digest scheduler (`npm run jobs` or the `jobs` compose service); Docker passes it from `.env`, default `dev-jobs-key` |
-| `MAIL_PROVIDER` | `stub` records every email in the Settings outbox instead of sending (the default the setup writes); `smtp` sends through the settings below; `off` disables email |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Outbound email for password resets, set-password links, and two-factor codes |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GMAIL_TOKEN_KEY`, `GOOGLE_REDIRECT_URI` | Gmail linking for the lead Emails tab. The token key is any long random string that encrypts stored refresh tokens; the redirect URI defaults to `APP_URL/api/gmail/callback` |
+| `MAIL_PROVIDER` | `gmail` sends through the Google app from the mailbox chosen under Settings → Email delivery (the default when the Google client is set); `stub` records every email under Settings → Email log instead of sending; `smtp` (legacy) sends through the settings below; `off` disables email |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Legacy SMTP mailer, used only with `MAIL_PROVIDER=smtp`; not needed with the Google app |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GMAIL_TOKEN_KEY`, `GOOGLE_REDIRECT_URI` | One OAuth client for **Sign in with Google** and the Gmail link on the lead Emails tab. The token key is any long random string that encrypts stored refresh tokens; the redirect URI defaults to `APP_URL/api/auth/google/callback` and is the only one to register |
 | `GOOGLE_AUTH_URI`, `GOOGLE_TOKEN_URI`, `GOOGLE_PROJECT_ID` | Optional, from the same OAuth client JSON (`auth_uri`, `token_uri`, `project_id`); the endpoints default to Google's standard ones and the project id is informational |
 | `TRIPS_PROVIDER` | `stub` serves sample companies for the sales trip planner (the Docker dev stack sets it), and their Hiring counts then come from the sample job source so no live job-source budget is spent on fictional names; leave empty for live data |
 | `MAPS_API_KEY` | Google Maps Platform key for live trip searches. Enable the **Geocoding API**, **Places API (New)**, and **Routes API** on the Cloud project (the legacy Places and Distance Matrix services are not used; Distance Matrix cannot be enabled on projects created after October 2026). `npm run maps:test -- "<address>"` checks a key with three calls |
@@ -92,7 +98,7 @@ The setup step writes the database settings and a commented template for the res
 | `JOBS_API_URL`, `JOBS_API_KEY` | A custom job-listing source behind the JSON contract in SPEC §7.13 |
 | `JOBS_COUNTRY` | Country code for the sources that take one (default `ca`) |
 
-With `MAIL_PROVIDER=stub` the email features work without a mailbox: reset links and sign-in codes appear under Settings → Email delivery, where an administrator can open each message. Switch to `MAIL_PROVIDER=smtp` with the `SMTP_*` settings when a real mailbox is ready; without either, administrators set passwords directly and two-factor cannot be switched on. `npm run mail:test` checks the connection and sign-in with those settings, and `npm run mail:test -- --send` also delivers a test message to `SMTP_USER` (inside Docker: `docker compose run --rm app npm run mail:test -- --send`). A Gmail or Google Workspace mailbox needs an App Password (2-Step Verification turned on) in `SMTP_PASSWORD`; the account password is rejected.
+Email goes out through the Google app: an administrator picks the sending mailbox under Settings → Email delivery from the people who have signed in with Google, and notifications and summary emails are sent from it. Report emails (the weekly stalled-leads report to administrators) stay off until the switch next to it is on. With `MAIL_PROVIDER=stub` nothing is sent and every message is recorded under Settings → Email log, which the test stacks use. Until Google verifies the app, the sending mailbox's token expires after seven days while the consent screen is in Testing; that person signing in again renews it.
 
 Job-source keys can be tried without a trip: `npm run jobs:test -- "OceanMD" Toronto` (in Docker: `docker compose run --rm app npm run jobs:test -- "OceanMD" Toronto`) calls every configured source for that company and prints what each returns. It spends one call per source, so use it sparingly on a test plan. With `TRIPS_PROVIDER=stub` the trip planner itself never calls the live sources, because its companies are fictional.
 
@@ -110,14 +116,43 @@ With `TRIPS_PROVIDER=stub` the trip planner never calls these sources (its compa
 
 ### Gmail linking
 
-Each user connects their own Google account from a lead's **Emails** tab (read-only Gmail scope). The tab then lists recent messages exchanged with the lead's client email addresses; administrators see messages from every connected mailbox. To enable it:
+Read-only access to each user's own mailbox is granted together with their first **Sign in with Google** sign-in (next section), and the app stores the token so nobody is asked again. A lead's **Emails** tab then lists recent messages exchanged with the lead's client email addresses; administrators see messages from every connected mailbox. The tab keeps a **Connect Gmail** button for people who unticked the Gmail box on Google's consent screen or whose token expired (see the note on Testing mode below). From the same tab, **Send email** writes to the lead's contacts from the person's own mailbox, with the lead's documents as attachments, and **Reply** answers inside the thread; sent mail shows in the trail with the replies and is logged on the timeline. To enable it:
 
-1. In Google Cloud Console, enable the Gmail API and create an OAuth client of type Web application with the redirect URI `<APP_URL>/api/gmail/callback` (for local development `http://localhost:3000/api/gmail/callback`).
+1. In Google Cloud Console, enable the Gmail API on the project of the OAuth client.
 2. Put `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GMAIL_TOKEN_KEY` in `.env.local` and restart the app. The `gmail_connections` table is created by the schema script (migration 3).
 
 Until these exist the Emails tab explains that Gmail is not configured, and emails are logged by hand on the Timeline.
 
-The setup scripts read `.env.setup.local` (administrator credentials) instead; it also accepts `PGAPPUSER` (the name of the restricted application role, default `leadtrailpro_app`) and `PGDATABASE` (default `leadtrailpro`).
+### Sign in with Google
+
+When `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set, the sign-in screen offers only **Sign in with Google**: there is no email and password form, `POST /api/auth/login` answers 403, the Change password entry disappears from the user menu, and User management has no password fields, set-password emails, or two-factor switch: a person is added with their Google address and signs in with it. Password sign-in exists only on a stack without a Google client (the browser test suite, or a laptop before the client is configured). Google is asked for the person's identity (`openid email profile`) and read-only Gmail in one consent, so the mailbox link exists from the first sign-in; the token is stored, and later sign-ins only show Google's account picker. Someone who unticks the Gmail box still signs in and gets a note to connect it later from a lead's Emails tab. The account whose email equals the verified Google email is signed in. Nobody is created on the way in: an email that is not in the users table, or belongs to a deactivated account, sees "Sign-in failed: these credentials are not valid or you are not registered. Please contact your administrator." A Google sign-in skips the email two-factor step, since Google has already verified the person, and is recorded in the login history like any other sign-in.
+
+1. On the OAuth client, add `<APP_URL>/api/auth/google/callback` (locally `http://localhost:3000/api/auth/google/callback`) as the Authorized redirect URI. Sign-in and the Gmail link share it.
+2. On the consent screen choose the External user type, so personal Gmail accounts can sign in as well as Google Workspace ones, and add the Gmail read-only scope. Google calls that scope restricted: until the app passes Google's verification only the listed test users (up to 100) can sign in, and refresh tokens issued while the screen is in Testing expire after seven days, after which the Emails tab asks to reconnect. Publishing the screen and completing verification lifts both limits.
+3. Make sure each person exists with their Google email, either in the seed file below or under **Admin → Users**.
+
+### Seed accounts
+
+`seed/accounts.csv`, in the repository, lists the accounts that may sign in: the administrator, one account per role, and any testers. Edit it and commit; the Docker `setup` service loads it on a new machine, and `docker compose run --rm setup node scripts/seed-users.mjs` (without Docker: `npm run db:seed:users`) loads it again after edits. The format is in the file's header:
+
+```csv
+email,first_name,last_name,role,stage
+admin@example.com,Ada,Admin,admin,full_productive
+sales@example.com,Sam,Seller,sales_manager,full_productive
+```
+
+Roles are `admin`, `sales_manager`, and `recruiter`; the stage column (`onboarding`, `training`, `full_productive`; default `full_productive`) is optional. No password is stored: everyone signs in with Google using that address. Every row is checked before anything is written, existing emails are never changed, and from then on administrators manage everyone under **Admin → Users**. The file holds real addresses, so keep the repository private.
+
+### Analytics
+
+**Analytics** in the navigation (the former Reports & dashboard) keeps the performance table with its drill-downs and exports and adds, for the chosen period and filters: the pipeline by status now (click a number or bar for the leads), the pipeline at the end of each day, week, or month of the period, the movement between statuses with the cold → warm → hot → client funnel and the moves backwards, lost and disqualified reasons, the median time a lead spends in each status, a stalled-leads list that says why each lead needs attention (longer in its status or quiet for longer than the needs-attention rules allow, follow-up overdue, a hot lead gone quiet), the opportunity pool funnel per run and by job type, breakdowns by industry, city, and lead type, the clients worked most, and a leaderboard per salesperson. Periods: last 24 hours, 7, 30, or 90 days, 12 months, the calendar periods, or a custom range. Filters: salesperson, status, lead type, city, industry, client name, lead source (pool or by hand), and job type. The needs-attention rules under Settings double as the days allowed per status. Sales Managers see their own numbers; administrators see everyone. A weekly stalled-leads email to administrators exists behind the Send report emails switch, off by default.
+
+### Opportunity pool
+
+**Opportunities** in the navigation is a shared list of companies that are hiring, built from keyword searches on the configured job-listing sources (Adzuna, JSearch, Indeed through HasData, a custom JSON source, or the sample source). Administrators keep the searches under **Opportunities → Searches & runs** (name, keyword, location, job type, an optional cap of listings per source) and the schedule under **Settings → Opportunity searches** (days of the week, time, the default cap, notifications); the `jobs` service runs them, and **Run searches now** starts a run on demand. The sources that answer the searches are chosen under Settings → Opportunity searches (Indeed through HasData by default) and must also be enabled, with budget left, under Job sources, so two or three runs a week with a cap of a few hundred listings keep the Indeed calls inside the free credits.
+
+Each run groups the listings by company into one card. From a card, a salesperson clicks **Assign as lead**, picks the owner (themselves by default), and saves the pre-filled lead form; the lead is created in that owner's name, linked to the card, and the card leaves the pool. **Not relevant** hides a card with a reason from the List of values; a role-level reason ("Role not relevant") lets the company come back when a different role appears, a company-level reason keeps it hidden. A company that is already a live lead or client never enters the pool: its new listings go to that lead's timeline (marked as system entries that do not count as sales activity) and the owner is notified. A company whose earlier lead was closed or archived comes back with that history, and **Reopen lead** restores the old lead for the chosen owner instead of creating a second one. Salespeople get a notification when a run adds new companies, and the Opportunities item shows how many wait in the pool.
+
 
 ## Production
 
@@ -125,8 +160,8 @@ The setup scripts read `.env.setup.local` (administrator credentials) instead; i
 
 ```bash
 printf 'POSTGRES_PASSWORD=%s\nJOBS_KEY=%s\n' "$(openssl rand -base64 36)" "$(openssl rand -base64 36)" > .env   # both are required
-docker compose -f compose.yaml -f compose.prod.yaml run --rm setup       # first time only; writes .env.local
-#   now edit .env.local: APP_URL=https://sales.example.com, and the SMTP_* lines or MAIL_PROVIDER=stub
+docker compose -f compose.yaml -f compose.prod.yaml run --rm setup       # first time only; schema, app role, .env.local, and the accounts in seed/accounts.csv
+#   now edit .env.local: APP_URL=https://sales.example.com and the GOOGLE_* lines (MAIL_PROVIDER=gmail), or MAIL_PROVIDER=stub
 docker compose -f compose.yaml -f compose.prod.yaml up -d --build
 docker compose -f compose.yaml -f compose.prod.yaml run --rm app npm run db:check
 ```
@@ -134,6 +169,7 @@ docker compose -f compose.yaml -f compose.prod.yaml run --rm app npm run db:chec
 The full server walk-through, including the reverse proxy and the first sign-in, is [docs/TESTING.md, path C](docs/TESTING.md#c-server).
 
 - The app container takes its configuration from `.env.local`. Behind a reverse proxy, set `APP_URL` to the public origin and terminate TLS at the proxy.
+- Accounts: the setup step above creates every account in `seed/accounts.csv` that is missing. To add people later, add rows, commit, `git pull` on the server, and run `docker compose -f compose.yaml -f compose.prod.yaml run --rm setup node scripts/seed-users.mjs`; or add them under User management in the app. Each Google address must also be a test user on the consent screen until Google verifies the app.
 - The image carries the database scripts, so later schema upgrades can run from it:
 
   ```bash
@@ -157,14 +193,16 @@ tests/e2e/               Selenium end-to-end suite (node:test) with helpers/ui.m
 docs/                    PRD.md (requirements with IDs and status), SPEC.md (design, API, data model, screens), TESTING.md (set up and test on a laptop or a server),
                          Sales_Tracker_App_BRD_SRS_Updated.pdf (the updated BRD/SRS; its new section 25 is tracked as OPP-01..22 in PRD.md)
 Dockerfile               targets: dev (hot reload) and runner (standalone production image)
-compose.yaml             db, app, jobs (digest scheduler), setup, and the `test` profile (db-test, app-test, selenium, e2e)
+compose.yaml             db, app, jobs (digest and opportunity-search scheduler), setup, and the `test` profile (db-test, app-test, selenium, e2e)
 compose.prod.yaml        production override
 ```
 
 ## What is implemented
 
-- **Roles and privileges.** Three system roles (Admin, Sales Manager, Recruiter) with renamable display names. Each role has default privileges; administrators can grant extras per account.
-- **Sign-in and security.** Email and password with scrypt hashes, database-backed sign-in rate limiting and login history, optional email two-factor codes, per-account daily auto sign-out at a configurable time, change password, forgot-password links, and administrator password resets.
+- **Roles and privileges.** Three system roles (Admin, Sales Manager, Recruiter) with renamable display names. Each role has default privileges; administrators can grant extras per account. Since November 6, 2026 every Sales Manager may also reassign any lead, so a colleague's leads can be handed over while they are away; every move stays in the audit history.
+- **Opportunity pool.** Scheduled keyword searches on the job-listing sources produce one card per hiring company under **Opportunities**; salespeople assign a card to themselves or a colleague, which creates the lead pre-filled, or mark it not relevant with a reason. Companies that are already leads or clients get their new listings on the lead's timeline instead. See [Opportunity pool](#opportunity-pool).
+- **Duplicate guard.** A new lead that matches an existing one on client email, website, phone number, or company name is refused with a link to that lead; a very similar name at the same address, or a match on an archived lead, warns and can be overridden.
+- **Sign-in and security.** Sign in with Google only, with identity, read-only Gmail, and sending granted in one consent; no passwords are stored. Database-backed login history, per-account daily auto sign-out at a configurable time, and rate limiting. On a stack without a Google client (the browser suite) the email-and-password sign-in with scrypt hashes, two-factor codes, and reset links remains available.
 - **Leads.** All BRD section 6 fields plus the status reasons from the October 2026 change note (Lost Lead and Disqualified ask for a reason and display as “Status – Reason” everywhere), owner as a user reference, creator becomes owner, transfer and administrator reassignment (open tasks follow the lead), bulk archive, restore, and reassign, independent archive search, and queued leads for historical first-contact dates with approve and reject.
 - **Timeline.** Logged calls, emails, visits, and interaction notes, plus automatic entries for status, BD action, client response, follow-up, transfer, state, task, and file events. Most recently active leads sort first.
 - **Emails (Gmail).** Each user can link their Gmail account; a lead's Emails tab lists recent messages to or from the lead's client addresses with direction, sender, recipients, subject, time, and body text. Administrators see every connected mailbox. Dormant until a Google OAuth client is configured.
@@ -217,6 +255,7 @@ scripts/e2e.sh tests/e2e/02-leads.test.mjs   # one or more files
 | `05-admin-reports.test.mjs` | List of values, role rename reflected in the sidebar, a needs-attention rule that shows on the Action Center, a set-password link read from the stub outbox and used to reset the password, the daily digest sent on demand, business-calendar holiday, target template, report drill-down, stage filter, PDF and Excel export responses, action-center metric link |
 | `06-trips.test.mjs` | Plan a sales trip on the stub provider, a lead recognised by website domain, job listings dialog, shortlist and planned visit, Show and Action filters, Excel export response, trip list |
 | `07-accessibility.test.mjs` | axe-core WCAG 2.1 A/AA audit of the sign-in screen, Action Center, lead dialog, lead list, tasks, reports, settings, list of values, user management, and trip planner; serious or critical findings fail |
+| `08-opportunities.test.mjs` | A search on the sample source, Run searches now, cards in the pool, Assign as lead with the pre-filled form and the Timeline entry, the duplicate guard, Not relevant and Back to the pool |
 
 - Tests are written with `node:test` and `selenium-webdriver`; the page helpers (labels, dialogs, toasts, navigation) live in `tests/e2e/helpers/ui.mjs`, test data and the bootstrap shortcut in `tests/e2e/helpers/data.mjs`.
 - Watch the browser at [http://localhost:7900](http://localhost:7900) while a run is in progress.
@@ -259,7 +298,10 @@ docker compose run --rm app npm run mail:test      # the same for the SMTP mailb
 
 - **"Could not load the workspace" right after signing in** on an `http://` host other than localhost: the browser dropped the Secure session cookie. Set `APP_URL` to that `http://` origin in `.env.local`, or serve the app over HTTPS.
 - **"Request origin rejected"** behind a proxy: set `APP_URL` (or `TRUSTED_ORIGINS`) to the public origin, and make sure the proxy forwards `X-Forwarded-Host` and `X-Forwarded-Proto`.
-- **"Password reset emails are not configured yet"** or two-factor cannot be enabled: fill in the `SMTP_*` settings (or set `MAIL_PROVIDER=stub`) and restart the app. `npm run mail:test` shows whether the server accepts the sign-in; a `534` ("Application-specific password required") or `535` from Google means it wants an App Password, not the account password.
+- **Nothing is emailed**: under Settings → Email delivery choose the sending mailbox (someone who signed in with Google) and save; the Email log below shows every attempt and its error. A mailbox that signed in before sending was requested must sign in again and allow it. `MAIL_PROVIDER=stub` records instead of sending.
+- **"Sign-in failed: these credentials are not valid or you are not registered"** after Sign in with Google: the Google email is not in the users table, or the account is deactivated. Add it under Admin → Users or to `seed/accounts.csv` and run the seed script.
+- **Google shows `Error 400: redirect_uri_mismatch`**: `<APP_URL>/api/auth/google/callback` is not registered on the OAuth client (the match is exact, including http or https and the port). **`Error 403: access_denied`** or "has not completed the Google verification process": the consent screen is in Testing and this account is not a test user; add it under the consent screen's test users (the Gmail scope keeps the app on test users until Google verifies it).
+- **No "Sign in with Google" button** (the password form shows instead): `GOOGLE_CLIENT_ID` or `GOOGLE_CLIENT_SECRET` is missing; `curl http://localhost:3000/api/auth/session` shows `"googleSignIn":false`.
 - **"The Sales Trip Planner is not configured"**: no `MAPS_API_KEY` and no stub. The Docker dev stack sets `TRIPS_PROVIDER=stub`; on a server put it in `.env`, without Docker in `.env.local`.
 - **Port already in use**: set `APP_PORT` or `DB_PORT` in `.env` and run `docker compose up -d` again.
 - **Everyone was signed out after a deploy**: expected once, when the rename of October 30, 2026 changed the cookie names.

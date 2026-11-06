@@ -1,4 +1,4 @@
-export const listKeys = ["lead_type", "status", "bd_action", "client_response", "lead_category", "company_size", "city", "lost_reason", "disqualified_reason", "business_type"] as const;
+export const listKeys = ["lead_type", "status", "bd_action", "client_response", "lead_category", "company_size", "city", "lost_reason", "disqualified_reason", "business_type", "opportunity_reason"] as const;
 export type ListKey = (typeof listKeys)[number];
 
 export const listKeyLabels: Record<ListKey, string> = {
@@ -12,6 +12,7 @@ export const listKeyLabels: Record<ListKey, string> = {
   lost_reason: "Lost lead reason",
   disqualified_reason: "Disqualified reason",
   business_type: "Business type (sales trips)",
+  opportunity_reason: "Not relevant reason (opportunities)",
 };
 
 /** Lists whose values are fixed by the requirement (LEAD-06): they can be renamed but not added to or deactivated. */

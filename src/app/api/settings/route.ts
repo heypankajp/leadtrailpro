@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { handleRouteError, jsonError, readJsonBody, requireSameOrigin } from "@/lib/http";
-import { getMailProvider, isMailerConfigured, listOutbox } from "@/lib/mailer";
+import { getMailProvider, isMailerConfigured, listOutbox, listSenderMailboxes } from "@/lib/mailer";
 import { businessTimeZone } from "@/lib/dates";
 import { sourceStatuses } from "@/features/jobs/repository";
 import { getSettings, updateSettings } from "@/features/settings/repository";
@@ -12,7 +12,7 @@ export async function GET() {
     // The outbox (which holds reset links and sign-in codes in stub mode) is for administrators only.
     const manages = hasPrivilege(user, "manage_settings");
     const outbox = manages ? await listOutbox(20) : [];
-    return NextResponse.json({ settings: await getSettings(), mailerConfigured: isMailerConfigured(), mail: { provider: getMailProvider(), outbox }, jobSources: manages ? await sourceStatuses() : [], timeZone: businessTimeZone() });
+    return NextResponse.json({ settings: await getSettings(), mailerConfigured: isMailerConfigured(), mail: { provider: getMailProvider(), outbox, senders: manages ? await listSenderMailboxes() : [] }, jobSources: manages ? await sourceStatuses() : [], timeZone: businessTimeZone() });
   } catch (error) {
     return handleRouteError(error, "Load settings");
   }
@@ -30,7 +30,9 @@ export async function PATCH(request: Request) {
     const holidays = body.holidays !== undefined ? body.holidays : undefined;
     const digests = body.digests !== undefined ? body.digests : undefined;
     const jobSources = body.jobSources !== undefined ? body.jobSources : undefined;
-    const settings = await updateSettings({ roleLabels, reminders, digests, jobSources, holidays }, user.id);
+    const opportunities = body.opportunities !== undefined ? body.opportunities : undefined;
+    const email = body.email !== undefined ? body.email : undefined;
+    const settings = await updateSettings({ roleLabels, reminders, digests, jobSources, opportunities, email, holidays }, user.id);
     return NextResponse.json({ settings });
   } catch (error) {
     return handleRouteError(error, "Update settings");

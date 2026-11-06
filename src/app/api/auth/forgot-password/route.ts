@@ -4,11 +4,12 @@ import { appBaseUrl, handleRouteError, jsonError, readJsonBody, requireSameOrigi
 import { isMailerConfigured, passwordResetEmail, sendMail } from "@/lib/mailer";
 import { isValidEmail } from "@/features/users/model";
 import { getUserByEmail } from "@/features/users/repository";
-import { createPasswordResetToken } from "@/features/users/session";
+import { createPasswordResetToken, passwordSignInEnabled } from "@/features/users/session";
 
 /** Sends a reset link. The response is the same whether or not the address exists. */
 export async function POST(request: Request) {
   try {
+    if (!passwordSignInEnabled()) return jsonError(403, "Password sign-in is turned off on this server; accounts sign in with Google.");
     requireSameOrigin(request);
     const body = await readJsonBody(request);
     if (!isValidEmail(body?.email)) return jsonError(400, "Enter the email address you sign in with.");

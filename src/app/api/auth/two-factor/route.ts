@@ -3,11 +3,12 @@ import { cookies } from "next/headers";
 import { clientAddress, handleRouteError, jsonError, readJsonBody, requireSameOrigin, userAgent } from "@/lib/http";
 import { getUser } from "@/features/users/repository";
 import {
-  clearedCookieOptions, createUserSession, recordLoginAttempt, sessionCookieName, sessionCookieOptions, twoFactorCookieName, verifyTwoFactorChallenge,
+  clearedCookieOptions, createUserSession, recordLoginAttempt, sessionCookieName, sessionCookieOptions, twoFactorCookieName, verifyTwoFactorChallenge, passwordSignInEnabled,
 } from "@/features/users/session";
 
 export async function POST(request: Request) {
   try {
+    if (!passwordSignInEnabled()) return jsonError(403, "Password sign-in is turned off on this server; accounts sign in with Google.");
     requireSameOrigin(request);
     const body = await readJsonBody(request);
     const code = typeof body?.code === "string" ? body.code.replace(/\s+/g, "") : "";

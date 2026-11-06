@@ -3,8 +3,10 @@
 import { useCallback, useMemo, useState } from "react";
 import { ChevronDown, Download, Mail, MapPin, Phone, TrendingUp, UsersRound } from "lucide-react";
 import { errorMessage } from "@/lib/api";
-import { reportPeriodLabels, reportPeriods, type ReportPeriod } from "@/lib/dates";
+import { reportPeriodLabels, reportPeriods, type CustomRange, type ReportPeriod } from "@/lib/dates";
 import { formatDate, formatDateTime, formatShortDate } from "@/lib/format";
+import AnalyticsSections from "@/features/analytics/AnalyticsSections";
+import { StackedBars, seriesColors } from "@/features/analytics/charts";
 import { useAsyncData } from "@/lib/useAsyncData";
 import { useApp } from "@/features/shell/AppContext";
 import { Dialog, EmptyState, ErrorText, Loading } from "@/features/shell/components";
@@ -29,6 +31,8 @@ const metricColumns: { key: keyof PerformanceRow; label: string; metric?: Drilld
 export default function ReportsPage() {
   const { user, can, reference, openLead, dataVersion, roleLabel } = useApp();
   const [period, setPeriod] = useState<ReportPeriod>("this_week");
+  const [custom, setCustom] = useState<CustomRange | null>(null);
+  const [customDraft, setCustomDraft] = useState<CustomRange>({ from: reference.today.slice(0, 8) + "01", to: reference.today });
   const [userId, setUserId] = useState<number | null>(null);
   const [stage, setStage] = useState<UserStage | "">("");
   const [templateId, setTemplateId] = useState<number | null>(null);
@@ -36,13 +40,13 @@ export default function ReportsPage() {
   const teamWide = can("view_team_reports");
   // RPT-05: stage and template narrow the team report; a single person's report ignores them.
   const filters = useMemo<ReportFilters>(() => ({ stage: teamWide && stage ? stage : null, templateId: teamWide ? templateId : null }), [teamWide, stage, templateId]);
-  const fetcher = useCallback(() => fetchReport(period, teamWide ? userId : user.id, filters), [period, userId, teamWide, user.id, filters]);
+  const fetcher = useCallback(() => fetchReport(period, teamWide ? userId : user.id, filters, custom), [period, userId, teamWide, user.id, filters, custom]);
   const { data: report, error } = useAsyncData<PerformanceReport>(fetcher, dataVersion);
 
   const openDrill = async (row: PerformanceRow, metric: DrilldownMetric) => {
     setDrill({ row, metric, data: null, error: "" });
     try {
-      setDrill({ row, metric, data: await fetchDrilldown(period, row.userId, metric), error: "" });
+      setDrill({ row, metric, data: await fetchDrilldown(period, row.userId, metric, custom), error: "" });
     } catch (caught) {
       setDrill({ row, metric, data: null, error: errorMessage(caught) });
     }
@@ -66,22 +70,26 @@ export default function ReportsPage() {
     URL.revokeObjectURL(url);
   };
 
-  const maxBar = Math.max(1, ...(report?.series ?? []).map((point) => point.calls + point.emails + point.visits));
   const people = reference.users.filter((person) => person.role !== "recruiter");
 
   return (
     <>
       <div className="page-heading">
-        <div><div className="eyebrow">{teamWide ? "TEAM PERFORMANCE" : "YOUR PERFORMANCE"}</div><h1>Reports & dashboard</h1><p>{report ? `${formatDate(report.range.startYmd)} to ${formatDate(report.range.endExclusiveYmd === report.range.startYmd ? report.range.startYmd : addDays(report.range.endExclusiveYmd, -1))}` : "Activity, leads, conversions, and target progress."}</p></div>
+        <div><div className="eyebrow">{teamWide ? "TEAM PERFORMANCE" : "YOUR PERFORMANCE"}</div><h1>Analytics</h1><p>{report ? `${formatDate(report.range.startYmd)} to ${formatDate(report.range.endExclusiveYmd === report.range.startYmd ? report.range.startYmd : addDays(report.range.endExclusiveYmd, -1))}` : "Activity, leads, conversions, and target progress."}</p></div>
         <div className="heading-actions">
-          <a className={`button button-outline ${report ? "" : "is-disabled"}`} href={report ? reportExportUrl("xlsx", period, teamWide ? userId : user.id, filters) : undefined} download><Download size={16} /> Export Excel</a>
-          <a className={`button button-outline ${report ? "" : "is-disabled"}`} href={report ? reportExportUrl("pdf", period, teamWide ? userId : user.id, filters) : undefined} download><Download size={16} /> Export PDF</a>
+          <a className={`button button-outline ${report ? "" : "is-disabled"}`} href={report ? reportExportUrl("xlsx", period, teamWide ? userId : user.id, filters, custom) : undefined} download><Download size={16} /> Export Excel</a>
+          <a className={`button button-outline ${report ? "" : "is-disabled"}`} href={report ? reportExportUrl("pdf", period, teamWide ? userId : user.id, filters, custom) : undefined} download><Download size={16} /> Export PDF</a>
           <button className="button button-outline" onClick={exportCsv} disabled={!report}><Download size={16} /> CSV</button>
         </div>
       </div>
       <div className="report-toolbar">
         <div className="report-periods">
-          {reportPeriods.map((option) => <button key={option} className={option === period ? "active-period" : ""} onClick={() => setPeriod(option)}>{reportPeriodLabels[option]}</button>)}
+          {reportPeriods.filter((option) => option !== "custom").map((option) => <button key={option} className={option === period ? "active-period" : ""} onClick={() => setPeriod(option)}>{reportPeriodLabels[option]}</button>)}
+          <span className="custom-range">
+            <input type="date" aria-label="From date" value={customDraft.from} max={customDraft.to} onChange={(event) => setCustomDraft((current) => ({ ...current, from: event.target.value }))} />
+            <input type="date" aria-label="To date" value={customDraft.to} min={customDraft.from} onChange={(event) => setCustomDraft((current) => ({ ...current, to: event.target.value }))} />
+            <button className={period === "custom" ? "active-period" : ""} disabled={!customDraft.from || !customDraft.to} onClick={() => { setCustom({ ...customDraft }); setPeriod("custom"); }}>Apply range</button>
+          </span>
         </div>
         {teamWide && (
           <label className="select-filter"><UsersRound size={15} />
@@ -122,23 +130,9 @@ export default function ReportsPage() {
 
           <div className="panel report-chart-panel">
             <div className="panel-heading"><div><h2>Activity over time</h2><p>Calls, emails, and visits per business day</p></div></div>
-            <div className="chart-legend"><span><i className="legend-blue" /> Calls</span><span><i className="legend-purple" /> Emails</span><span><i className="legend-orange" /> Visits</span></div>
             {report.series.length === 0 ? <EmptyState title="No activity in this period" /> : (
-              <div className="bar-chart">
-                <div className="chart-y-axis"><span>{maxBar}</span><span>{Math.round(maxBar / 2)}</span><span>0</span></div>
-                <div className="chart-bars">
-                  {report.series.map((point) => (
-                    <div className="bar-day" key={point.date} title={`${formatDate(point.date)}: ${point.calls} calls, ${point.emails} emails, ${point.visits} visits, ${point.leads} leads`}>
-                      <div className="bar-stack">
-                        <i style={{ height: `${(point.calls / maxBar) * 100}%` }} />
-                        <i style={{ height: `${(point.emails / maxBar) * 100}%` }} />
-                        <i style={{ height: `${(point.visits / maxBar) * 100}%` }} />
-                      </div>
-                      <small>{report.series.length > 14 ? formatShortDate(point.date).replace(/\D+$/, "") : formatShortDate(point.date)}</small>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <StackedBars height={240} xKey="date" series={[{ key: "calls", label: "Calls", color: seriesColors[0] }, { key: "emails", label: "Emails", color: seriesColors[1] }, { key: "visits", label: "Visits", color: seriesColors[2] }]}
+                data={report.series.map((point) => ({ date: formatShortDate(point.date), calls: point.calls, emails: point.emails, visits: point.visits }))} />
             )}
           </div>
 
@@ -163,6 +157,7 @@ export default function ReportsPage() {
               </table>
             </div>
           </section>
+          <AnalyticsSections period={period} custom={custom} ownerId={teamWide ? userId : user.id} />
         </>
       )}
       {drill && (
@@ -201,8 +196,8 @@ function Stat({ label, value, icon }: { label: string; value: number; icon: Reac
   return <div className="small-stat"><div className="small-stat-top"><span>{label}</span><span className="small-stat-icon">{icon}</span></div><strong>{value}</strong><small>In the selected period</small></div>;
 }
 
+
 function addDays(ymd: string, days: number): string {
   const [year, month, day] = ymd.split("-").map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day + days));
-  return date.toISOString().slice(0, 10);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
 }

@@ -8,6 +8,7 @@
     "db:create": "node --env-file=.env.setup.local scripts/create-database.mjs",
     "db:user:create": "node --env-file=.env.setup.local scripts/create-app-user.mjs",
     "db:seed": "node --env-file=.env.setup.local scripts/seed-sample-data.mjs",
+    "db:seed:users": "node --env-file=.env.setup.local scripts/seed-users.mjs",
     "db:import": "node --env-file=.env.setup.local scripts/import-tracker.mjs",
     "db:check": "node --env-file-if-exists=.env.local scripts/db-check.mjs",
     "start": "next start",
@@ -29,7 +30,8 @@
     "pdfkit": "^0.20.2",
     "pg": "^8.23.1",
     "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "react-dom": "19.3.1",
+    "recharts": "^3.10.1"
   },
   "devDependencies": {
     "@axe-core/webdriverjs": "^4.14.0",

@@ -28,7 +28,7 @@ export default function UserFormDialog({ user, onClose, onSaved }: Props) {
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!user && form.password !== form.confirmPassword) { setError("Passwords do not match."); return; }
+    if (!user && reference.passwordSignIn && form.password !== form.confirmPassword) { setError("Passwords do not match."); return; }
     setBusy(true);
     setError("");
     const shared = {
@@ -37,7 +37,7 @@ export default function UserFormDialog({ user, onClose, onSaved }: Props) {
       autoLogoutTime: form.autoLogoutTime || defaultAutoLogoutTime, targetTemplateId: form.targetTemplateId ? Number(form.targetTemplateId) : null,
     };
     try {
-      const result = user ? await updateUser(user.id, shared) : await createUser({ ...shared, password: form.password });
+      const result = user ? await updateUser(user.id, shared) : await createUser({ ...shared, password: reference.passwordSignIn ? form.password : null });
       onSaved(result.user);
     } catch (caught) {
       setError(errorMessage(caught, "Could not save the user."));
@@ -61,7 +61,8 @@ export default function UserFormDialog({ user, onClose, onSaved }: Props) {
               {reference.targetTemplates.map((template) => <option key={template.id} value={template.id}>{template.name} ({stageLabels[template.stage]})</option>)}
             </select>
           </label>
-          {!user && (
+          {!user && !reference.passwordSignIn && <p className="user-form-wide field-hint">The person signs in with Google using this email address; no password is stored.</p>}
+          {!user && reference.passwordSignIn && (
             <>
               <label className="user-form-wide">Initial password
                 <span className="user-password-input-wrap">
@@ -76,7 +77,7 @@ export default function UserFormDialog({ user, onClose, onSaved }: Props) {
         </div>
         <fieldset className="user-privileges security-options">
           <legend>Security</legend>
-          <label><input type="checkbox" checked={form.twoFactorEnabled} disabled={!reference.mailerConfigured && !form.twoFactorEnabled} onChange={(event) => set("twoFactorEnabled", event.target.checked)} />Two-factor sign-in by email code{!reference.mailerConfigured && <small> (needs SMTP settings)</small>}</label>
+          {reference.passwordSignIn && <label><input type="checkbox" checked={form.twoFactorEnabled} disabled={!reference.mailerConfigured && !form.twoFactorEnabled} onChange={(event) => set("twoFactorEnabled", event.target.checked)} />Two-factor sign-in by email code{!reference.mailerConfigured && <small> (needs SMTP settings)</small>}</label>}
           <label><input type="checkbox" checked={form.autoLogoutEnabled} onChange={(event) => set("autoLogoutEnabled", event.target.checked)} />Automatic daily sign-out</label>
           <label className="inline-time">Sign out every day at<input type="time" value={form.autoLogoutTime} disabled={!form.autoLogoutEnabled} required={form.autoLogoutEnabled} onChange={(event) => set("autoLogoutTime", event.target.value)} /><small>{reference.timeZone}. Sessions started before this time end; the next sign-in needs the password{form.twoFactorEnabled ? " and the two-factor code" : ""}.</small></label>
         </fieldset>

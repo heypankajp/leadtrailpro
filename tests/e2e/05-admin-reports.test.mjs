@@ -136,8 +136,8 @@ describe("Administration and reports", () => {
   });
 
   uiTest("reports open a drill-down for a metric", async () => {
-    await page.nav("Reports & dashboard");
-    await page.heading("Reports & dashboard");
+    await page.nav("Analytics");
+    await page.heading("Analytics");
     const firstRow = await page.wait(By.xpath('(//table[contains(@class,"report-table")]//tbody/tr)[1]'));
     const name = await firstRow.findElement(By.css("strong")).getText();
     const numbers = await firstRow.findElements(By.css("button.link-button.number"));
@@ -145,6 +145,14 @@ describe("Administration and reports", () => {
     await page.dialogTitle(`${name} · calls`);
     await page.wait(By.xpath('//section[@role="dialog"]//div[contains(@class,"timeline-list")]'));
     await page.closeDialog();
+  });
+
+  uiTest("analytics sections render the pipeline, stalled leads, and the leaderboard", async () => {
+    await page.wait(By.xpath("//h2[normalize-space()='Pipeline now']"));
+    await page.wait(By.xpath("//h2[normalize-space()='Stalled leads']"));
+    await page.wait(By.xpath("//h2[normalize-space()='Leaderboard']"));
+    await page.click(By.xpath("//div[contains(@class,'report-periods')]//button[normalize-space()='Last 30 days']"), { global: true });
+    await page.wait(By.xpath("//h2[normalize-space()='Status over time']"));
   });
 
   uiTest("reports filter by stage and export to PDF and Excel", async () => {
@@ -164,6 +172,6 @@ describe("Administration and reports", () => {
   uiTest("action center metrics link to the reports page", async () => {
     await page.nav("Action center");
     await page.click(By.css('button[aria-label="View Calls made report"]'), { global: true });
-    await page.heading("Reports & dashboard");
+    await page.heading("Analytics");
   });
 });

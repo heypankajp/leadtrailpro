@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { reportPeriods, type ReportPeriod } from "@/lib/dates";
+import { reportPeriods, type ReportPeriod, customRangeFrom } from "@/lib/dates";
 import { handleRouteError, jsonError } from "@/lib/http";
 import { drilldown } from "@/features/reports/repository";
 import type { DrilldownMetric } from "@/features/reports/model";
@@ -19,7 +19,7 @@ export async function GET(request: Request) {
     if (!metrics.includes(metric as DrilldownMetric)) return jsonError(400, "Unknown metric.");
     if (!Number.isSafeInteger(userId) || userId < 1) return jsonError(400, "Choose a user.");
     if (userId !== user.id && !hasPrivilege(user, "view_team_reports")) return jsonError(403, "You can only view your own report.");
-    return NextResponse.json(await drilldown(period as ReportPeriod, user, userId, metric as DrilldownMetric));
+    return NextResponse.json(await drilldown(period as ReportPeriod, user, userId, metric as DrilldownMetric, customRangeFrom(params.get("from"), params.get("to"))));
   } catch (error) {
     return handleRouteError(error, "Report drill-down");
   }

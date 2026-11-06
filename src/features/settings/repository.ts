@@ -1,15 +1,17 @@
 import { getDatabasePool, withTransaction, type Queryable } from "@/lib/db";
 import { isValidYmd } from "@/lib/dates";
 import { HttpError } from "@/lib/http";
+import { noteSenderChosen } from "@/lib/mail-state";
 import { recordAudit } from "@/features/audit/repository";
 import { defaultJobSources, normalizeJobSources } from "@/features/jobs/model";
+import { defaultOpportunitySettings, normalizeOpportunitySettings } from "@/features/opportunities/model";
 import { assertListValue } from "@/features/list-values/repository";
 import { defaultRoleLabels, systemRoles } from "@/features/users/model";
 import type { SystemRole } from "@/features/users/model";
 
-import { defaultDigests, maxHolidayNameLength, maxHolidays, normalizeDigests, normalizeInactivityRules, type AppSettings, type Holiday, type InactivityRule } from "./model";
+import { defaultDigests, defaultEmailSettings, maxHolidayNameLength, maxHolidays, normalizeDigests, normalizeEmailSettings, normalizeInactivityRules, type AppSettings, type Holiday, type InactivityRule } from "./model";
 
-const defaults: AppSettings = { roleLabels: { ...defaultRoleLabels }, reminders: { inactivityDays: 7, rules: [] }, digests: { ...defaultDigests }, jobSources: defaultJobSources, holidays: [] };
+const defaults: AppSettings = { roleLabels: { ...defaultRoleLabels }, reminders: { inactivityDays: 7, rules: [] }, digests: { ...defaultDigests }, jobSources: defaultJobSources, opportunities: { ...defaultOpportunitySettings }, email: { ...defaultEmailSettings }, holidays: [] };
 
 /** Keeps well-formed, unique holidays sorted by date; returns the first problem found (for input validation). */
 function normalizeHolidays(value: unknown): { holidays: Holiday[]; error: string | null } {
@@ -43,12 +45,17 @@ export async function getSettings(db: Queryable = getDatabasePool()): Promise<Ap
   const calendar = await readSetting<{ holidays?: unknown }>(db, "business_calendar", {});
   const digests = normalizeDigests(await readSetting<unknown>(db, "digests", {}));
   const jobSources = normalizeJobSources(await readSetting<unknown>(db, "job_sources", {}));
+  const opportunities = normalizeOpportunitySettings(await readSetting<unknown>(db, "opportunities", {}));
+  const email = normalizeEmailSettings(await readSetting<unknown>(db, "email", {}));
+  noteSenderChosen(!email.error && email.email.senderUserId !== null);
   const { holidays, error } = normalizeHolidays(calendar.holidays ?? []);
   return {
     roleLabels: Object.fromEntries(systemRoles.map((role) => [role, roleLabels[role]?.trim() || defaults.roleLabels[role]])) as Record<SystemRole, string>,
     reminders: { inactivityDays: Number.isInteger(reminders.inactivityDays) && Number(reminders.inactivityDays) > 0 ? Number(reminders.inactivityDays) : defaults.reminders.inactivityDays, rules: rules.error ? [] : rules.rules },
     digests: digests.error ? { ...defaultDigests } : digests.digests,
     jobSources: jobSources.error ? defaultJobSources : jobSources.jobSources,
+    opportunities: opportunities.error ? { ...defaultOpportunitySettings } : opportunities.settings,
+    email: email.error ? { ...defaultEmailSettings } : email.email,
     holidays: error ? [] : holidays,
   };
 }
@@ -58,7 +65,7 @@ export async function listHolidayDates(db: Queryable = getDatabasePool()): Promi
   return (await getSettings(db)).holidays.map((holiday) => holiday.date);
 }
 
-export async function updateSettings(changes: { roleLabels?: Partial<Record<SystemRole, string>>; reminders?: { inactivityDays?: number; rules?: unknown }; digests?: unknown; jobSources?: unknown; holidays?: unknown }, actorId: number): Promise<AppSettings> {
+export async function updateSettings(changes: { roleLabels?: Partial<Record<SystemRole, string>>; reminders?: { inactivityDays?: number; rules?: unknown }; digests?: unknown; jobSources?: unknown; opportunities?: unknown; email?: unknown; holidays?: unknown }, actorId: number): Promise<AppSettings> {
   return withTransaction(async (connection) => {
     const current = await getSettings(connection);
     if (changes.roleLabels) {
@@ -115,6 +122,33 @@ export async function updateSettings(changes: { roleLabels?: Partial<Record<Syst
       );
       if (JSON.stringify(current.jobSources) !== JSON.stringify(jobSources)) {
         await recordAudit(connection, { actorId, action: "setting.updated", entityType: "setting", before: { ...current.jobSources }, after: { ...jobSources }, details: "Updated the job-listing sources" });
+      }
+    }
+    if (changes.opportunities !== undefined) {
+      const { settings: opportunities, error } = normalizeOpportunitySettings(changes.opportunities);
+      if (error) throw new HttpError(400, error);
+      await connection.query(
+        "INSERT INTO app_settings (setting_key, value_json) VALUES ('opportunities', ?) ON CONFLICT (setting_key) DO UPDATE SET value_json = EXCLUDED.value_json",
+        [JSON.stringify(opportunities)],
+      );
+      if (JSON.stringify(current.opportunities) !== JSON.stringify(opportunities)) {
+        await recordAudit(connection, { actorId, action: "setting.updated", entityType: "setting", before: { ...current.opportunities }, after: { ...opportunities }, details: "Updated the opportunity search schedule" });
+      }
+    }
+    if (changes.email !== undefined) {
+      const { email, error } = normalizeEmailSettings(changes.email);
+      if (error) throw new HttpError(400, error);
+      if (email.senderUserId !== null) {
+        const { rows } = await connection.query("SELECT 1 FROM gmail_connections g JOIN users u ON u.id = g.user_id WHERE g.user_id = ? AND u.is_active = TRUE", [email.senderUserId]);
+        if (!rows.length) throw new HttpError(400, "The sending mailbox must belong to an active user who has signed in with Google.");
+      }
+      await connection.query(
+        "INSERT INTO app_settings (setting_key, value_json) VALUES ('email', ?) ON CONFLICT (setting_key) DO UPDATE SET value_json = EXCLUDED.value_json",
+        [JSON.stringify(email)],
+      );
+      noteSenderChosen(email.senderUserId !== null);
+      if (JSON.stringify(current.email) !== JSON.stringify(email)) {
+        await recordAudit(connection, { actorId, action: "setting.updated", entityType: "setting", before: { ...current.email }, after: { ...email }, details: "Updated email delivery settings" });
       }
     }
     if (changes.holidays !== undefined) {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { handleRouteError, jsonError, requireSameOrigin } from "@/lib/http";
+import { googleOAuthClient } from "@/features/gmail/gmail";
 import { countUsers } from "@/features/users/repository";
 import { clearedCookieOptions, getRequestUser, revokeUserSession, sessionCookieName } from "@/features/users/session";
 
@@ -8,7 +9,7 @@ export async function GET() {
   try {
     const user = await getRequestUser();
     const needsSetup = user ? false : (await countUsers()) === 0;
-    return NextResponse.json({ user, needsSetup });
+    return NextResponse.json({ user, needsSetup, googleSignIn: Boolean(googleOAuthClient()) });
   } catch (error) {
     return handleRouteError(error, "Session lookup");
   }

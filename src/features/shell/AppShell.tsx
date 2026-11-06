@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
-  AlertCircle, Activity, BriefcaseBusiness, Building2, Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, Clock3, Compass, FileText, Flame, KeyRound,
+  AlertCircle, Activity, Briefcase, BriefcaseBusiness, Building2, Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, Clock3, Compass, FileText, Flame, KeyRound,
   BellRing, LayoutDashboard, ListTodo, LogOut, Map, Menu, PanelLeftClose, PanelLeftOpen, Search, Settings2, ShieldCheck, SlidersHorizontal, Target, TrendingUp, UsersRound,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -14,6 +14,8 @@ import LeadDetailDialog from "@/features/leads/LeadDetailDialog";
 import LeadFormDialog from "@/features/leads/LeadFormDialog";
 import LeadListPage, { leadListViews, type LeadListView } from "@/features/leads/LeadListPage";
 import NotificationsMenu from "@/features/notifications/NotificationsMenu";
+import OpportunitiesPage from "@/features/opportunities/OpportunitiesPage";
+import { fetchOpportunities } from "@/features/opportunities/client";
 import PreferencesDialog from "@/features/notifications/PreferencesDialog";
 import AdminPage, { adminTabs, type AdminTab } from "@/features/admin/AdminPage";
 import LeadGenerationPage from "@/features/preview/LeadGenerationPage";
@@ -28,7 +30,7 @@ import { hasPrivilege } from "@/features/users/model";
 import { AppContext, useHashRoute, type AppContextValue, type ToastTone } from "./AppContext";
 import { fetchReference } from "./client";
 
-type NavItem = { id: string; label: string; icon: LucideIcon; privilege?: UserPrivilege; tone?: string; count?: "queued" | "tasks"; preview?: boolean; hideForRecruiter?: boolean };
+type NavItem = { id: string; label: string; icon: LucideIcon; privilege?: UserPrivilege; tone?: string; count?: "queued" | "tasks" | "opportunities"; preview?: boolean; hideForRecruiter?: boolean };
 
 const navigation: { title: string; items: NavItem[] }[] = [
   {
@@ -48,6 +50,7 @@ const navigation: { title: string; items: NavItem[] }[] = [
   {
     title: "TOOLS",
     items: [
+      { id: "opportunities", label: "Opportunities", icon: Briefcase, privilege: "view_leads", count: "opportunities", hideForRecruiter: true },
       { id: "lead-generation", label: "Lead generation", icon: Building2, privilege: "create_leads", preview: true },
       { id: "tasks", label: "Tasks & reminders", icon: ListTodo, count: "tasks" },
       { id: "trips", label: "Sales trip planner", icon: Compass, privilege: "plan_trips" },
@@ -57,7 +60,7 @@ const navigation: { title: string; items: NavItem[] }[] = [
   {
     title: "MANAGE",
     items: [
-      { id: "reports", label: "Reports & dashboard", icon: TrendingUp, privilege: "view_reports" },
+      { id: "reports", label: "Analytics", icon: TrendingUp, privilege: "view_reports" },
       { id: "targets", label: "Targets & templates", icon: Target, privilege: "manage_targets" },
       { id: "admin", label: "User management", icon: UsersRound, privilege: "manage_users" },
       { id: "values", label: "List of values", icon: Settings2, privilege: "manage_values" },
@@ -69,11 +72,11 @@ const navigation: { title: string; items: NavItem[] }[] = [
 
 const pageTitles: Record<string, string> = {
   home: "Action center", leads: "My leads", "all-leads": "All leads", cold: "Cold leads", warm: "Warm leads", hot: "Hot leads", client: "Clients",
-  queued: "Queued leads", archive: "Archive", lead: "Lead", "lead-generation": "Lead generation", tasks: "Tasks & reminders", trips: "Sales trip planner", planner: "Road visit planner",
-  reports: "Reports & dashboard", targets: "Targets & templates", admin: "User management", values: "List of values", devices: "Device authorization", settings: "Settings",
+  queued: "Queued leads", archive: "Archive", lead: "Lead", opportunities: "Opportunities", "lead-generation": "Lead generation", tasks: "Tasks & reminders", trips: "Sales trip planner", planner: "Road visit planner",
+  reports: "Analytics", targets: "Targets & templates", admin: "User management", values: "List of values", devices: "Device authorization", settings: "Settings",
 };
 
-export default function AppShell({ user, setUser, signOut }: { user: UserAccount; setUser: (user: UserAccount) => void; signOut: () => Promise<void> }) {
+export default function AppShell({ user, setUser, signOut, passwordSignIn }: { user: UserAccount; setUser: (user: UserAccount) => void; signOut: () => Promise<void>; passwordSignIn: boolean }) {
   const [route, navigate] = useHashRoute();
   const referenceFetcher = useCallback(() => fetchReference(), []);
   const { data: reference, error: referenceError, reload: reloadReference } = useAsyncData(referenceFetcher);
@@ -96,13 +99,14 @@ export default function AppShell({ user, setUser, signOut }: { user: UserAccount
   const shownLeadId = activeLeadId ?? routeLeadId;
 
   const countsFetcher = useCallback(async () => {
-    const [queued, tasks] = await Promise.all([
+    const [queued, tasks, opportunities] = await Promise.all([
       can("review_queued") ? fetchLeads({ state: "queued", pageSize: 1 }).then((page) => page.total).catch(() => 0) : Promise.resolve(0),
       fetchTasks({ status: "open" }).then((result) => result.tasks.length).catch(() => 0),
+      can("create_leads") ? fetchOpportunities({ status: "new", pageSize: 1 }).then((page) => page.counts.new).catch(() => 0) : Promise.resolve(0),
     ]);
-    return { queued, tasks };
+    return { queued, tasks, opportunities };
   }, [can]);
-  const counts = useAsyncData(countsFetcher, dataVersion).data ?? { queued: 0, tasks: 0 };
+  const counts = useAsyncData(countsFetcher, dataVersion).data ?? { queued: 0, tasks: 0, opportunities: 0 };
 
   const notify = useCallback((message: string, tone: ToastTone = "success") => {
     setToast({ id: Date.now(), message, tone });
@@ -131,6 +135,7 @@ export default function AppShell({ user, setUser, signOut }: { user: UserAccount
     if (!outcome) return;
     const outcomes: Record<string, [string, ToastTone]> = {
       connected: ["Gmail connected. Open a lead's Emails tab to see messages.", "success"],
+      declined: ["Signed in without Gmail access. Connect it from a lead's Emails tab when you need it.", "info"],
       denied: ["Gmail connection was cancelled.", "error"],
       failed: ["Gmail could not be connected. Try again.", "error"],
       not_configured: ["Gmail is not configured on this server.", "error"],
@@ -185,6 +190,7 @@ export default function AppShell({ user, setUser, signOut }: { user: UserAccount
     const listKey = `${view}:${route.query.toString()}`;
     if (leadListViews.includes(view as LeadListView)) return <LeadListPage key={listKey} view={view as LeadListView} />;
     if (view === "lead") return <LeadListPage key={listKey} view="all-leads" />;
+    if (view === "opportunities") return can("view_leads") ? <OpportunitiesPage /> : <NoAccess />;
     if (view === "tasks") return <TasksPage />;
     if (view === "reports") return can("view_reports") ? <ReportsPage /> : <NoAccess />;
     if (adminTabs.includes(view as AdminTab)) return <AdminPage tab={view as AdminTab} />;
@@ -268,7 +274,7 @@ export default function AppShell({ user, setUser, signOut }: { user: UserAccount
                 {menuOpen && (
                   <div className="menu-dropdown" role="menu">
                     <div className="menu-heading"><strong>{user.name}</strong><small>{roleLabel(user.role)}</small></div>
-                    <button role="menuitem" onClick={() => { setMenuOpen(false); setPasswordOpen(true); }}><KeyRound size={14} /> Change password</button>
+                    {passwordSignIn && (<button role="menuitem" onClick={() => { setMenuOpen(false); setPasswordOpen(true); }}><KeyRound size={14} /> Change password</button>)}
                     <button role="menuitem" onClick={() => { setMenuOpen(false); setPrefsOpen(true); }}><BellRing size={14} /> Notification preferences</button>
                     <button role="menuitem" onClick={() => void signOut()}><LogOut size={14} /> Sign out</button>
                   </div>

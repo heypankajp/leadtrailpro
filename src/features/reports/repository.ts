@@ -1,5 +1,5 @@
 import { getDatabasePool, fromSqlDateTime, toSqlDateTime, type Queryable } from "@/lib/db";
-import { addDaysYmd, businessDaysBetween, daysBetween, formatYmd, periodRange, startOfWeekYmd, startOfMonthYmd, todayYmd, zonedParts, type DateRange, type ReportPeriod } from "@/lib/dates";
+import { addDaysYmd, businessDaysBetween, daysBetween, formatYmd, periodRange, startOfWeekYmd, startOfMonthYmd, todayYmd, zonedParts, type CustomRange, type DateRange, type ReportPeriod } from "@/lib/dates";
 import { selectLeads } from "@/features/leads/repository";
 import type { LeadSummary } from "@/features/leads/model";
 import { listTasks } from "@/features/tasks/repository";
@@ -68,10 +68,10 @@ function scaledTargets(template: TargetTemplate | null, range: DateRange, holida
   };
 }
 
-export async function performanceReport(period: ReportPeriod, viewer: UserAccount, userId: number | null, filters: ReportFilters = { stage: null, templateId: null }): Promise<{ range: DateRange; rows: PerformanceRow[]; series: { date: string; calls: number; emails: number; visits: number; leads: number }[] }> {
+export async function performanceReport(period: ReportPeriod, viewer: UserAccount, userId: number | null, filters: ReportFilters = { stage: null, templateId: null }, custom: CustomRange | null = null): Promise<{ range: DateRange; rows: PerformanceRow[]; series: { date: string; calls: number; emails: number; visits: number; leads: number }[] }> {
   const db = getDatabasePool();
   const holidays = await listHolidayDates(db);
-  const range = periodRange(period, undefined, undefined, holidays);
+  const range = periodRange(period, undefined, undefined, holidays, custom);
   const teamWide = hasPrivilege(viewer, "view_team_reports");
   let users = await listUsers({ includeInactive: true }, db);
   if (!teamWide) users = users.filter((user) => user.id === viewer.id);
@@ -139,9 +139,9 @@ export async function performanceReport(period: ReportPeriod, viewer: UserAccoun
   return { range, rows, series: [...buckets.values()] };
 }
 
-export async function drilldown(period: ReportPeriod, viewer: UserAccount, userId: number, metric: DrilldownMetric): Promise<{ activities?: { id: number; leadId: number; leadName: string; summary: string; body: string | null; occurredAt: string }[]; leads?: LeadSummary[]; tasks?: Task[] }> {
+export async function drilldown(period: ReportPeriod, viewer: UserAccount, userId: number, metric: DrilldownMetric, custom: CustomRange | null = null): Promise<{ activities?: { id: number; leadId: number; leadName: string; summary: string; body: string | null; occurredAt: string }[]; leads?: LeadSummary[]; tasks?: Task[] }> {
   const db = getDatabasePool();
-  const range = periodRange(period, undefined, undefined, await listHolidayDates(db));
+  const range = periodRange(period, undefined, undefined, await listHolidayDates(db), custom);
   const startSql = toSqlDateTime(range.start);
   const endSql = toSqlDateTime(range.end);
   if (metric === "leads") {

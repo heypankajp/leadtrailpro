@@ -62,8 +62,8 @@ describe("Accessibility", () => {
     await page.nav("Tasks & reminders");
     await page.heading("Tasks & reminders");
     await audit("tasks");
-    await page.nav("Reports & dashboard");
-    await page.heading("Reports & dashboard");
+    await page.nav("Analytics");
+    await page.heading("Analytics");
     await page.wait(By.css(".report-table"));
     await audit("reports");
     await page.nav("Settings");

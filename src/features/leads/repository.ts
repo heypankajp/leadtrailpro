@@ -7,6 +7,8 @@ import { assertListValue, getListValue } from "@/features/list-values/repository
 import { notifyUsers } from "@/features/notifications/repository";
 import { getUser, listUsersWithPrivilege } from "@/features/users/repository";
 import { hasPrivilege } from "@/features/users/model";
+import { claimOpportunityForLead } from "@/features/opportunities/claim";
+import { matchLead, normalizeCompanyName, type MatchableLead, type MatchedOn } from "@/features/trips/matching";
 import type { UserAccount } from "@/features/users/model";
 import { activityTypes } from "./model";
 import type { ActivityType, LeadActivity, LeadFilters, LeadInput, LeadPage, LeadRecordState, LeadSummary, LoggableActivityType } from "./model";
@@ -185,7 +187,7 @@ export async function listLeads(filters: LeadFilters, viewer: UserAccount): Prom
 
 // ---- Activities ----
 
-type ActivityRow = { id: number; leadId: number; userId: number; userName: string; type: string; summary: string; body: string | null; valueCode: string | null; meta: string | Record<string, unknown> | null; occurredAt: string; createdAt: string };
+type ActivityRow = { id: number; leadId: number; userId: number | null; userName: string; type: string; summary: string; body: string | null; valueCode: string | null; meta: string | Record<string, unknown> | null; occurredAt: string; createdAt: string };
 
 const toActivity = (row: ActivityRow): LeadActivity => {
   let meta: Record<string, unknown> | null = null;
@@ -197,7 +199,7 @@ const toActivity = (row: ActivityRow): LeadActivity => {
   return {
     id: Number(row.id),
     leadId: Number(row.leadId),
-    userId: Number(row.userId),
+    userId: row.userId === null ? null : Number(row.userId),
     userName: row.userName,
     type: activityTypes.includes(row.type as ActivityType) ? (row.type as ActivityType) : "edit",
     summary: row.summary,
@@ -211,15 +213,15 @@ const toActivity = (row: ActivityRow): LeadActivity => {
 
 export async function listActivities(leadId: number, db: Queryable = getDatabasePool()): Promise<LeadActivity[]> {
   const { rows } = await db.query(
-    `SELECT a.id, a.lead_id AS "leadId", a.user_id AS "userId", CONCAT(u.first_name, ' ', u.last_name) AS "userName", a.activity_type AS type,
+    `SELECT a.id, a.lead_id AS "leadId", a.user_id AS "userId", COALESCE(NULLIF(CONCAT(u.first_name, ' ', u.last_name), ' '), 'LeadTrailPro') AS "userName", a.activity_type AS type,
        a.summary, a.body, a.value_code AS "valueCode", a.meta, a.occurred_at AS "occurredAt", a.created_at AS "createdAt"
-     FROM lead_activities a JOIN users u ON u.id = a.user_id WHERE a.lead_id = ? ORDER BY a.occurred_at DESC, a.id DESC LIMIT 500`,
+     FROM lead_activities a LEFT JOIN users u ON u.id = a.user_id WHERE a.lead_id = ? ORDER BY a.occurred_at DESC, a.id DESC LIMIT 500`,
     [leadId],
   );
   return (rows as ActivityRow[]).map(toActivity);
 }
 
-export type ActivityInput = { leadId: number; userId: number; type: ActivityType; summary: string; body?: string | null; valueCode?: string | null; meta?: Record<string, unknown> | null; occurredAt?: Date };
+export type ActivityInput = { leadId: number; userId: number | null; type: ActivityType; summary: string; body?: string | null; valueCode?: string | null; meta?: Record<string, unknown> | null; occurredAt?: Date; /** false: a system entry (job listing) that does not count as sales activity. */ touch?: boolean };
 
 /** Appends a timeline entry and bumps the lead's last-activity timestamp. Call inside the caller's transaction. */
 export async function addActivity(db: Queryable, input: ActivityInput): Promise<number> {
@@ -229,7 +231,7 @@ export async function addActivity(db: Queryable, input: ActivityInput): Promise<
     `INSERT INTO lead_activities (lead_id, user_id, activity_type, summary, body, value_code, meta, occurred_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
     [input.leadId, input.userId, input.type, input.summary.slice(0, 500), input.body ?? null, input.valueCode ?? null, input.meta ? JSON.stringify(input.meta) : null, toSqlDateTime(occurredAt), toSqlDateTime(now)],
   );
-  await db.query("UPDATE leads SET last_activity_at = GREATEST(last_activity_at, ?::timestamp) WHERE id = ?", [toSqlDateTime(occurredAt), input.leadId]);
+  if (input.touch !== false) await db.query("UPDATE leads SET last_activity_at = GREATEST(last_activity_at, ?::timestamp) WHERE id = ?", [toSqlDateTime(occurredAt), input.leadId]);
   return insertId(result);
 }
 
@@ -250,9 +252,9 @@ export async function logActivity(lead: LeadSummary, actor: UserAccount, entry: 
       after: { type: entry.type, summary: entry.summary || defaults[entry.type], body: entry.body || null }, details: `${actor.name} logged a ${entry.type} on ${lead.clientName}`,
     });
     const { rows } = await connection.query(
-      `SELECT a.id, a.lead_id AS "leadId", a.user_id AS "userId", CONCAT(u.first_name, ' ', u.last_name) AS "userName", a.activity_type AS type,
+      `SELECT a.id, a.lead_id AS "leadId", a.user_id AS "userId", COALESCE(NULLIF(CONCAT(u.first_name, ' ', u.last_name), ' '), 'LeadTrailPro') AS "userName", a.activity_type AS type,
          a.summary, a.body, a.value_code AS "valueCode", a.meta, a.occurred_at AS "occurredAt", a.created_at AS "createdAt"
-       FROM lead_activities a JOIN users u ON u.id = a.user_id WHERE a.id = ?`,
+       FROM lead_activities a LEFT JOIN users u ON u.id = a.user_id WHERE a.id = ?`,
       [id],
     );
     return toActivity((rows as ActivityRow[])[0]);
@@ -284,18 +286,91 @@ async function enforceStatusReason(db: Queryable, statusId: number, statusReason
   return statusReasonId;
 }
 
+// ---- Company matching (TRIP-07, duplicate check on creation) ----
+
+export type MatchableLeadRow = MatchableLead & { ownerId: number; ownerName: string; clientEmails: string[] };
+
+const emailList = (value: unknown): string[] => {
+  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string");
+  if (typeof value === "string") { try { const parsed = JSON.parse(value) as unknown; return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : []; } catch { return []; } }
+  return [];
+};
+
+/** Every lead with the fields the company matcher needs (`features/trips/matching`), plus its owner and client emails. */
+export async function listMatchableLeads(db: Queryable = getDatabasePool()): Promise<MatchableLeadRow[]> {
+  const { rows } = await db.query(`
+    SELECT l.id, l.client_name AS "clientName", l.company_url AS "companyUrl", l.contact_phone AS "contactPhone", l.contact_alt_phone AS "contactAltPhone",
+      l.address, ci.value AS city, st.code AS "statusCode", st.value AS status, sr.value AS "statusReason", l.record_state AS "recordState", l.last_activity_at AS "lastActivityAt",
+      l.owner_id AS "ownerId", CONCAT(o.first_name, ' ', o.last_name) AS "ownerName", l.client_emails AS "clientEmails"
+    FROM leads l
+    JOIN list_values st ON st.id = l.status_id
+    JOIN users o ON o.id = l.owner_id
+    LEFT JOIN list_values sr ON sr.id = l.status_reason_id
+    LEFT JOIN list_values ci ON ci.id = l.city_id
+  `);
+  type Row = Omit<MatchableLeadRow, "statusLabel" | "lastActivityAt" | "clientEmails"> & { statusReason: string | null; lastActivityAt: string; clientEmails: unknown };
+  return (rows as Row[]).map((row) => ({
+    ...row, id: Number(row.id), ownerId: Number(row.ownerId), clientEmails: emailList(row.clientEmails),
+    statusLabel: statusLabel(row.status, row.statusReason), lastActivityAt: fromSqlDateTime(row.lastActivityAt) ?? row.lastActivityAt,
+  }));
+}
+
+export type DuplicateMatch = { lead: MatchableLeadRow; matchedOn: MatchedOn | "email"; exact: boolean };
+const exactMatches: readonly string[] = ["email", "domain", "phone", "name_address", "name"];
+const liveliest = (a: MatchableLeadRow, b: MatchableLeadRow) => (a.recordState === "archived" ? 1 : 0) - (b.recordState === "archived" ? 1 : 0) || b.lastActivityAt.localeCompare(a.lastActivityAt);
+
+/**
+ * The existing lead a new one would duplicate: the same client email, website domain, phone number, or company name
+ * counts as exact; a very similar name at the same address as similar. An archived lead never blocks: it is reported
+ * as similar so the person can restore it instead of creating a second record.
+ */
+export async function findDuplicateLead(input: Pick<LeadInput, "clientName" | "companyUrl" | "contactPhone" | "contactAltPhone" | "address" | "clientEmails">, db: Queryable = getDatabasePool(), excludeId: number | null = null): Promise<DuplicateMatch | null> {
+  const leads = (await listMatchableLeads(db)).filter((lead) => lead.id !== excludeId);
+  const result = (lead: MatchableLeadRow, matchedOn: MatchedOn | "email"): DuplicateMatch => ({ lead, matchedOn, exact: exactMatches.includes(matchedOn) && lead.recordState !== "archived" });
+  const emails = new Set(input.clientEmails.map((email) => email.trim().toLowerCase()).filter(Boolean));
+  const byEmail = emails.size ? leads.filter((lead) => lead.clientEmails.some((email) => emails.has(email.trim().toLowerCase()))).sort(liveliest)[0] : undefined;
+  if (byEmail) return result(byEmail, "email");
+  const facts = { name: input.clientName, website: input.companyUrl, phone: input.contactPhone, address: input.address };
+  const match = matchLead(facts, leads) ?? (input.contactAltPhone ? matchLead({ ...facts, phone: input.contactAltPhone }, leads) : null);
+  const found = (id: number) => leads.find((lead) => lead.id === id)!;
+  if (match && exactMatches.includes(match.matchedOn)) return result(found(match.lead.id), match.matchedOn);
+  const name = normalizeCompanyName(input.clientName);
+  const sameName = name ? leads.filter((lead) => normalizeCompanyName(lead.clientName) === name).sort(liveliest)[0] : undefined;
+  if (sameName) return result(sameName, "name");
+  return match ? result(found(match.lead.id), match.matchedOn) : null;
+}
+
+const duplicateWording: Record<MatchedOn | "email", string> = {
+  email: "the same client email", domain: "the same website", phone: "the same phone number", name_address: "the same name and address", name: "the same company name", similar_name_address: "a very similar name at the same address",
+};
+
+export type CreateLeadOptions = { allowSimilar?: boolean; opportunityId?: number | null };
+
 /** A first-contact date earlier than yesterday needs Admin approval unless the creator can approve queued leads. */
 export function isHistoricalFirstContact(firstContactDate: string): boolean {
   return firstContactDate < addDaysYmd(todayYmd(), -1);
 }
 
-export async function createLead(input: LeadInput, actor: UserAccount, ownerId: number | null): Promise<LeadSummary> {
+export async function createLead(input: LeadInput, actor: UserAccount, ownerId: number | null, options: CreateLeadOptions = {}): Promise<LeadSummary> {
   return withTransaction(async (connection) => {
     await validateListReferences(connection, input);
+    const duplicate = await findDuplicateLead(input, connection);
+    if (duplicate && (duplicate.exact || !options.allowSimilar)) {
+      const found = duplicate.lead;
+      const where = found.recordState === "archived" ? "an archived lead" : `a ${found.statusLabel} lead owned by ${found.ownerName}`;
+      const how = duplicateWording[duplicate.matchedOn];
+      const message = duplicate.exact
+        ? `${found.clientName} already exists as ${where} (${how}). Open that lead, or ask its owner or an administrator to transfer it to you.`
+        : `${found.clientName} looks like the same company (${how}; ${where}). Open it to check, or save anyway if this is a different company.`;
+      throw new HttpError(409, message, {
+        duplicate: { leadId: found.id, clientName: found.clientName, ownerId: found.ownerId, ownerName: found.ownerName, statusLabel: found.statusLabel, recordState: found.recordState, matchedOn: duplicate.matchedOn },
+        canOverride: !duplicate.exact,
+      });
+    }
     const statusReasonId = await enforceStatusReason(connection, input.statusId, input.statusReasonId);
     let owner = actor;
     if (ownerId && ownerId !== actor.id) {
-      if (!hasPrivilege(actor, "reassign_leads")) throw new HttpError(403, "Only an administrator can create a lead for someone else.");
+      if (!hasPrivilege(actor, "reassign_leads")) throw new HttpError(403, "You do not have permission to create a lead for someone else.");
       const candidate = await getUser(ownerId, connection);
       if (!candidate || !candidate.active || candidate.role === "recruiter") throw new HttpError(400, "The owner must be an active Sales Manager or Admin.");
       owner = candidate;
@@ -323,11 +398,19 @@ export async function createLead(input: LeadInput, actor: UserAccount, ownerId: 
       summary: queued ? `Lead created and queued for approval (first contact ${input.firstContactDate})` : `Lead created as ${lead.status}`,
       valueCode: lead.statusCode, meta: { statusId: lead.statusId, queued },
     });
+    if (options.opportunityId) {
+      const claimed = await claimOpportunityForLead(connection, options.opportunityId, { id, clientName: lead.clientName }, actor, now);
+      await addActivity(connection, {
+        leadId: id, userId: actor.id, type: "listing", occurredAt: now, touch: false, meta: { opportunityId: options.opportunityId },
+        summary: `Created from the opportunity pool: ${claimed.listings.length} job listing${claimed.listings.length === 1 ? "" : "s"}`,
+        body: claimed.listings.map((item) => `${item.title} (${item.source}) ${item.url}`).join("\n") || null,
+      });
+    }
     if (lead.bdActionId) {
       const action = await getListValue(lead.bdActionId, connection);
       if (action) await addActivity(connection, { leadId: id, userId: actor.id, type: "bd_action", summary: action.value, valueCode: action.code, occurredAt: now });
     }
-    await recordAudit(connection, { actorId: actor.id, action: queued ? "lead.queued" : "lead.created", entityType: "lead", entityId: id, after: leadAuditView(lead), details: `${actor.name} created ${lead.clientName}` }, now);
+    await recordAudit(connection, { actorId: actor.id, action: queued ? "lead.queued" : "lead.created", entityType: "lead", entityId: id, after: leadAuditView(lead), details: `${actor.name} created ${lead.clientName}${duplicate ? ` (saved although it resembles ${duplicate.lead.clientName}, lead #${duplicate.lead.id})` : ""}` }, now);
     if (queued) {
       const reviewers = await listUsersWithPrivilege("review_queued", connection);
       await notifyUsers(connection, { userIds: reviewers.map((user) => user.id), actorId: actor.id, type: "queued_lead", title: `Queued lead awaiting approval: ${lead.clientName}`, body: `${actor.name} created it with first contact on ${input.firstContactDate}.`, leadId: id });
@@ -500,7 +583,7 @@ export async function bulkSetState(ids: number[], state: "active" | "archived", 
 }
 
 export async function bulkReassign(ids: number[], newOwnerId: number, reason: string, actor: UserAccount): Promise<number> {
-  if (!hasPrivilege(actor, "reassign_leads")) throw new HttpError(403, "Only an administrator can reassign leads in bulk.");
+  if (!hasPrivilege(actor, "reassign_leads")) throw new HttpError(403, "You do not have permission to reassign leads.");
   let count = 0;
   for (const id of ids) {
     const lead = await getLead(id);

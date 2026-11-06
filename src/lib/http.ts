@@ -3,9 +3,12 @@ import { NextResponse } from "next/server";
 
 export class HttpError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** Extra fields for the JSON body, for example the existing lead a duplicate would clash with. */
+  details: Record<string, unknown> | null;
+  constructor(status: number, message: string, details: Record<string, unknown> | null = null) {
     super(message);
     this.status = status;
+    this.details = details;
   }
 }
 
@@ -17,7 +20,7 @@ export function jsonError(status: number, error: string) {
 export function handleRouteError(error: unknown, context: string) {
   // Let Next.js keep its own signals (for example the prerender bailout thrown by cookies()).
   unstable_rethrow(error);
-  if (error instanceof HttpError) return jsonError(error.status, error.message);
+  if (error instanceof HttpError) return NextResponse.json({ error: error.message, ...(error.details ?? {}) }, { status: error.status });
   // PostgreSQL SQLSTATE codes: unique_violation, foreign_key_violation, check_violation, and the data exceptions.
   const code = (error as { code?: string }).code;
   if (code === "23505") return jsonError(409, "A record with the same unique value already exists.");

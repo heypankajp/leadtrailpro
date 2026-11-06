@@ -12,6 +12,8 @@ export type ReferenceData = {
   holidays: string[];
   targetTemplates: TargetTemplate[];
   mailerConfigured: boolean;
+  /** False when a Google client is configured: no passwords, resets, or two-factor codes anywhere. */
+  passwordSignIn: boolean;
   today: string;
   timeZone: string;
 };

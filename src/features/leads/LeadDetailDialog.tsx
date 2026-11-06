@@ -174,7 +174,7 @@ export default function LeadDetailDialog({ leadId, onClose }: { leadId: number; 
         )}
         {tab === "timeline" && <TimelineTab detail={detail} onLogged={(message) => refresh(message ?? "Activity recorded")} />}
         {tab === "collaboration" && <CollaborationTab leadId={lead.id} attachments={detail.attachments} canPost={can("collaborate") && lead.recordState !== "archived"} onChanged={() => { reload(); bumpData(); }} />}
-        {tab === "emails" && <LeadEmails leadId={lead.id} addresses={lead.clientEmails} />}
+        {tab === "emails" && <LeadEmails leadId={lead.id} addresses={lead.clientEmails} attachments={detail.attachments} />}
         {(tab === "files" || tab === "profiles") && (
           <FilesTab key={tab} category={tab === "files" ? "document" : "profile"} files={tab === "files" ? documents : profiles} leadId={lead.id} onChanged={(message) => refresh(message)} />
         )}

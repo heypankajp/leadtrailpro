@@ -625,6 +625,115 @@ const migrations = [
       `);
     },
   },
+  {
+    version: 11,
+    name: "opportunity pool: keyword searches, runs, one card per company, its listings, not-relevant reasons, system timeline entries (OPP-*)",
+    async run(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS opportunity_searches (
+          id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          name VARCHAR(120) NOT NULL,
+          keyword VARCHAR(200) NOT NULL,
+          location VARCHAR(160) NOT NULL DEFAULT '',
+          job_type VARCHAR(60) NOT NULL DEFAULT '',
+          max_listings INTEGER NULL,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_by INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
+          last_run_at TIMESTAMP(0) NULL,
+          last_found INTEGER NOT NULL DEFAULT 0,
+          last_new INTEGER NOT NULL DEFAULT 0,
+          created_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW},
+          updated_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW}
+        )
+      `);
+      await stampUpdatedAt(client, "opportunity_searches");
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS opportunity_runs (
+          id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          trigger_kind VARCHAR(10) NOT NULL CHECK (trigger_kind IN ('scheduled', 'manual')),
+          status VARCHAR(10) NOT NULL CHECK (status IN ('running', 'success', 'partial', 'failed')),
+          actor_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
+          started_at TIMESTAMP(0) NOT NULL,
+          finished_at TIMESTAMP(0) NULL,
+          listings_found INTEGER NOT NULL DEFAULT 0,
+          new_companies INTEGER NOT NULL DEFAULT 0,
+          new_listings INTEGER NOT NULL DEFAULT 0,
+          attached INTEGER NOT NULL DEFAULT 0,
+          details TEXT NOT NULL DEFAULT ''
+        )
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS opportunities (
+          id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          company_key VARCHAR(200) NOT NULL UNIQUE,
+          company_name VARCHAR(200) NOT NULL,
+          website VARCHAR(500) NOT NULL DEFAULT '',
+          location VARCHAR(160) NOT NULL DEFAULT '',
+          status VARCHAR(20) NOT NULL CHECK (status IN ('new', 'attached', 'converted', 'not_relevant')),
+          lead_id INTEGER NULL REFERENCES leads(id) ON DELETE SET NULL,
+          matched_lead_id INTEGER NULL REFERENCES leads(id) ON DELETE SET NULL,
+          revived BOOLEAN NOT NULL DEFAULT FALSE,
+          reason_id INTEGER NULL REFERENCES list_values(id) ON DELETE SET NULL,
+          reason_scope VARCHAR(10) NULL,
+          reason_note VARCHAR(500) NOT NULL DEFAULT '',
+          decided_by INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
+          decided_at TIMESTAMP(0) NULL,
+          listings_count INTEGER NOT NULL DEFAULT 0,
+          latest_title VARCHAR(200) NOT NULL DEFAULT '',
+          first_seen_at TIMESTAMP(0) NOT NULL,
+          last_seen_at TIMESTAMP(0) NOT NULL,
+          created_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW},
+          updated_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW}
+        )
+      `);
+      await stampUpdatedAt(client, "opportunities");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_opportunities_status ON opportunities (status, last_seen_at)");
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS opportunity_listings (
+          id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          opportunity_id INTEGER NOT NULL REFERENCES opportunities(id) ON DELETE CASCADE,
+          source VARCHAR(20) NOT NULL,
+          source_key VARCHAR(300) NOT NULL,
+          title VARCHAR(200) NOT NULL,
+          location VARCHAR(160) NOT NULL DEFAULT '',
+          employment_type VARCHAR(60) NULL,
+          posted_at DATE NULL,
+          url VARCHAR(2048) NOT NULL,
+          search_id INTEGER NULL REFERENCES opportunity_searches(id) ON DELETE SET NULL,
+          lead_id INTEGER NULL REFERENCES leads(id) ON DELETE SET NULL,
+          first_seen_at TIMESTAMP(0) NOT NULL,
+          last_seen_at TIMESTAMP(0) NOT NULL,
+          CONSTRAINT uq_opportunity_listings UNIQUE (opportunity_id, source_key)
+        )
+      `);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_opportunity_listings_lead ON opportunity_listings (lead_id)");
+      // Timeline entries written by the scheduled search (no person behind them).
+      await client.query("ALTER TABLE lead_activities ALTER COLUMN user_id DROP NOT NULL");
+      const reasons = [
+        ["existing_client", "Existing client", 1], ["existing_lead", "Existing lead", 2], ["not_target_industry", "Not our industry", 3],
+        ["position_not_relevant", "Role not relevant", 4], ["company_not_suitable", "Company not suitable", 5], ["duplicate", "Duplicate", 6],
+        ["location_not_relevant", "Location not relevant", 7], ["other", "Other", 8],
+      ];
+      for (const [code, value, order] of reasons) {
+        await client.query("INSERT INTO list_values (list_key, code, value, sort_order) VALUES ('opportunity_reason', $1, $2, $3) ON CONFLICT DO NOTHING", [code, value, order]);
+      }
+      await client.query(
+        "INSERT INTO app_settings (setting_key, value_json) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        ["opportunities", JSON.stringify({ enabled: true, days: [1, 3, 5], time: "06:30", maxListings: 200, notify: true })],
+      );
+    },
+  },
+  {
+    version: 12,
+    name: "Google-only sign-in: accounts without a stored password (AUTH-03); email delivery settings (sending mailbox, report emails switch)",
+    async run(client) {
+      await client.query("ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL");
+      await client.query(
+        "INSERT INTO app_settings (setting_key, value_json) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        ["email", JSON.stringify({ senderUserId: null, reportEmails: false })],
+      );
+    },
+  },
 ];
 
 if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port > 65535 || !/^[a-z_][a-z0-9_]*$/.test(databaseName)) {

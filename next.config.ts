@@ -1,7 +1,12 @@
 import type { NextConfig } from "next";
 
+// Hosts the development server (next dev) may serve to besides localhost, for example the public domain when a
+// machine runs `docker compose up` behind a proxy; the production image (standalone) ignores this. Add more with
+// ALLOWED_DEV_ORIGINS=host1,host2 (feedback from the leadtrail.pro deployment, November 5, 2026).
+const allowedDevOrigins = ["leadtrail.pro", "www.leadtrail.pro", ...(process.env.ALLOWED_DEV_ORIGINS ?? "").split(",").map((host) => host.trim()).filter(Boolean)];
+
 const nextConfig: NextConfig = {
-  /* config options here */
+  allowedDevOrigins,
   output: "standalone",
   experimental: {
     agentUpgrade: "security",

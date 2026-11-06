@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { handleRouteError, jsonError, readJsonBody, requireSameOrigin } from "@/lib/http";
 import { parseCreateUser } from "@/features/users/model";
 import { countUsers, createUser, listDirectory, listUsers } from "@/features/users/repository";
-import { getRequestUser, hasManagementKey, hasPrivilege } from "@/features/users/session";
+import { getRequestUser, hasManagementKey, hasPrivilege, passwordSignInEnabled } from "@/features/users/session";
 
 export async function GET(request: Request) {
   try {
@@ -36,12 +36,13 @@ export async function POST(request: Request) {
     }
     const input = parseCreateUser(await readJsonBody(request));
     if (!input) {
-      return jsonError(400, "Enter valid user details, a password with at least 12 characters, a role, and valid privileges.");
+      return jsonError(400, "Enter valid user details, a role, valid privileges, and (without Google sign-in) a password with at least 12 characters.");
     }
     if (bootstrap) {
       if ((await countUsers()) > 0) return jsonError(403, "The bootstrap key is disabled after the first platform account is created.");
       input.role = "admin";
     }
+    if (passwordSignInEnabled() && !input.password) return jsonError(400, "A password with at least 12 characters is required on this server.");
     const user = await createUser(input, actor?.id ?? null);
     return NextResponse.json({ user }, { status: 201 });
   } catch (error) {

@@ -79,7 +79,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    command: ["sh", "-c", "node scripts/create-database.mjs && node scripts/create-app-user.mjs"]
+    command: ["sh", "-c", "node scripts/create-database.mjs && node scripts/create-app-user.mjs && node scripts/seed-users.mjs"]
 
   # ---------------------------------------------------------------------------
   # End-to-end tests (profile "test"). scripts/e2e.sh wires these together:

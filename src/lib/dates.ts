@@ -135,10 +135,16 @@ export function daysBetween(startYmd: string, endExclusiveYmd: string): number {
   return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86_400_000);
 }
 
-export const reportPeriods = ["today", "yesterday", "this_week", "last_week", "month_to_date", "last_month", "year_to_date"] as const;
+export const reportPeriods = ["last_24h", "last_7d", "last_30d", "last_90d", "last_12m", "today", "yesterday", "this_week", "last_week", "month_to_date", "last_month", "year_to_date", "custom"] as const;
 export type ReportPeriod = (typeof reportPeriods)[number];
 
 export const reportPeriodLabels: Record<ReportPeriod, string> = {
+  last_24h: "Last 24 hours",
+  last_7d: "Last 7 days",
+  last_30d: "Last 30 days",
+  last_90d: "Last 90 days",
+  last_12m: "Last 12 months",
+  custom: "Custom",
   today: "Today",
   yesterday: "Yesterday",
   this_week: "This week",
@@ -149,13 +155,20 @@ export const reportPeriodLabels: Record<ReportPeriod, string> = {
 };
 
 export type DateRange = { startYmd: string; endExclusiveYmd: string; start: Date; end: Date };
+/** A custom report range: both dates inclusive, `YYYY-MM-DD`. */
+export type CustomRange = { from: string; to: string };
+export const maxCustomRangeDays = 731;
+
+export function customRangeFrom(from: string | null | undefined, to: string | null | undefined): CustomRange | null {
+  return from && to && isValidYmd(from) && isValidYmd(to) ? { from, to } : null;
+}
 
 export function rangeFromYmd(startYmd: string, endExclusiveYmd: string, timeZone = businessTimeZone()): DateRange {
   return { startYmd, endExclusiveYmd, start: startOfDayUtc(startYmd, timeZone), end: startOfDayUtc(endExclusiveYmd, timeZone) };
 }
 
 /** Calendar range for a report period. "Yesterday" uses the previous business day (weekends and holidays skipped), per the BRD. */
-export function periodRange(period: ReportPeriod, now = new Date(), timeZone = businessTimeZone(), holidays: readonly string[] = []): DateRange {
+export function periodRange(period: ReportPeriod, now = new Date(), timeZone = businessTimeZone(), holidays: readonly string[] = [], custom: CustomRange | null = null): DateRange {
   const today = todayYmd(now, timeZone);
   const tomorrow = addDaysYmd(today, 1);
   switch (period) {
@@ -179,6 +192,25 @@ export function periodRange(period: ReportPeriod, now = new Date(), timeZone = b
     }
     case "year_to_date":
       return rangeFromYmd(`${today.slice(0, 4)}-01-01`, tomorrow, timeZone);
+    case "last_24h": {
+      const start = new Date(now.getTime() - 86_400_000);
+      return { startYmd: todayYmd(start, timeZone), endExclusiveYmd: tomorrow, start, end: now };
+    }
+    case "last_7d":
+      return rangeFromYmd(addDaysYmd(today, -6), tomorrow, timeZone);
+    case "last_30d":
+      return rangeFromYmd(addDaysYmd(today, -29), tomorrow, timeZone);
+    case "last_90d":
+      return rangeFromYmd(addDaysYmd(today, -89), tomorrow, timeZone);
+    case "last_12m":
+      return rangeFromYmd(addMonthsYmd(today, -12), tomorrow, timeZone);
+    case "custom": {
+      const from = custom && isValidYmd(custom.from) ? custom.from : startOfWeekYmd(today);
+      let to = custom && isValidYmd(custom.to) ? custom.to : today;
+      if (to < from) to = from;
+      if (daysBetween(from, addDaysYmd(to, 1)) > maxCustomRangeDays) to = addDaysYmd(from, maxCustomRangeDays - 1);
+      return rangeFromYmd(from, addDaysYmd(to, 1), timeZone);
+    }
   }
 }
 

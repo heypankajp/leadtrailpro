@@ -24,7 +24,7 @@ export type LeadDetail = {
 
 export const fetchLeads = (query: LeadQuery) => api<LeadPage>(`/api/leads${toQuery(query)}`);
 export const fetchLead = (id: number) => api<LeadDetail>(`/api/leads/${id}`);
-export const createLead = (input: LeadInput & { ownerId?: number | null }) => api<{ lead: LeadSummary }>("/api/leads", { method: "POST", json: input });
+export const createLead = (input: LeadInput & { ownerId?: number | null; opportunityId?: number | null; allowSimilar?: boolean }) => api<{ lead: LeadSummary }>("/api/leads", { method: "POST", json: input });
 export const updateLead = (id: number, changes: Partial<LeadInput>) => api<{ lead: LeadSummary }>(`/api/leads/${id}`, { method: "PATCH", json: changes });
 export const transferLead = (id: number, ownerId: number, reason: string) => api<{ lead: LeadSummary }>(`/api/leads/${id}/transfer`, { method: "POST", json: { ownerId, reason } });
 export const reviewLead = (id: number, approve: boolean, comment: string) => api<{ lead: LeadSummary }>(`/api/leads/${id}/review`, { method: "POST", json: { approve, comment } });

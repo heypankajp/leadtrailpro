@@ -1,7 +1,7 @@
 import { api } from "@/lib/api";
 import type { CreateUserInput, UserAccount } from "@/features/users/model";
 
-export type SessionResponse = { user: UserAccount | null; needsSetup: boolean };
+export type SessionResponse = { user: UserAccount | null; needsSetup: boolean; googleSignIn: boolean };
 export type LoginResponse = { user?: UserAccount; requiresTwoFactor?: boolean; email?: string };
 
 export const getSession = () => api<SessionResponse>("/api/auth/session");

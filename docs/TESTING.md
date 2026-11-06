@@ -35,7 +35,7 @@ Ports: the app listens on 3000; the Docker database is published on 127.0.0.1:54
    docker compose run --rm setup
    ```
 
-   Expected ending: ten `Applied migration …` lines, `The leadtrailpro schema is ready`, and `Created the restricted app role leadtrailpro_app and the user-management key in the ignored .env.local.`
+   Expected ending: twelve `Applied migration …` lines, `The leadtrailpro schema is ready`, and `Created the restricted app role leadtrailpro_app and the user-management key in the ignored .env.local.` The accounts in `seed/accounts.csv` (in the repository) are created in the same step: the ending also lists `Created admin …` lines and `Seed accounts: N created, 0 already existed.`
 
 3. Start the stack and watch it come up:
 
@@ -53,7 +53,7 @@ Ports: the app listens on 3000; the Docker database is published on 127.0.0.1:54
 
    Expected: `Connected: PostgreSQL 17 … database leadtrailpro, role leadtrailpro_app.`, the table and migration counts, and `Database check passed.`
 
-5. Open [http://localhost:3000](http://localhost:3000). The sign-in screen offers **First time setup**: paste `USER_MANAGEMENT_KEY` from `.env.local` (`grep USER_MANAGEMENT_KEY .env.local`) and create the administrator. The option disappears once an account exists. Before that, `curl http://localhost:3000/api/auth/session` answers `{"user":null,"needsSetup":true}`.
+5. Open [http://localhost:3000](http://localhost:3000) and click **Sign in with Google** with one of the accounts in `seed/accounts.csv`. Two things must be true in the Google Cloud console: the OAuth client lists `http://localhost:3000/api/auth/google/callback` as a redirect URI, and the account is a test user on the consent screen (until Google verifies the app). Before signing in, `curl http://localhost:3000/api/auth/session` answers `{"user":null,"needsSetup":false,"googleSignIn":true}`. Only if the accounts file were empty would the screen offer **First time setup** with the `USER_MANAGEMENT_KEY` from `.env.local` instead.
 
 6. Optional sample data (demo accounts, leads, activities, tasks):
 
@@ -85,11 +85,12 @@ After a `git pull`: `docker compose run --rm setup node scripts/create-database.
    ```bash
    npm run db:create        # creates leadtrailpro and applies the migrations
    npm run db:user:create   # creates leadtrailpro_app and writes .env.local (PGHOST and PGPORT copied from .env.setup.local)
+   npm run db:seed:users    # creates the accounts in seed/accounts.csv that do not exist yet
    npm run db:check
    npm run dev              # http://localhost:3000
    ```
 
-3. First-time setup, sample data (`npm run db:seed`), and the demo accounts are the same as in path A.
+3. Sign in with **Sign in with Google** as one of the accounts in `seed/accounts.csv` (edit the file and run `npm run db:seed:users` again to add people). Sample data (`npm run db:seed`) is the same as in path A.
 
 Extras on this path: `TRIPS_PROVIDER=stub` in `.env.local` gives the Sales Trip Planner sample companies (the Docker stack sets it for you); the digest scheduler is `npm run jobs` with the same `JOBS_KEY` in `.env.local` and in its environment.
 
@@ -110,13 +111,13 @@ Tested shape: a Linux host with Docker Engine and the Compose plugin, the app on
 
    On a server `TRIPS_PROVIDER` must be in `.env`, not `.env.local`: compose passes it to the container and an empty value there means "use the real providers".
 
-2. Create the schema, the app role, and `.env.local`:
+2. Create the schema, the app role, and `.env.local`: The same step creates every account in `seed/accounts.csv` that does not exist yet, so check that file first (the administrator must be on it):
 
    ```bash
    docker compose -f compose.yaml -f compose.prod.yaml run --rm setup
    ```
 
-3. Edit `.env.local`: set `APP_URL` to the address users will type (`https://sales.example.com`; for a plain-http test host `http://<host>:3000`, which also makes the session cookie work without TLS), and either keep `MAIL_PROVIDER=stub` or fill in the `SMTP_*` lines (`docker compose -f compose.yaml -f compose.prod.yaml run --rm app npm run mail:test -- --send` checks them).
+3. Edit `.env.local`: set `APP_URL` to the address users will type (`https://sales.example.com`; for a plain-http test host `http://<host>:3000`, which also makes the session cookie work without TLS), and either keep `MAIL_PROVIDER=stub` or fill in the `SMTP_*` lines (`docker compose -f compose.yaml -f compose.prod.yaml run --rm app npm run mail:test -- --send` checks them). Also paste the Google OAuth client values (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GMAIL_TOKEN_KEY`, `MAIL_PROVIDER=gmail`), register `https://<your domain>/api/auth/google/callback` on that client, and list every seeded address as a test user on the consent screen until Google verifies the app.
 
 4. Build, start, check, and watch:
 
@@ -138,6 +139,7 @@ Later on the server:
   ```
 
 - Backup: `docker compose -f compose.yaml -f compose.prod.yaml exec db pg_dump -U postgres leadtrailpro > leadtrailpro-$(date +%F).sql`, plus the `leadtrailpro_attachments` volume for uploads.
+- New people: add them to `seed/accounts.csv`, commit, `git pull` on the server, then `docker compose -f compose.yaml -f compose.prod.yaml run --rm setup node scripts/seed-users.mjs` (only missing emails are created; existing ones are never changed). Or add them under User management in the app, which needs no redeploy.
 - Logs: `docker compose -f compose.yaml -f compose.prod.yaml logs --since 1h app jobs`.
 
 ## What to test in the app
@@ -150,7 +152,12 @@ Each line is a short path a tester can follow after the first administrator exis
 - **Reports**: change the period and filters, export CSV, Excel, and PDF.
 - **Settings**: Email delivery shows every message the app "sent" in stub mode (use **Forgot password** on the sign-in screen and open the reset link from here); Business calendar, Needs-attention rules, Job sources.
 - **User management**: add a user and send the set-password link; it appears under Email delivery in stub mode.
+- **Sign in with Google**: sign out, click **Sign in with Google**, pick a Google account whose email exists under User management; a Google account that is not registered gets "Sign-in failed: these credentials are not valid or you are not registered. Please contact your administrator." The first Google sign-in also asks for read-only Gmail; afterwards a lead's Emails tab shows the mailbox as connected.
 - **Sales trip planner**: plan a trip from an address on the sample provider, shortlist a company, export to Excel.
+- **Opportunities**: as an administrator, add a search under Opportunities → Searches & runs (keyword “baker”, location “Mississauga, ON”) and click Run searches now; the Pool shows three sample companies. Assign one as a lead (the form is pre-filled, pick the owner), mark another not relevant and bring it back. Then try Add a lead with the same company name: the duplicate guard points to the existing lead.
+- **Analytics**: pick Last 30 days, then a custom range; filter by status or industry; click a status tile for the leads behind it; read the stalled-leads reasons and open one; export the stalled list as CSV.
+- **Send email** (needs the Google client and a connected mailbox): open a lead with a client email, Emails tab, Send email; the message appears in the trail and on the timeline, and Reply keeps the thread.
+- **Email delivery** (administrator): Settings → Email delivery, choose the sending mailbox and save; the Email log below shows what was sent.
 - **Digest**: Settings → "Send me today's digest" puts a digest in the outbox and the bell.
 
 ## Automated checks
@@ -160,11 +167,11 @@ Inside the dev container (`docker compose exec app …` while the stack runs, or
 ```bash
 npm run typecheck
 npm run lint
-npm run test:unit     # 63 tests, no database needed
+npm run test:unit     # 96 tests, no database needed
 npm run build
 ```
 
-Browser suite (Selenium in Docker, about ten minutes, 54 tests): `scripts/e2e.sh`, or one file with `scripts/e2e.sh tests/e2e/02-leads.test.mjs`. Watch it live at [http://localhost:7900](http://localhost:7900); failed tests leave screenshots and page sources in `tests/e2e/output/`. It uses its own throwaway database and never touches your data.
+Browser suite (Selenium in Docker, about ten minutes, 59 tests in 8 files): `scripts/e2e.sh`, or one file with `scripts/e2e.sh tests/e2e/02-leads.test.mjs`. Watch it live at [http://localhost:7900](http://localhost:7900); failed tests leave screenshots and page sources in `tests/e2e/output/`. It uses its own throwaway database and never touches your data.
 
 GitHub Actions runs the same checks on every push and pull request. As of October 31, 2026 the typecheck, lint, and unit-test job passes and the browser job fails on the GitHub runner on every run, while the same suite passes locally; the job's log on the Actions tab of the repository is the next thing to read.
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AtSign, Bell, CheckCheck, CalendarCheck2, Mail, Paperclip, Users, UserRound, Inbox, MessageSquare } from "lucide-react";
+import { AtSign, Bell, Briefcase, CheckCheck, CalendarCheck2, Mail, Paperclip, Users, UserRound, Inbox, MessageSquare } from "lucide-react";
 import { errorMessage } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
 import { useApp } from "@/features/shell/AppContext";
@@ -18,6 +18,7 @@ const icon = (type: AppNotification["type"]) => {
     case "file_uploaded": return <Paperclip size={14} />;
     case "mention": return <AtSign size={14} />;
     case "daily_digest": case "weekly_digest": return <Mail size={14} />;
+    case "opportunities_found": case "listing_found": return <Briefcase size={14} />;
     default: return <MessageSquare size={14} />;
   }
 };

@@ -49,7 +49,7 @@ export const allPrivileges = userPrivileges.map((privilege) => privilege.id) as 
 export const rolePrivileges: Record<SystemRole, UserPrivilege[]> = {
   admin: allPrivileges,
   sales_manager: [
-    "view_leads", "create_leads", "edit_leads", "transfer_leads", "add_notes", "collaborate", "log_activities",
+    "view_leads", "create_leads", "edit_leads", "transfer_leads", "reassign_leads", "add_notes", "collaborate", "log_activities",
     "manage_tasks", "plan_trips", "upload_files", "view_reports",
   ],
   recruiter: ["view_leads", "add_notes", "collaborate"],
@@ -119,7 +119,8 @@ export type CreateUserInput = {
   lastName: string;
   email: string;
   phone: string;
-  password: string;
+  /** Null when the person signs in with Google (no password is stored). */
+  password: string | null;
   role: SystemRole;
   stage: UserStage;
   extraPrivileges: UserPrivilege[];
@@ -155,7 +156,7 @@ export function parseCreateUser(value: unknown): CreateUserInput | null {
   if (typeof body.lastName !== "string" || !body.lastName.trim() || body.lastName.length > 80) return null;
   if (!isValidEmail(body.email)) return null;
   if (body.phone !== undefined && (typeof body.phone !== "string" || body.phone.length > 40)) return null;
-  if (!isValidPassword(body.password)) return null;
+  if (body.password !== undefined && body.password !== null && body.password !== "" && !isValidPassword(body.password)) return null;
   if (!isSystemRole(body.role)) return null;
   if (body.stage !== undefined && !isUserStage(body.stage)) return null;
   if (body.autoLogoutTime !== undefined && !isValidTimeOfDay(body.autoLogoutTime)) return null;
@@ -169,7 +170,7 @@ export function parseCreateUser(value: unknown): CreateUserInput | null {
     lastName: body.lastName.trim(),
     email: body.email.trim().toLowerCase(),
     phone: typeof body.phone === "string" ? body.phone.trim() : "",
-    password: body.password,
+    password: typeof body.password === "string" && body.password ? body.password : null,
     role: body.role,
     stage: isUserStage(body.stage) ? body.stage : "onboarding",
     extraPrivileges: [...new Set(extras as UserPrivilege[])],

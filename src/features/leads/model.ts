@@ -61,7 +61,7 @@ export type LeadPage = { leads: LeadSummary[]; total: number; page: number; page
 
 export const activityTypes = [
   "created", "call", "email", "visit", "note", "status_change", "bd_action", "client_response", "follow_up",
-  "transfer", "state_change", "task", "file", "edit",
+  "transfer", "state_change", "task", "file", "edit", "listing",
 ] as const;
 export type ActivityType = (typeof activityTypes)[number];
 
@@ -71,6 +71,7 @@ export type LoggableActivityType = (typeof loggableActivityTypes)[number];
 
 export const activityLabels: Record<ActivityType, string> = {
   created: "Lead created",
+  listing: "Job listing",
   call: "Call",
   email: "Email",
   visit: "Visit",
@@ -89,7 +90,7 @@ export const activityLabels: Record<ActivityType, string> = {
 export type LeadActivity = {
   id: number;
   leadId: number;
-  userId: number;
+  userId: number | null;
   userName: string;
   type: ActivityType;
   summary: string;

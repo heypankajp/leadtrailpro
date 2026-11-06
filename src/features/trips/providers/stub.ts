@@ -48,6 +48,8 @@ const defaultOrigin: GeoPoint = { latitude: 43.589, longitude: -79.6441 }; // Mi
 
 /** The sample listings of a catalogue company, served by the stub job source. */
 export const stubListings = (companyName: string): JobListing[] => catalogue.find((entry) => entry.name === companyName)?.jobs ?? [];
+/** The whole sample catalogue, for the stub job source's keyword search. */
+export const stubCatalogue = (): readonly CatalogueEntry[] => catalogue;
 
 export const stubProvider: TripProvider = {
   name: "stub",

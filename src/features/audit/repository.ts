@@ -5,7 +5,7 @@ import type { AuditEntry } from "./model";
 export type AuditInput = {
   actorId: number | null;
   action: string;
-  entityType: "lead" | "user" | "task" | "attachment" | "list_value" | "target_template" | "setting" | "session" | "sales_trip" | "job" | "message";
+  entityType: "lead" | "user" | "task" | "attachment" | "list_value" | "target_template" | "setting" | "session" | "sales_trip" | "job" | "message" | "opportunity" | "opportunity_search";
   entityId?: number | null;
   before?: Record<string, unknown> | null;
   after?: Record<string, unknown> | null;

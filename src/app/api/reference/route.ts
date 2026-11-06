@@ -6,7 +6,7 @@ import { listValues } from "@/features/list-values/repository";
 import { getSettings } from "@/features/settings/repository";
 import { listTargetTemplates } from "@/features/targets/repository";
 import { listDirectory } from "@/features/users/repository";
-import { requireUser } from "@/features/users/session";
+import { requireUser, passwordSignInEnabled } from "@/features/users/session";
 
 /** Everything the signed-in client needs to render forms: dropdown values, the user directory, and settings. */
 export async function GET() {
@@ -21,6 +21,7 @@ export async function GET() {
       holidays: settings.holidays.map((holiday) => holiday.date),
       targetTemplates,
       mailerConfigured: isMailerConfigured(),
+      passwordSignIn: passwordSignInEnabled(),
       today: todayYmd(),
       timeZone: businessTimeZone(),
     });

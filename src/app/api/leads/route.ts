@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     const body = await readJsonBody(request);
     const { input, errors } = parseLeadInput(body);
     if (errors.length) return jsonError(400, errors.join(" "));
-    const lead = await createLead(input, user, asOptionalId(body?.ownerId));
+    const lead = await createLead(input, user, asOptionalId(body?.ownerId), { allowSimilar: body?.allowSimilar === true, opportunityId: asOptionalId(body?.opportunityId) });
     return NextResponse.json({ lead }, { status: 201 });
   } catch (error) {
     return handleRouteError(error, "Create lead");

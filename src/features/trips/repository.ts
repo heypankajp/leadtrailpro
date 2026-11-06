@@ -3,13 +3,13 @@ import { HttpError } from "@/lib/http";
 import { isCacheFresh } from "@/features/jobs/model";
 import { getCompanyJobs } from "@/features/jobs/repository";
 import { jobSourcesConfigured } from "@/features/jobs/sources";
+import { listMatchableLeads } from "@/features/leads/repository";
 import { getSettings } from "@/features/settings/repository";
 import { recordAudit } from "@/features/audit/repository";
-import { statusLabel } from "@/features/list-values/model";
 import { assertListValue, getListValue } from "@/features/list-values/repository";
 import { hasPrivilege } from "@/features/users/model";
 import type { UserAccount } from "@/features/users/model";
-import { actionFor, matchLead, type MatchableLead } from "./matching";
+import { actionFor, matchLead } from "./matching";
 import { getTripProvider, type CompanyCandidate } from "./providers";
 import type { ExportScope, JobListing, SalesTrip, TripInput, TripResult } from "./model";
 
@@ -81,19 +81,6 @@ export async function getTrip(id: number, viewer: UserAccount, db: Queryable = g
 // ---- Search ----
 
 /** Every lead and client with the fields the matcher compares (TRIP-07). */
-async function loadMatchableLeads(db: Queryable): Promise<MatchableLead[]> {
-  const { rows } = await db.query(`
-    SELECT l.id, l.client_name AS "clientName", l.company_url AS "companyUrl", l.contact_phone AS "contactPhone", l.contact_alt_phone AS "contactAltPhone",
-      l.address, ci.value AS city, st.code AS "statusCode", st.value AS status, sr.value AS "statusReason", l.record_state AS "recordState", l.last_activity_at AS "lastActivityAt"
-    FROM leads l
-    JOIN list_values st ON st.id = l.status_id
-    LEFT JOIN list_values sr ON sr.id = l.status_reason_id
-    LEFT JOIN list_values ci ON ci.id = l.city_id
-  `);
-  return (rows as (Omit<MatchableLead, "statusLabel" | "lastActivityAt"> & { statusReason: string | null; lastActivityAt: string })[]).map((row) => ({
-    ...row, id: Number(row.id), statusLabel: statusLabel(row.status, row.statusReason), lastActivityAt: fromSqlDateTime(row.lastActivityAt) ?? row.lastActivityAt,
-  }));
-}
 
 /**
  * Listings for the nearest `prefetch` candidates through the job-sources layer (cache first, then the sources within
@@ -133,7 +120,7 @@ async function runSearch(trip: { address: string; radiusType: TripInput["radiusT
   if (!origin) throw new HttpError(400, "The address could not be located. Try a fuller address or a nearby landmark.");
   const candidates = await fromProvider(() => provider.searchCompanies({ origin, radiusType: trip.radiusType, radius: trip.radius, businessType: businessType ? { code: businessType.code, value: businessType.value } : null, limit: trip.maxResults }));
   const listings = await listingsFor(candidates, (await getSettings(db)).jobSources.prefetch, db);
-  const leads = await loadMatchableLeads(db);
+  const leads = await listMatchableLeads(db);
   const rows = candidates.map((candidate, index) => {
     const match = matchLead({ name: candidate.name, website: candidate.website, phone: candidate.phone, address: candidate.address }, leads);
     const action = actionFor(match);
@@ -184,7 +171,7 @@ export async function createTrip(input: TripInput, actor: UserAccount): Promise<
 export async function rerunTrip(id: number, actor: UserAccount): Promise<{ trip: SalesTrip; results: TripResult[] }> {
   const db = getDatabasePool();
   const { trip } = await getTrip(id, actor, db);
-  if (trip.ownerId !== actor.id && !hasPrivilege(actor, "reassign_leads")) throw new HttpError(403, "Only the trip owner or an administrator can run it again.");
+  if (trip.ownerId !== actor.id && !hasPrivilege(actor, "manage_settings")) throw new HttpError(403, "Only the trip owner or an administrator can run it again.");
   const search = await runSearch(trip, db);
   const now = new Date();
   return withTransaction(async (connection) => {

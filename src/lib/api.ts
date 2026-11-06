@@ -1,8 +1,11 @@
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** The rest of the server's JSON body (for example the existing lead a duplicate clashes with). */
+  data: Record<string, unknown>;
+  constructor(status: number, message: string, data: Record<string, unknown> = {}) {
     super(message);
     this.status = status;
+    this.data = data;
   }
 }
 
@@ -18,7 +21,7 @@ export async function api<T>(path: string, init: ApiInit = {}): Promise<T> {
   }
   const response = await fetch(path, { ...init, headers, body, credentials: "same-origin", cache: "no-store" });
   const data = await response.json().catch(() => ({})) as { error?: string } & T;
-  if (!response.ok) throw new ApiError(response.status, data.error || `Request failed (${response.status}).`);
+  if (!response.ok) throw new ApiError(response.status, data.error || `Request failed (${response.status}).`, data as Record<string, unknown>);
   return data;
 }
 

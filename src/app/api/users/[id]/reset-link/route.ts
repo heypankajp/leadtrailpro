@@ -2,13 +2,14 @@ import { NextResponse } from "next/server";
 import { appBaseUrl, handleRouteError, jsonError, requireSameOrigin } from "@/lib/http";
 import { isMailerConfigured, passwordResetEmail, sendMail } from "@/lib/mailer";
 import { getUser } from "@/features/users/repository";
-import { createPasswordResetToken, requirePrivilege, requireUser } from "@/features/users/session";
+import { createPasswordResetToken, requirePrivilege, requireUser, passwordSignInEnabled } from "@/features/users/session";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 /** Emails a set-password link to a user (used to invite someone once SMTP is configured). */
 export async function POST(request: Request, context: RouteContext) {
   try {
+    if (!passwordSignInEnabled()) return jsonError(403, "Password sign-in is turned off on this server; accounts sign in with Google.");
     requireSameOrigin(request);
     const actor = await requireUser();
     requirePrivilege(actor, "manage_users", "You do not have permission to manage users.");

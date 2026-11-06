@@ -2,13 +2,14 @@ import { NextResponse } from "next/server";
 import { handleRouteError, jsonError, readJsonBody, requireSameOrigin } from "@/lib/http";
 import { isValidPassword } from "@/features/users/model";
 import { getUser, setUserPassword } from "@/features/users/repository";
-import { requirePrivilege, requireUser } from "@/features/users/session";
+import { requirePrivilege, requireUser, passwordSignInEnabled } from "@/features/users/session";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 /** Admin sets a new password for someone (the fallback while email delivery is not configured). */
 export async function POST(request: Request, context: RouteContext) {
   try {
+    if (!passwordSignInEnabled()) return jsonError(403, "Password sign-in is turned off on this server; accounts sign in with Google.");
     requireSameOrigin(request);
     const actor = await requireUser();
     requirePrivilege(actor, "manage_users", "You do not have permission to manage users.");

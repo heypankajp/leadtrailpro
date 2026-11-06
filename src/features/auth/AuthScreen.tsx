@@ -9,27 +9,36 @@ import { createBootstrapAdmin, login, requestPasswordReset, resetPassword, verif
 
 type Mode = "login" | "two-factor" | "forgot" | "reset" | "setup";
 
-type Props = { checking: boolean; needsSetup: boolean; initialError: string; onSignedIn: (user: UserAccount) => void };
+type Props = { checking: boolean; needsSetup: boolean; googleSignIn: boolean; initialError: string; onSignedIn: (user: UserAccount) => void };
 
-export default function AuthScreen({ checking, needsSetup, initialError, onSignedIn }: Props) {
+/** Sign in with Google lands on /?login=<status> when it did not end in a session; shown in place of an error. */
+const loginOutcomes: Record<string, string> = {
+  denied: "Google sign-in was cancelled.",
+  failed: "Google sign-in did not complete. Try again.",
+  unknown_account: "Sign-in failed: these credentials are not valid or you are not registered. Please contact your administrator.",
+  not_configured: "Sign in with Google is not set up on this server.",
+};
+
+export default function AuthScreen({ checking, needsSetup, googleSignIn, initialError, onSignedIn }: Props) {
   // A reset link lands on /?reset=<token>; read it once when the screen mounts.
   const [resetToken] = useState(() => (typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("reset") ?? ""));
+  const [loginOutcome] = useState(() => (typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("login") ?? ""));
   const [mode, setMode] = useState<Mode>(resetToken ? "reset" : "login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [error, setError] = useState(initialError);
+  const [error, setError] = useState(initialError || (loginOutcome ? loginOutcomes[loginOutcome] ?? loginOutcomes.failed : ""));
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [setup, setSetup] = useState({ key: "", firstName: "", lastName: "", email: "", phone: "", password: "", confirm: "" });
   const [showKey, setShowKey] = useState(false);
 
   useEffect(() => {
-    if (!checking && resetToken && window.location.search.includes("reset=")) {
+    if (!checking && (resetToken || loginOutcome) && /[?&](reset|login)=/.test(window.location.search)) {
       window.history.replaceState(null, "", window.location.pathname + window.location.hash);
     }
-  }, [checking, resetToken]);
+  }, [checking, resetToken, loginOutcome]);
 
   const run = async (work: () => Promise<void>) => {
     setBusy(true);
@@ -95,6 +104,19 @@ export default function AuthScreen({ checking, needsSetup, initialError, onSigne
             <h1>Checking your session</h1>
             <p>Connecting securely to your LeadTrailPro workspace.</p>
             <div className="login-loading">Verifying session...</div>
+          </>
+        ) : mode === "login" && googleSignIn ? (
+          <>
+            <h1>Welcome back</h1>
+            <p>Sign in with your Google account to access your leads and team workspace.</p>
+            {message && <p className="login-message" role="status">{message}</p>}
+            <ErrorText message={error} />
+            <a className="button button-primary login-google" href="/api/auth/google">Sign in with Google</a>
+            {needsSetup && (
+              <div className="login-links">
+                <button className="login-bootstrap-link" onClick={() => { setMode("setup"); setError(""); setMessage(""); }}>First time setup? Create the initial administrator account</button>
+              </div>
+            )}
           </>
         ) : mode === "login" ? (
           <>

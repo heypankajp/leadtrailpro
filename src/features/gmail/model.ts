@@ -10,6 +10,9 @@ export type LeadEmail = {
   date: string;
   /** The Google account the message was read from. */
   mailbox: string;
+  /** Gmail's thread id and the RFC 822 Message-ID, for replies. */
+  threadId: string;
+  messageId: string;
 };
 
 export type GmailStatus = {

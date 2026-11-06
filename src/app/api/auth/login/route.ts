@@ -2,13 +2,15 @@ import { NextResponse } from "next/server";
 import { clientAddress, handleRouteError, jsonError, readJsonBody, requireSameOrigin, userAgent } from "@/lib/http";
 import { isMailerConfigured, sendMail, twoFactorEmail } from "@/lib/mailer";
 import {
-  createTwoFactorChallenge, createUserSession, isLoginRateLimited, recordLoginAttempt, sessionCookieName, sessionCookieOptions,
+  createTwoFactorChallenge, createUserSession, isLoginRateLimited, passwordSignInEnabled, recordLoginAttempt, sessionCookieName, sessionCookieOptions,
   twoFactorCookieName, twoFactorCookieOptions, verifyPassword,
 } from "@/features/users/session";
 
 export async function POST(request: Request) {
   try {
     requireSameOrigin(request);
+    // Google-only sign-in wherever the OAuth client is configured (AUTH-03); passwords remain for stacks without one.
+    if (!passwordSignInEnabled()) return jsonError(403, "Password sign-in is turned off on this server. Use Sign in with Google.");
     const body = await readJsonBody(request);
     const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
     const password = typeof body?.password === "string" ? body.password : "";

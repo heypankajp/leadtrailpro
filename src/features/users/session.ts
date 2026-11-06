@@ -5,6 +5,8 @@ import { getDatabasePool, fromSqlDateTime, toSqlDateTime, withTransaction, type 
 import { lastAutoLogoutCutoff } from "@/lib/dates";
 import { HttpError } from "@/lib/http";
 import { toUser, userColumns, type UserRow } from "./repository";
+import { googleStateCookiePath } from "./google-signin";
+import { googleOAuthClient } from "@/features/gmail/gmail";
 import { hasPrivilege } from "./model";
 import type { UserAccount, UserPrivilege } from "./model";
 
@@ -24,6 +26,8 @@ const baseCookie = { httpOnly: true, secure: secureCookies, sameSite: "lax" as c
 export const sessionCookieOptions = { ...baseCookie, maxAge: sessionLifetimeSeconds };
 export const twoFactorCookieOptions = { ...baseCookie, maxAge: twoFactorLifetimeSeconds };
 export const clearedCookieOptions = { ...baseCookie, maxAge: 0 };
+/** State cookie of the Google consent round trips (sign-in and Gmail reconnect); read only by the shared callback. */
+export const googleStateCookieOptions = { ...baseCookie, path: googleStateCookiePath, maxAge: 600 };
 
 export const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 
@@ -38,14 +42,17 @@ async function matchesHash(password: string, storedHash: string): Promise<boolea
   return timingSafeEqual(actual, expected);
 }
 
+/** Password sign-in, reset links, and two-factor exist only on a stack without a Google client (the browser suite); with Google everyone signs in with Google (AUTH-03). */
+export const passwordSignInEnabled = (): boolean => !googleOAuthClient();
+
 /** Returns the account when the email and password match an active user. */
 export async function verifyPassword(email: string, password: string): Promise<UserAccount | null> {
   const { rows } = await getDatabasePool().query(
     `SELECT ${userColumns}, u.password_hash AS "passwordHash" FROM users u WHERE u.email = ? LIMIT 1`,
     [email.trim().toLowerCase()],
   );
-  const row = (rows as (UserRow & { passwordHash: string })[])[0];
-  if (!row || !row.active) {
+  const row = (rows as (UserRow & { passwordHash: string | null })[])[0];
+  if (!row || !row.active || !row.passwordHash) {
     await matchesHash(password, dummyHash);
     return null;
   }

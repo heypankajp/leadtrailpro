@@ -2,6 +2,8 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { handleRouteError, jsonError, readJsonBody, requireSameOrigin } from "@/lib/http";
 import { runDigestJobs } from "@/features/notifications/digests";
+import { runScheduledOpportunities } from "@/features/opportunities/runner";
+import { runStalledReport } from "@/features/analytics/report-email";
 import { getRequestUser, hasPrivilege } from "@/features/users/session";
 
 const keyMatches = (supplied: string | null) => {
@@ -13,7 +15,7 @@ const keyMatches = (supplied: string | null) => {
 };
 
 /**
- * Scheduled jobs (TASK-06). The scheduler (scripts/jobs.mjs or an external cron) calls this every minute with
+ * Scheduled jobs (TASK-06 digests, OPP-06 opportunity searches). The scheduler (scripts/jobs.mjs or an external cron) calls this every minute with
  * `X-Jobs-Key`; whatever is due runs once. An administrator may instead force a digest for themselves from Settings.
  */
 export async function POST(request: Request) {
@@ -21,7 +23,10 @@ export async function POST(request: Request) {
     const body = (await readJsonBody(request)) ?? {};
     const job = body.job === "daily" || body.job === "weekly" ? body.job : null;
     if (keyMatches(request.headers.get("x-jobs-key"))) {
-      return NextResponse.json(await runDigestJobs({ force: body.force === true ? job : null }));
+      const digests = await runDigestJobs({ force: body.force === true ? job : null });
+      const opportunities = await runScheduledOpportunities().catch((error: unknown) => { console.error("Scheduled opportunity search failed.", error instanceof Error ? error.message : error); return null; });
+      const stalledReport = await runStalledReport().catch((error: unknown) => { console.error("Stalled-leads report failed.", error instanceof Error ? error.message : error); return null; });
+      return NextResponse.json({ ...digests, ran: [...digests.ran, ...(opportunities ? [{ job: "opportunities" as const, ...opportunities }] : []), ...(stalledReport ? [{ job: "stalled_report" as const, ...stalledReport }] : [])] });
     }
     requireSameOrigin(request);
     const user = await getRequestUser();

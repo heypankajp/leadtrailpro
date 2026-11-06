@@ -86,8 +86,8 @@ export default function UsersPanel() {
                     <td>
                       <span className="row-actions">
                         <button className="icon-button" title="Edit" aria-label={`Edit ${user.name}`} onClick={() => setDialog({ kind: "edit", user })}><Pencil size={14} /></button>
-                        <button className="icon-button" title="Set password" aria-label={`Set password for ${user.name}`} onClick={() => setDialog({ kind: "password", user })}><KeyRound size={14} /></button>
-                        {reference.mailerConfigured && user.active && <button className="icon-button" title="Email a set-password link" aria-label={`Email a set-password link to ${user.name}`} onClick={() => void resetLink(user)}><Mail size={14} /></button>}
+                        {reference.passwordSignIn && <button className="icon-button" title="Set password" aria-label={`Set password for ${user.name}`} onClick={() => setDialog({ kind: "password", user })}><KeyRound size={14} /></button>}
+                        {reference.passwordSignIn && reference.mailerConfigured && user.active && <button className="icon-button" title="Email a set-password link" aria-label={`Email a set-password link to ${user.name}`} onClick={() => void resetLink(user)}><Mail size={14} /></button>}
                         <button className="text-button" onClick={() => void showHistory(user)}>Logins</button>
                         {user.active && user.id !== me.id && <button className="icon-button danger" title="Terminate" aria-label={`Terminate ${user.name}`} onClick={() => setDialog({ kind: "terminate", user })}><UserMinus size={14} /></button>}
                         {!user.active && <button className="icon-button" title="Reactivate" aria-label={`Reactivate ${user.name}`} onClick={() => void reactivate(user)}><UserPlus size={14} /></button>}

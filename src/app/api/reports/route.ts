@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { reportPeriods, type ReportPeriod } from "@/lib/dates";
+import { reportPeriods, type ReportPeriod, customRangeFrom } from "@/lib/dates";
 import { handleRouteError, jsonError } from "@/lib/http";
 import { performanceReport } from "@/features/reports/repository";
 import { isUserStage } from "@/features/users/model";
@@ -17,7 +17,7 @@ export async function GET(request: Request) {
     if (selectedUser && selectedUser !== user.id && !hasPrivilege(user, "view_team_reports")) return jsonError(403, "You can only view your own report.");
     const stage = params.get("stage");
     const templateId = Number(params.get("templateId"));
-    return NextResponse.json(await performanceReport(period as ReportPeriod, user, selectedUser, { stage: isUserStage(stage) ? stage : null, templateId: Number.isSafeInteger(templateId) && templateId > 0 ? templateId : null }));
+    return NextResponse.json(await performanceReport(period as ReportPeriod, user, selectedUser, { stage: isUserStage(stage) ? stage : null, templateId: Number.isSafeInteger(templateId) && templateId > 0 ? templateId : null }, customRangeFrom(params.get("from"), params.get("to"))));
   } catch (error) {
     return handleRouteError(error, "Performance report");
   }

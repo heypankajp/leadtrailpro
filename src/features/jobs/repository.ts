@@ -15,7 +15,7 @@ const chains = new Map<JobSourceId, Promise<unknown>>();
 const lastCall = new Map<JobSourceId, number>();
 
 /** Serialises calls to one source and keeps its minimum gap (in-process, which is enough for one app instance). */
-function scheduled<T>(adapter: JobSourceAdapter, work: () => Promise<T>): Promise<T> {
+export function scheduled<T>(adapter: JobSourceAdapter, work: () => Promise<T>): Promise<T> {
   const previous = chains.get(adapter.id) ?? Promise.resolve();
   const run = previous.catch(() => undefined).then(async () => {
     const wait = (lastCall.get(adapter.id) ?? 0) + adapter.minIntervalMs - Date.now();
@@ -44,7 +44,7 @@ export async function sourceUsage(db: Queryable = getDatabasePool()): Promise<Re
   return usage;
 }
 
-async function recordUsage(db: Queryable, source: JobSourceId, failed: boolean) {
+export async function recordUsage(db: Queryable, source: JobSourceId, failed: boolean) {
   await db.query(
     "INSERT INTO job_source_usage (source, day, calls, failures) VALUES (?, ?, 1, ?) ON CONFLICT (source, day) DO UPDATE SET calls = job_source_usage.calls + 1, failures = job_source_usage.failures + EXCLUDED.failures",
     [source, todayYmd(), failed ? 1 : 0],

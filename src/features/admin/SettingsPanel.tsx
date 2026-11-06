@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { AlertTriangle, ArrowDown, ArrowUp, BriefcaseBusiness, CalendarDays, Mail, Plus, RefreshCw, Save, Send, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, Briefcase, BriefcaseBusiness, CalendarDays, Mail, Plus, RefreshCw, Save, Send, X } from "lucide-react";
 import { errorMessage } from "@/lib/api";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { useApp } from "@/features/shell/AppContext";
@@ -9,6 +9,7 @@ import { ErrorText, Field, Loading } from "@/features/shell/components";
 import { maxHolidayNameLength, maxInactivityDays, maxInactivityRules, type AppSettings, type InactivityRule } from "@/features/settings/model";
 import { defaultRoleLabels, systemRoles } from "@/features/users/model";
 import { jobSourceLabels, maxCacheHours, maxPrefetch, type JobSourceId, type JobSourceStatus } from "@/features/jobs/model";
+import { maxMaxListings, minMaxListings, opportunitySourceIds } from "@/features/opportunities/model";
 import { fetchSettings, updateSettings, type MailStatus } from "./client";
 import { runDigestNow } from "@/features/notifications/client";
 import { weekdayNames, type DigestJob } from "@/features/notifications/model";
@@ -17,7 +18,7 @@ export default function SettingsPanel() {
   const { notify, refreshReference, reference, bumpData } = useApp();
   const [sending, setSending] = useState<DigestJob | null>(null);
   const [settings, setSettings] = useState<AppSettings | null>(null);
-  const [meta, setMeta] = useState<{ mailerConfigured: boolean; timeZone: string; mail: MailStatus; jobSources: JobSourceStatus[] }>({ mailerConfigured: false, timeZone: "", mail: { provider: "off", outbox: [] }, jobSources: [] });
+  const [meta, setMeta] = useState<{ mailerConfigured: boolean; timeZone: string; mail: MailStatus; jobSources: JobSourceStatus[] }>({ mailerConfigured: false, timeZone: "", mail: { provider: "off", outbox: [], senders: [] }, jobSources: [] });
   const [openMail, setOpenMail] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -35,7 +36,7 @@ export default function SettingsPanel() {
     if (!settings) return;
     setBusy(true);
     try {
-      const result = await updateSettings({ roleLabels: settings.roleLabels, reminders: settings.reminders, digests: settings.digests, jobSources: settings.jobSources, holidays: settings.holidays });
+      const result = await updateSettings({ roleLabels: settings.roleLabels, reminders: settings.reminders, digests: settings.digests, jobSources: settings.jobSources, opportunities: settings.opportunities, email: settings.email, holidays: settings.holidays });
       setSettings(result.settings);
       await refreshReference();
       notify("Settings saved");
@@ -121,7 +122,7 @@ export default function SettingsPanel() {
                 <small className="field-hint">A rule needs a status, a BD action, or both. Rules apply when you save settings.</small>
               </fieldset>
               <fieldset className="user-privileges digest-editor">
-                <legend><Send size={12} /> Daily and weekly digests</legend>
+                <legend><Send size={12} /> Summary emails</legend>
                 <p className="field-hint">Each person gets a summary of overdue and upcoming follow-ups, tasks, and their numbers, as an in-app notification and by email when delivery is configured. People can opt out under Notification preferences. Times are in the business timezone.</p>
                 <label className="checklist-item"><input type="checkbox" checked={settings.digests.enabled} onChange={(event) => setSettings({ ...settings, digests: { ...settings.digests, enabled: event.target.checked } })} /><span>Send digests on schedule</span></label>
                 <div className="rule-row">
@@ -134,6 +135,19 @@ export default function SettingsPanel() {
                   <button type="button" className="button button-outline button-small" disabled={sending !== null} onClick={() => void sendDigest("weekly")}><Send size={13} /> {sending === "weekly" ? "Sending..." : "Send me the weekly digest"}</button>
                 </div>
                 <small className="field-hint">The schedule applies when you save settings; the buttons send at once.</small>
+              </fieldset>
+              <fieldset className="user-privileges digest-editor email-editor">
+                <legend><Mail size={12} /> Email delivery</legend>
+                <p className="field-hint">The app sends through the Google account chosen here: notifications, summary emails, and anything else it emails. People who have signed in with Google appear in the list. Report emails stay off until switched on.</p>
+                <div className="rule-row">
+                  <Field label="Send from" hint={meta.mail.senders.length ? "A user whose Google mailbox is connected." : "Nobody has signed in with Google yet."}>
+                    <select value={settings.email.senderUserId ?? ""} onChange={(event) => setSettings({ ...settings, email: { ...settings.email, senderUserId: event.target.value ? Number(event.target.value) : null } })}>
+                      <option value="">Not chosen (nothing is sent)</option>
+                      {meta.mail.senders.map((sender) => <option key={sender.userId} value={sender.userId}>{sender.name} · {sender.email}</option>)}
+                    </select>
+                  </Field>
+                </div>
+                <label className="checklist-item"><input type="checkbox" checked={settings.email.reportEmails} onChange={(event) => setSettings({ ...settings, email: { ...settings.email, reportEmails: event.target.checked } })} /> Send report emails (the weekly stalled-leads report to administrators)</label>
               </fieldset>
               <fieldset className="user-privileges job-sources-editor">
                 <legend><BriefcaseBusiness size={12} /> Job listing sources</legend>
@@ -172,6 +186,31 @@ export default function SettingsPanel() {
                   <Field label="Companies checked per trip" hint={`0 to ${maxPrefetch}. The nearest ones are checked when a trip is created; the rest on demand.`}><input type="number" min={0} max={maxPrefetch} value={settings.jobSources.prefetch} onChange={(event) => setSettings({ ...settings, jobSources: { ...settings.jobSources, prefetch: Number(event.target.value) } })} required /></Field>
                 </div>
               </fieldset>
+              <fieldset className="user-privileges digest-editor opportunity-editor">
+                <legend><Briefcase size={12} /> Opportunity searches</legend>
+                <p className="field-hint">The keyword searches under Opportunities → Searches &amp; runs run on these days at this time (business time zone) and fill the opportunity pool. Every enabled job source answers each search up to the listings cap, within the budgets above. Two or three runs a week keep the Indeed calls low.</p>
+                <label className="checklist-item"><input type="checkbox" checked={settings.opportunities.enabled} onChange={(event) => setSettings({ ...settings, opportunities: { ...settings.opportunities, enabled: event.target.checked } })} /> Run the searches on a schedule</label>
+                <div className="weekday-picks">
+                  {weekdayNames.map((name, day) => (
+                    <label key={name} className="checklist-item">
+                      <input type="checkbox" checked={settings.opportunities.days.includes(day)} onChange={(event) => setSettings({ ...settings, opportunities: { ...settings.opportunities, days: event.target.checked ? [...settings.opportunities.days, day].sort((a, b) => a - b) : settings.opportunities.days.filter((item) => item !== day) } })} /> {name.slice(0, 3)}
+                    </label>
+                  ))}
+                </div>
+                <div className="rule-row">
+                  <Field label="Run at"><input type="time" value={settings.opportunities.time} onChange={(event) => setSettings({ ...settings, opportunities: { ...settings.opportunities, time: event.target.value } })} /></Field>
+                  <Field label="Listings per search and source" hint={`${minMaxListings} to ${maxMaxListings}; a search can set its own cap.`}><input type="number" min={minMaxListings} max={maxMaxListings} value={settings.opportunities.maxListings} onChange={(event) => setSettings({ ...settings, opportunities: { ...settings.opportunities, maxListings: Number(event.target.value) } })} /></Field>
+                </div>
+                <div className="weekday-picks" aria-label="Job sources for the searches">
+                  {opportunitySourceIds.map((id) => (
+                    <label key={id} className="checklist-item">
+                      <input type="checkbox" checked={settings.opportunities.sources.includes(id)} onChange={(event) => setSettings({ ...settings, opportunities: { ...settings.opportunities, sources: event.target.checked ? [...settings.opportunities.sources, id] : settings.opportunities.sources.filter((item) => item !== id) } })} /> {jobSourceLabels[id]}
+                    </label>
+                  ))}
+                </div>
+                <small className="field-hint">Which job sources answer the searches (Indeed through HasData by default; the sample source only exists on a stack running the sample provider). Each source must also be enabled above.</small>
+                <label className="checklist-item"><input type="checkbox" checked={settings.opportunities.notify} onChange={(event) => setSettings({ ...settings, opportunities: { ...settings.opportunities, notify: event.target.checked } })} /> Tell salespeople when a run adds new companies to the pool</label>
+              </fieldset>
               <fieldset className="user-privileges holiday-editor">
                 <legend><CalendarDays size={12} /> Business calendar · public holidays</legend>
                 <p className="field-hint">Non-working days besides weekends. Reports treat &ldquo;yesterday&rdquo; as the last working day, and due dates typed in words (&ldquo;in two weeks&rdquo;, &ldquo;January&rdquo;) skip these dates.</p>
@@ -198,11 +237,12 @@ export default function SettingsPanel() {
             </div>
           </form>
           <section className="panel settings-panel">
-            <div className="panel-heading"><div><h2>Email delivery</h2><p>Used for password reset links and two-factor codes.</p></div><button type="button" className="text-button" onClick={load}><RefreshCw size={13} /> Refresh</button></div>
+            <div className="panel-heading"><div><h2>Email log</h2><p>What the app sent, or recorded in stub mode.</p></div><button type="button" className="text-button" onClick={load}><RefreshCw size={13} /> Refresh</button></div>
             <div className={`form-note ${meta.mailerConfigured ? "" : "note-warning"}`}><Mail size={14} /> {
-              meta.mail.provider === "stub" ? "Stub mode (MAIL_PROVIDER=stub): nothing is sent. Reset links and sign-in codes are recorded in the outbox below so they can be tested. Switch to MAIL_PROVIDER=smtp once the Google Workspace mailbox is ready."
-                : meta.mail.provider === "smtp" ? "SMTP is configured. Password resets and two-factor codes are emailed; deliveries are listed below."
-                : "Email is not configured. Add the SMTP_* settings to .env.local (or MAIL_PROVIDER=stub to record messages without sending) and restart the app. Until then, administrators set passwords directly and two-factor cannot be enabled."}</div>
+              meta.mail.provider === "gmail" ? (settings.email.senderUserId ? `Sending through Gmail from ${meta.mail.senders.find((sender) => sender.userId === settings.email.senderUserId)?.email ?? "the chosen mailbox"}.` : "Gmail delivery: choose a sending mailbox above and save settings; until then nothing is sent.")
+                : meta.mail.provider === "stub" ? "Stub mode (MAIL_PROVIDER=stub): nothing is sent; every message is recorded below so it can be checked."
+                : meta.mail.provider === "smtp" ? "SMTP is configured (legacy); deliveries are listed below."
+                : "Email is not configured. Set MAIL_PROVIDER=gmail with the Google OAuth client (or MAIL_PROVIDER=stub to record messages without sending) and restart the app."}</div>
             {meta.mail.outbox.length > 0 && (
               <div className="table-scroll">
                 <table className="lead-table outbox-table">

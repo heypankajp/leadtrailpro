@@ -1,4 +1,5 @@
 import type { JobSourceSettings } from "@/features/jobs/model";
+import type { OpportunitySettings } from "@/features/opportunities/model";
 import type { SystemRole } from "@/features/users/model";
 
 /** A non-working day in the business calendar (public holiday, company closure). */
@@ -27,12 +28,28 @@ export function normalizeDigests(value: unknown): { digests: DigestSettings; err
   return { digests: { enabled: record.enabled === undefined ? defaultDigests.enabled : record.enabled === true, dailyTime, weeklyDay, weeklyTime }, error: null };
 }
 
+/** Email delivery through the Google app: the mailbox the app sends from and whether report emails go out at all. */
+export type EmailSettings = { senderUserId: number | null; reportEmails: boolean };
+export const defaultEmailSettings: EmailSettings = { senderUserId: null, reportEmails: false };
+
+export function normalizeEmailSettings(value: unknown): { email: EmailSettings; error: string | null } {
+  const record = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const raw = record.senderUserId;
+  const senderUserId = raw === null || raw === undefined || raw === "" ? null : Number(raw);
+  if (senderUserId !== null && (!Number.isSafeInteger(senderUserId) || senderUserId < 1)) return { email: defaultEmailSettings, error: "Choose a valid sending mailbox." };
+  return { email: { senderUserId, reportEmails: record.reportEmails === true }, error: null };
+}
+
 export type AppSettings = {
   roleLabels: Record<SystemRole, string>;
   reminders: ReminderSettings;
   digests: DigestSettings;
   /** TRIP-06: order, budgets, cache life, and prefetch count of the job-listing sources (SPEC §7.13). */
   jobSources: JobSourceSettings;
+  /** OPP-06: when the keyword searches run and how many listings each source may return per search. */
+  opportunities: OpportunitySettings;
+  /** The mailbox system email is sent from (a user with a connected Gmail) and the switch for report emails. */
+  email: EmailSettings;
   /** Sorted by date. Used with weekends for "yesterday" in reports and for natural-language due dates. */
   holidays: Holiday[];
 };

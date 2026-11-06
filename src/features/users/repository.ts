@@ -131,7 +131,7 @@ export async function getUserByEmail(email: string, db: Queryable = getDatabaseP
 }
 
 export async function createUser(input: CreateUserInput, actorId: number | null): Promise<UserAccount> {
-  const passwordHash = await hashPassword(input.password);
+  const passwordHash = input.password ? await hashPassword(input.password) : null;
   return withTransaction(async (connection) => {
     const result = await connection.query(
       `INSERT INTO users (first_name, last_name, email, phone, password_hash, role, privileges, stage, two_factor_enabled, auto_logout_enabled, auto_logout_time, target_template_id)

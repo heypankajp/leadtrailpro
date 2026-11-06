@@ -3,13 +3,23 @@ import type { JobSourceId } from "../model.ts";
 
 export type CompanyJobsInput = { companyName: string; website: string; address: string; city: string; country: string; /** The trip planner's company-name normaliser (features/trips/matching). */ normalize: (name: string) => string };
 
-/** One job-listing source (SPEC §7.13). `companyJobs` returns the company's active listings; it throws on a failed call. */
+/** One page of a keyword search (opportunity pool, SPEC §7.14). `page` is 1-based; `pageToken` is the source's own cursor when it uses one. */
+export type SearchListingsInput = { keyword: string; location: string; jobType: string; country: string; page: number; pageToken: string | null };
+/** A listing with the company it belongs to and the key that identifies it inside its source (see `listingKey`). */
+export type FoundRow = { company: string; listing: JobListing; sourceKey: string };
+export type SearchPage = { rows: FoundRow[]; hasMore: boolean; nextPageToken: string | null };
+
+/**
+ * One job-listing source (SPEC §7.13). `companyJobs` returns the company's active listings; `searchListings` returns
+ * one page of listings for a keyword and location (SPEC §7.14). Both throw on a failed call.
+ */
 export interface JobSourceAdapter {
   readonly id: JobSourceId;
   readonly configured: boolean;
   /** Minimum gap between two calls to this source, to stay inside its rate limit. */
   readonly minIntervalMs: number;
   companyJobs(input: CompanyJobsInput): Promise<JobListing[]>;
+  searchListings(input: SearchListingsInput): Promise<SearchPage>;
 }
 
 export class JobSourceError extends Error {
@@ -24,7 +34,7 @@ export async function fetchJson(url: string, init: RequestInit = {}, timeoutMs =
   return (await response.json()) as Record<string, unknown>;
 }
 
-export const text = (value: unknown, max = 200): string => (typeof value === "string" ? value.trim().slice(0, max) : "");
+export const text = (value: unknown, max = 200): string => (typeof value === "string" ? value.trim().slice(0, max) : typeof value === "number" ? String(value) : "");
 export const ymd = (value: unknown): string | null => (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null);
 export const httpUrl = (value: unknown): string => { const link = text(value, 2048); return /^https?:\/\//i.test(link) ? link : ""; };
 export const cityOf = (address: string): string => { const parts = address.split(",").map((part) => part.trim()).filter(Boolean); return parts.length >= 2 ? parts[parts.length - 2].replace(/\s+[A-Z]\d[A-Z]\s?\d[A-Z]\d$/i, "") : parts[0] ?? ""; };

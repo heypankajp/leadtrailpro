@@ -1,5 +1,5 @@
 import ExcelJS from "exceljs";
-import { reportPeriodLabels, reportPeriods, type ReportPeriod } from "@/lib/dates";
+import { reportPeriodLabels, reportPeriods, type ReportPeriod, customRangeFrom } from "@/lib/dates";
 import { handleRouteError, jsonError } from "@/lib/http";
 import { pdfResponse, renderTablePdf } from "@/lib/pdf";
 import { performanceReport } from "@/features/reports/repository";
@@ -21,7 +21,7 @@ export async function GET(request: Request) {
     const stageParam = params.get("stage");
     const templateParam = Number(params.get("templateId"));
     const filters = { stage: isUserStage(stageParam) ? stageParam : null, templateId: Number.isSafeInteger(templateParam) && templateParam > 0 ? templateParam : null };
-    const report = await performanceReport(period as ReportPeriod, user, selectedUser, filters);
+    const report = await performanceReport(period as ReportPeriod, user, selectedUser, filters, customRangeFrom(params.get("from"), params.get("to")));
     const { roleLabels } = await getSettings();
     const filterText = [filters.stage ? `Stage: ${stageLabels[filters.stage]}` : "", filters.templateId ? `Template: ${report.rows[0]?.template ?? `#${filters.templateId}`}` : ""].filter(Boolean).join(" · ") || "All sales managers";
 

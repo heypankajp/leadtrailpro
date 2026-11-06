@@ -1,5 +1,5 @@
 /**
- * Scheduler for LeadTrailPro's timed jobs (daily and weekly digests, TASK-06). Every JOBS_INTERVAL_SECONDS (default
+ * Scheduler for LeadTrailPro's timed jobs (daily and weekly digests, TASK-06; opportunity searches, OPP-06). Every JOBS_INTERVAL_SECONDS (default
  * 60) it asks the app to run whatever is due; the app decides and never sends a digest twice for one period.
  *
  *   JOBS_URL=http://localhost:3000 JOBS_KEY=<same value as the app's JOBS_KEY> node scripts/jobs.mjs
@@ -27,7 +27,11 @@ async function tick() {
       return;
     }
     if (failures) { console.log(`jobs: ${url} reachable again`); failures = 0; }
-    for (const run of data.ran ?? []) console.log(`${new Date().toISOString()} ${run.job} digest sent to ${run.recipients} recipient(s), ${run.failures} failure(s) [${run.periodKey}]`);
+    for (const run of data.ran ?? []) {
+      console.log(run.job === "opportunities"
+        ? `${new Date().toISOString()} opportunity searches ${run.status}: ${run.listingsFound} listings, ${run.newCompanies} new companies, ${run.attached} attached to leads [${run.periodKey}]`
+        : `${new Date().toISOString()} ${run.job} digest sent to ${run.recipients} recipient(s), ${run.failures} failure(s) [${run.periodKey}]`);
+    }
   } catch (error) {
     failures += 1;
     if (failures === 1 || failures % 30 === 0) console.error(`jobs: ${url} unreachable: ${error instanceof Error ? error.message : error}`);

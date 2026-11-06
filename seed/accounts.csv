@@ -1,0 +1,7 @@
+# Accounts that may sign in (loaded by the setup step and by `node scripts/seed-users.mjs`; edit and commit).
+# Columns: email, first_name, last_name, role (admin | sales_manager | recruiter), stage (onboarding | training | full_productive;
+# default full_productive). Everyone signs in with Google using that address; no password is stored. Existing emails are never changed.
+email,first_name,last_name,role,stage
+manish@xcelinnovations.io,Manish,Singh,admin,full_productive
+manishsingh.architect@gmail.com,Manish,Singh (Marketing),sales_manager,full_productive
+amanda@scilltech.com,Amanda,,admin,full_productive

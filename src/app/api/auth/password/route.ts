@@ -2,11 +2,12 @@ import { NextResponse } from "next/server";
 import { handleRouteError, jsonError, readJsonBody, requireSameOrigin } from "@/lib/http";
 import { isValidPassword } from "@/features/users/model";
 import { setUserPassword } from "@/features/users/repository";
-import { getRequestSessionToken, hashToken, requireUser, verifyPassword } from "@/features/users/session";
+import { getRequestSessionToken, hashToken, requireUser, verifyPassword, passwordSignInEnabled } from "@/features/users/session";
 
 /** Lets a signed-in person change their own password. Other sessions are signed out. */
 export async function POST(request: Request) {
   try {
+    if (!passwordSignInEnabled()) return jsonError(403, "Password sign-in is turned off on this server; accounts sign in with Google.");
     requireSameOrigin(request);
     const user = await requireUser();
     const body = await readJsonBody(request);

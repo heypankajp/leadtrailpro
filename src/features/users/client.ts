@@ -10,5 +10,5 @@ export const createUser = (input: CreateUserInput) => api<{ user: UserAccount }>
 export const updateUser = (id: number, input: UpdateUserInput) => api<{ user: UserAccount }>(`/api/users/${id}`, { method: "PATCH", json: input });
 export const terminateUser = (id: number, reassignToUserId: number, reason: string) =>
   api<{ ok: true; leadsReassigned: number; tasksReassigned: number; user: UserAccount }>(`/api/users/${id}/terminate`, { method: "POST", json: { reassignToUserId, reason } });
-export const setUserPassword = (id: number, password: string) => api<{ ok: true }>(`/api/users/${id}/password`, { method: "POST", json: { password } });
+export const setUserPassword = (id: number, password?: string | null) => api<{ ok: true }>(`/api/users/${id}/password`, { method: "POST", json: { password } });
 export const sendResetLink = (id: number) => api<{ ok: true; message: string }>(`/api/users/${id}/reset-link`, { method: "POST" });

@@ -1,15 +1,25 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { Plus, Save, ShieldCheck } from "lucide-react";
-import { errorMessage } from "@/lib/api";
+import { AlertTriangle, Plus, Save, ShieldCheck } from "lucide-react";
+import { ApiError, errorMessage } from "@/lib/api";
 import { reasonListFor } from "@/features/list-values/model";
 import { useApp } from "@/features/shell/AppContext";
 import { Dialog, ErrorText, Field } from "@/features/shell/components";
 import { createLead, updateLead } from "./client";
 import type { LeadInput, LeadSummary } from "./model";
 
-type Props = { lead?: LeadSummary; onClose: () => void; onSaved: (lead: LeadSummary) => void };
+type Props = {
+  lead?: LeadSummary;
+  /** Starting values for a new lead, for example from an opportunity card. */
+  prefill?: Partial<LeadInput>;
+  /** The opportunity card this lead is created from; it becomes "assigned" together with the lead. */
+  opportunityId?: number;
+  onClose: () => void;
+  onSaved: (lead: LeadSummary) => void;
+};
+
+type DuplicateNotice = { leadId: number; clientName: string; ownerName: string; statusLabel: string; recordState: string; canOverride: boolean; message: string };
 
 type FormState = {
   clientName: string; companyUrl: string; address: string; comments: string; clientExecutive: string; contactPhone: string; contactAltPhone: string; contactRemark: string;
@@ -18,8 +28,8 @@ type FormState = {
 };
 
 /** Add or edit a lead with every field from BRD section 6 except files and notes (those live on the lead itself). */
-export default function LeadFormDialog({ lead, onClose, onSaved }: Props) {
-  const { reference, can, user } = useApp();
+export default function LeadFormDialog({ lead, prefill, opportunityId, onClose, onSaved }: Props) {
+  const { reference, can, user, openLead } = useApp();
   const values = reference.listValues;
   const defaultStatus = values.status.find((item) => item.code === "cold") ?? values.status[0];
   const [form, setForm] = useState<FormState>(() => lead ? {
@@ -29,10 +39,13 @@ export default function LeadFormDialog({ lead, onClose, onSaved }: Props) {
     leadCategoryId: lead.leadCategoryId ? String(lead.leadCategoryId) : "", companySizeId: lead.companySizeId ? String(lead.companySizeId) : "", cityId: lead.cityId ? String(lead.cityId) : "",
     firstContactDate: lead.firstContactDate, followUpDate: lead.followUpDate ?? "", contractSignedDate: lead.contractSignedDate ?? "", ownerId: String(lead.ownerId),
   } : {
-    clientName: "", companyUrl: "", address: "", comments: "", clientExecutive: "", contactPhone: "", contactAltPhone: "", contactRemark: "", clientEmails: "", industry: "", positions: "",
+    clientName: prefill?.clientName ?? "", companyUrl: prefill?.companyUrl ?? "", address: prefill?.address ?? "", comments: prefill?.comments ?? "", clientExecutive: prefill?.clientExecutive ?? "",
+    contactPhone: prefill?.contactPhone ?? "", contactAltPhone: prefill?.contactAltPhone ?? "", contactRemark: prefill?.contactRemark ?? "", clientEmails: (prefill?.clientEmails ?? []).join(", "),
+    industry: prefill?.industry ?? "", positions: prefill?.positions ?? "",
     leadTypeId: values.lead_type[0] ? String(values.lead_type[0].id) : "", statusId: defaultStatus ? String(defaultStatus.id) : "", statusReasonId: "", bdActionId: "", clientResponseId: "", leadCategoryId: "",
     companySizeId: "", cityId: "", firstContactDate: reference.today, followUpDate: "", contractSignedDate: "", ownerId: String(user.id),
   });
+  const [duplicate, setDuplicate] = useState<DuplicateNotice | null>(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -44,10 +57,12 @@ export default function LeadFormDialog({ lead, onClose, onSaved }: Props) {
   // LEAD-06: Lost Lead and Disqualified need a reason from their own list; other statuses clear it.
   const reasonKey = reasonListFor(values.status.find((item) => String(item.id) === form.statusId)?.code);
 
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const submit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); void save(false); };
+
+  const save = async (allowSimilar: boolean) => {
     setSaving(true);
     setError("");
+    setDuplicate(null);
     const input: LeadInput = {
       clientName: form.clientName, companyUrl: form.companyUrl, address: form.address, comments: form.comments, clientExecutive: form.clientExecutive, contactPhone: form.contactPhone,
       contactAltPhone: form.contactAltPhone, contactRemark: form.contactRemark, clientEmails: form.clientEmails.split(/[,;\s]+/).filter(Boolean), industry: form.industry, positions: form.positions,
@@ -56,10 +71,13 @@ export default function LeadFormDialog({ lead, onClose, onSaved }: Props) {
       firstContactDate: form.firstContactDate, followUpDate: form.followUpDate || null, contractSignedDate: form.contractSignedDate || null,
     };
     try {
-      const result = lead ? await updateLead(lead.id, input) : await createLead({ ...input, ownerId: can("reassign_leads") ? Number(form.ownerId) : null });
+      const result = lead ? await updateLead(lead.id, input) : await createLead({ ...input, ownerId: can("reassign_leads") ? Number(form.ownerId) : null, opportunityId: opportunityId ?? null, allowSimilar });
       onSaved(result.lead);
     } catch (caught) {
-      setError(errorMessage(caught, "Could not save the lead."));
+      const apiError = caught instanceof ApiError ? caught : null;
+      const found = apiError?.status === 409 && apiError.data.duplicate ? (apiError.data.duplicate as Omit<DuplicateNotice, "canOverride" | "message">) : null;
+      if (apiError && found) setDuplicate({ ...found, canOverride: apiError.data.canOverride === true, message: apiError.message });
+      else setError(errorMessage(caught, "Could not save the lead."));
       setSaving(false);
     }
   };
@@ -74,7 +92,7 @@ export default function LeadFormDialog({ lead, onClose, onSaved }: Props) {
   return (
     <Dialog title={lead ? `Edit ${lead.clientName}` : "Add a new lead"} eyebrow={lead ? "LEAD DETAILS" : "YOUR PIPELINE"} onClose={onClose} size="wide">
       <form className="lead-form" onSubmit={submit}>
-        <Field label="Client name" required wide><input value={form.clientName} onChange={set("clientName")} required maxLength={200} placeholder="Company or client name" autoFocus /></Field>
+        <Field label="Client name" required wide><input value={form.clientName} onChange={(event) => { set("clientName")(event); setDuplicate(null); }} required maxLength={200} placeholder="Company or client name" autoFocus /></Field>
         <Field label="Lead type" required>{select("leadTypeId", values.lead_type, "")}</Field>
         <Field label="Status" required>
           <select value={form.statusId} onChange={(event) => setForm((current) => ({ ...current, statusId: event.target.value, statusReasonId: "" }))}>
@@ -94,7 +112,7 @@ export default function LeadFormDialog({ lead, onClose, onSaved }: Props) {
         </Field>
         <Field label="Follow-up date"><input type="date" value={form.followUpDate} onChange={set("followUpDate")} /></Field>
         {!lead && can("reassign_leads") && (
-          <Field label="Owner" hint="The creator becomes the owner unless you choose someone else."><select value={form.ownerId} onChange={set("ownerId")}>{owners.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
+          <Field label="Owner" hint={opportunityId ? "Who will follow up this company; the lead is created in their name." : "The creator becomes the owner unless you choose someone else."}><select value={form.ownerId} onChange={set("ownerId")}>{owners.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
         )}
         <Field label="BD action">{select("bdActionId", values.bd_action)}</Field>
         <Field label="Client response">{select("clientResponseId", values.client_response)}</Field>
@@ -113,6 +131,18 @@ export default function LeadFormDialog({ lead, onClose, onSaved }: Props) {
         <Field label="Contract signed date"><input type="date" value={form.contractSignedDate} onChange={set("contractSignedDate")} /></Field>
         <Field label="Comments" wide><textarea value={form.comments} onChange={set("comments")} rows={3} maxLength={5000} placeholder="General comments" /></Field>
         {!lead && <div className="form-note"><ShieldCheck size={14} /> Interaction notes, documents, and candidate profiles are added from the lead page after saving.</div>}
+        {duplicate && (
+          <div className="form-note duplicate-note" role="alert">
+            <AlertTriangle size={14} />
+            <div>
+              <p>{duplicate.message}</p>
+              <div className="duplicate-actions">
+                <button type="button" className="button button-outline button-small" onClick={() => { openLead(duplicate.leadId); onClose(); }}>Open {duplicate.clientName}</button>
+                {duplicate.canOverride && <button type="button" className="button button-outline button-small" onClick={() => void save(true)} disabled={saving}>Save anyway</button>}
+              </div>
+            </div>
+          </div>
+        )}
         <ErrorText message={error} />
         <div className="modal-actions">
           <button type="button" className="button button-outline" onClick={onClose}>Cancel</button>

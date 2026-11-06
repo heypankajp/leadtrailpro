@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import { handleRouteError, jsonError, readJsonBody, requireSameOrigin } from "@/lib/http";
 import { isValidPassword } from "@/features/users/model";
 import { setUserPassword } from "@/features/users/repository";
-import { consumePasswordResetToken } from "@/features/users/session";
+import { consumePasswordResetToken, passwordSignInEnabled } from "@/features/users/session";
 
 export async function POST(request: Request) {
   try {
+    if (!passwordSignInEnabled()) return jsonError(403, "Password sign-in is turned off on this server; accounts sign in with Google.");
     requireSameOrigin(request);
     const body = await readJsonBody(request);
     const token = typeof body?.token === "string" ? body.token : "";

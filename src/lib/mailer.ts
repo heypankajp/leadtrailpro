@@ -1,8 +1,14 @@
 import nodemailer from "nodemailer";
 import { getDatabasePool, fromSqlDateTime, toSqlDateTime } from "@/lib/db";
+import { googleOAuthClient } from "@/features/gmail/gmail";
+import { senderMailbox, sendFromMailbox } from "@/features/gmail/send";
+import { getSettings } from "@/features/settings/repository";
+import { isSenderChosen } from "@/lib/mail-state";
 
 /**
  * Outbound email with a provider switch:
+ *   MAIL_PROVIDER=gmail  send through the Gmail API from the mailbox chosen under Settings → Email delivery (a user who
+ *                        signed in with Google); the default whenever the Google OAuth client is configured
  *   MAIL_PROVIDER=stub   nothing is sent; every message is recorded in `mail_outbox` with its text so reset links
  *                        and sign-in codes can be read from Settings → Email delivery (development, or until the
  *                        Google Workspace mailbox exists)
@@ -20,7 +26,7 @@ import { getDatabasePool, fromSqlDateTime, toSqlDateTime } from "@/lib/db";
 
 type MailerConfig = { host: string; port: number; secure: boolean; user?: string; password?: string; from: string };
 
-export type MailProvider = "stub" | "smtp" | "off";
+export type MailProvider = "gmail" | "stub" | "smtp" | "off";
 
 export function getMailerConfig(): MailerConfig | null {
   const host = process.env.SMTP_HOST?.trim();
@@ -42,11 +48,16 @@ export function getMailProvider(): MailProvider {
   const mode = (process.env.MAIL_PROVIDER || "").trim().toLowerCase();
   if (mode === "stub") return "stub";
   if (mode === "off") return "off";
+  if (mode === "gmail") return "gmail";
+  if (mode === "smtp") return getMailerConfig() ? "smtp" : "off";
+  if (googleOAuthClient()) return "gmail";
   return getMailerConfig() ? "smtp" : "off";
 }
 
 export function isMailerConfigured(): boolean {
-  return getMailProvider() !== "off";
+  const provider = getMailProvider();
+  if (provider === "gmail") return isSenderChosen();
+  return provider !== "off";
 }
 
 let transport: nodemailer.Transporter | undefined;
@@ -64,7 +75,7 @@ function getTransport(config: MailerConfig) {
 
 export class MailerNotConfiguredError extends Error {
   constructor() {
-    super("Email delivery is not configured. Add the SMTP_* settings to .env.local, or set MAIL_PROVIDER=stub to record messages without sending.");
+    super("Email delivery is not configured. Configure the Google OAuth client and choose a sending mailbox under Settings → Email delivery, or set MAIL_PROVIDER=stub to record messages without sending.");
   }
 }
 
@@ -95,6 +106,19 @@ export async function sendMail(message: { to: string; subject: string; text: str
     await recordOutbox({ to: message.to, subject: message.subject, status: "stubbed", text: message.text });
     return;
   }
+  if (provider === "gmail") {
+    try {
+      const settings = await getSettings();
+      const mailbox = settings.email.senderUserId ? await senderMailbox(settings.email.senderUserId) : null;
+      if (!mailbox) throw new Error("No sending mailbox is chosen under Settings → Email delivery.");
+      await sendFromMailbox(mailbox, { fromName: "LeadTrailPro", to: [message.to], subject: message.subject, text: message.text, html: message.html });
+      await recordOutbox({ to: message.to, subject: message.subject, status: "sent" });
+    } catch (error) {
+      await recordOutbox({ to: message.to, subject: message.subject, status: "failed", error: error instanceof Error ? error.message : "Unknown error" });
+      throw error;
+    }
+    return;
+  }
   const config = getMailerConfig()!;
   try {
     await getTransport(config).sendMail({ from: config.from, ...message });
@@ -102,6 +126,18 @@ export async function sendMail(message: { to: string; subject: string; text: str
   } catch (error) {
     await recordOutbox({ to: message.to, subject: message.subject, status: "failed", error: error instanceof Error ? error.message : "Unknown error" });
     throw error;
+  }
+}
+
+/** Users whose Google mailbox is connected and may be chosen as the system sender. */
+export async function listSenderMailboxes(): Promise<{ userId: number; name: string; email: string }[]> {
+  try {
+    const { rows } = await getDatabasePool().query(
+      `SELECT g.user_id AS "userId", CONCAT(u.first_name, ' ', u.last_name) AS name, g.google_email AS email FROM gmail_connections g JOIN users u ON u.id = g.user_id WHERE u.is_active = TRUE ORDER BY u.first_name, u.last_name`,
+    );
+    return (rows as { userId: number; name: string; email: string }[]).map((row) => ({ ...row, userId: Number(row.userId) }));
+  } catch {
+    return [];
   }
 }
 
