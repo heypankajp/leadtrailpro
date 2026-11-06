@@ -44,6 +44,7 @@ Everyday commands:
 | Import the legacy tracker (needs an administrator; `--dry-run` first) | `docker compose run --rm setup node scripts/import-tracker.mjs "docs/Sales Leads 2026.xlsx" --dry-run` |
 | Schema upgrade after pulling code | `docker compose run --rm setup node scripts/create-database.mjs` |
 | Check the database connection the app will use | `docker compose run --rm app npm run db:check` |
+| Check the Google Maps key (three live calls) | `docker compose run --rm app npm run maps:test -- "1 Dundas St W, Toronto"` |
 | Add a dependency | `docker compose exec app npm install <package>`, then `docker compose build` |
 | PostgreSQL from a desktop tool | `127.0.0.1:5433`, database `leadtrailpro`, user `postgres`, password `leadtrailpro` (unless overridden) |
 
@@ -113,6 +114,19 @@ The keys live only in `.env.local`, which Git ignores; never put them in `.env.s
   3. JSearch (optional): rapidapi.com → the JSearch listing → subscribe to the free Basic plan → copy the `X-RapidAPI-Key` into `JSEARCH_API_KEY`.
 
 With `TRIPS_PROVIDER=stub` the trip planner never calls these sources (its companies are fictional); `npm run jobs:test -- "<company>" <city>` is the way to see them answer for a real company.
+
+### Google Maps key and the usage budget
+
+The Sales Trip Planner searches with Google Maps Platform: the Geocoding API for the trip address, Places API (New) for the companies (with website and phone), and the Routes API for driving minutes. One key serves all three, and the app calls Google only from the server, never from the browser.
+
+1. **Create the key**: console.cloud.google.com → the project → APIs & Services → Library: enable **Geocoding API**, **Places API (New)**, and **Routes API** (billing must be enabled on the project; the free allowance still applies). Then Credentials → Create credentials → API key, and under the key's **API restrictions** allow only those three APIs.
+2. **Configure**: put `MAPS_API_KEY=<key>` (or `GOOGLE_MAPS_API_KEY=<key>`) in `.env.local` and restart the app (`docker compose restart app`). With Docker, leave `TRIPS_PROVIDER` out of `.env` or empty: `stub` there keeps the sample companies and never uses the key.
+3. **Check**: `npm run maps:test -- "1 Dundas St W, Toronto"` (in Docker: `docker compose run --rm app npm run maps:test -- "1 Dundas St W, Toronto"`) makes three live calls, not counted by the meter, and names any API that is not enabled.
+4. **Upgrade the schema** after pulling a release with the meter: `docker compose run --rm setup node scripts/create-database.mjs` (migration 13 adds the `maps_usage` counters and the default budgets).
+
+**What is counted and where to see it.** Google's free allowance is per API and per month (Geocoding 10,000 calls, Places text search 1,000 calls, Route matrix 10,000 elements); it resets monthly and is not pooled. A search spends one geocode for a new address (re-runs reuse the stored coordinates), one Places call per page of up to 20 companies (the scarcest allowance: 1,000 pages a month is at least 300 searches), and, only for a radius in driving minutes, one route element per company found. The app counts every call per calendar month and stops at the budgets under **Settings → Google Maps usage** (defaults 9,000 / 900 / 9,000, 90% of the allowance, editable). Everyone who plans trips sees the live card on the planner pages (used, left, reset date); administrators are notified in the app, and by email if they opted in to event emails, at 80% and when a budget is spent. A refused search says which allowance is spent; the choices are to wait for the 1st, raise the budget (usage past the free cap is billed by Google), or search with a radius in km. Keep **Number of results** at 20 or fewer so a search takes one page.
+
+**Google-side guard rails (recommended).** The app's meter is the first line; a cap in Google Cloud is the one nothing can bypass. Under APIs & Services → Quotas & System Limits set a cap on each of the three APIs where one is offered (per day or per minute; about a thirtieth of the monthly budget per day, for example Geocoding 300, Places text search 30, route matrix elements 300), and under Billing → Budgets & alerts create a budget of a few dollars with email alerts. Google's quotas apply to the whole project, so they also cover any other use of the key.
 
 ### Gmail linking
 
@@ -185,7 +199,7 @@ The full server walk-through, including the reverse proxy and the first sign-in,
 
 - The app container takes its configuration from `.env.local`. Behind a reverse proxy, set `APP_URL` to the public origin and terminate TLS at the proxy.
 - Accounts: the setup step above creates every account in `seed/accounts.csv` that is missing. To add people later, add rows, commit, `git pull` on the server, and run `docker compose -f compose.yaml -f compose.prod.yaml run --rm setup node scripts/seed-users.mjs`; or add them under User management in the app. Each Google address must also be a test user on the consent screen until Google verifies the app.
-- The image carries the database scripts, so later schema upgrades can run from it:
+- The image carries the database scripts, so later schema upgrades can run from it (run this after pulling any release that adds a migration, for example migration 13 of November 6, 2026, which adds the Google Maps usage counters):
 
   ```bash
   docker compose -f compose.yaml -f compose.prod.yaml run --rm \
@@ -223,7 +237,7 @@ compose.prod.yaml        production override
 - **Emails (Gmail).** Each user can link their Gmail account; a lead's Emails tab lists recent messages to or from the lead's client addresses with direction, sender, recipients, subject, time, and body text. Administrators see every connected mailbox. Dormant until a Google OAuth client is configured.
 - **Search and filters.** Keyword search across lead fields and notes; filters for lead type, status and status reason, category, size, city, owner, client response, BD action, and date ranges; sortable, paginated lists.
 - **Tasks.** Tasks with lead, assignee, due date and time, priority, description, and checklist. Due dates can be typed in words (“next Monday at 10am”, “in two weeks”, “Feb 1”, “January”) and are shown for confirmation before saving; month names and relative periods skip weekends and business-calendar holidays. Follow-ups scheduled from a lead set the follow-up date and create a reminder task, and a note that mentions a next step with a date (“follow up next week”, “send the proposal by Friday”) offers to create that task when the note is saved.
-- **Sales trip planner.** Define a trip by title, address, radius in kilometres or driving minutes, business type, and number of results (up to 50); the companies found are listed with address, distance, a hiring count that opens the job listings, and an Action computed by matching each company against existing leads and clients (website domain, phone, name, address) and shown as the lead's status, including “Lost Lead – reason” and “Disqualified – reason”. Sort any column, filter by Action, shortlist, set planned visit dates, export to Excel, or print the field-visit report. Sample data by default; live providers plug in behind a small interface.
+- **Sales trip planner.** Define a trip by title, address, radius in kilometres or driving minutes, business type, and number of results (up to 50); the companies found are listed with address, distance, a hiring count that opens the job listings, and an Action computed by matching each company against existing leads and clients (website domain, phone, name, address) and shown as the lead's status, including “Lost Lead – reason” and “Disqualified – reason”. Sort any column, filter by Action, shortlist, set planned visit dates, export to Excel, or print the field-visit report. Sample data by default; live providers plug in behind a small interface. Google calls are metered per month against budgets under Settings → Google Maps usage, with a live usage card on the planner pages and administrator alerts at 80% and 100%.
 - **Files.** Documents and a separate Resumes/Profiles Shared area, with in-app preview for PDF, images, text, and Word files, version numbers for re-uploads, and administrator soft delete.
 - **Notifications and digests.** A bell in the top bar collects task assignments and changes, lead status changes, transfers, queued-lead events, and file uploads, with unread counts and one-click navigation. Every Sales Manager and Admin gets a daily digest (overdue and upcoming follow-ups, tasks, leads needing attention, yesterday's counts) and a weekly digest (last week's numbers, targets, team totals for admins), in-app and by email; each person chooses what they receive, and administrators set the schedule or send one at once.
 - **Action center.** Calls, emails, and visits this week versus last week, overdue, today, and tomorrow follow-ups, target progress, leads that have gone quiet for longer than their limit (a default number of days plus Admin rules per status and BD action), open tasks, and recent leads.
@@ -233,7 +247,7 @@ compose.prod.yaml        production override
 
 ## Not yet connected
 
-Google sign-in, stored email threads with reply and forward, AI summaries, OCR of business cards, presence and typing indicators on collaboration threads, mobile push notifications, device authorization, the Opportunity Recommendation module from the updated BRD (scheduled job-listing searches), and live map, company, review, routing, or job-board data (the sales trip planner uses sample companies until keys are set). Lead generation and the road visit planner show sample content. Designs for these are in SPEC.md section 10.
+Stored email threads with reply and forward, AI summaries, OCR of business cards, presence and typing indicators on collaboration threads, mobile push notifications, device authorization, and review data (the sales trip planner searches Google Maps once `MAPS_API_KEY` is set and shows sample companies otherwise; hiring data comes from the configured job sources). Lead generation and the road visit planner show sample content. Designs for these are in SPEC.md section 10.
 
 ## Checks and tests
 

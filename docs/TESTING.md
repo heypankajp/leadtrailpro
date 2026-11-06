@@ -118,7 +118,7 @@ Keep Git's line endings as they are (`git config core.autocrlf false` before clo
    EOT
    ```
 
-   On a server `TRIPS_PROVIDER` must be in `.env`, not `.env.local`: compose passes it to the container and an empty value there means "use the real providers".
+   On a server `TRIPS_PROVIDER` must be in `.env`, not `.env.local`: compose passes it to the container and an empty value there means "use the real providers". When a Google Maps key will go into `.env.local`, leave the `TRIPS_PROVIDER` line out so the planner searches Google; the key, the monthly budgets, and the recommended Google-side caps are in the README under "Google Maps key and the usage budget".
 
 2. Create the schema, the app role, and `.env.local`: The same step creates every account in `seed/accounts.csv` that does not exist yet, so check that file first (the administrator must be on it):
 
