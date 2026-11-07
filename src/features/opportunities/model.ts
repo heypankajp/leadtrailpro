@@ -25,11 +25,59 @@ export const isLiveLead = (lead: { recordState: string; statusCode: string } | n
 // ---------------------------------------------------------------------------------------------------------------------
 // Schedule (Settings → Opportunity searches)
 
-export type OpportunitySettings = { enabled: boolean; days: number[]; time: string; maxListings: number; notify: boolean; /** Job sources the searches go to (decided November 6, 2026: Indeed only; the sample source only exists on sample stacks). */ sources: JobSourceId[] };
+export type OpportunitySettings = { enabled: boolean; days: number[]; time: string; maxListings: number; notify: boolean; /** Pre-filled on a new search (OPP-03, November 7, 2026): the job titles, the single location, and the posted-within window in days. */ defaultTitles: string[]; defaultLocation: string; postedWithinDays: number; /** Job sources the searches go to (decided November 6, 2026: Indeed only; the sample source only exists on sample stacks). */ sources: JobSourceId[] };
 export const opportunitySourceIds: readonly JobSourceId[] = ["adzuna", "jsearch", "hasdata", "generic", "stub"];
-export const defaultOpportunitySettings: OpportunitySettings = { enabled: true, days: [1, 3, 5], time: "06:30", maxListings: 200, notify: true, sources: ["hasdata", "stub"] };
+export const defaultOpportunitySettings: OpportunitySettings = {
+  enabled: true, days: [1, 3, 5], time: "06:30", maxListings: 200, notify: true, sources: ["hasdata", "stub"],
+  defaultTitles: ["General Labourer", "Warehouse Associate", "Forklift Operator", "Machine Operator", "Production Worker"], defaultLocation: "Ontario", postedWithinDays: 30,
+};
 export const minMaxListings = 20;
 export const maxMaxListings = 1000;
+/** A search carries a group of job titles; HasData/Indeed take one keyword per call, so the titles become one OR query (`indeedKeyword`). */
+export const maxSearchTitles = 10;
+export const maxTitleLength = 80;
+export const minPostedWithinDays = 1;
+export const maxPostedWithinDays = 90;
+export const defaultPostedWithinDays = 30;
+
+/** Job titles out of an array or a newline/comma-separated text: trimmed, non-empty, de-duplicated regardless of case. */
+export function parseTitles(value: unknown): string[] {
+  const raw = Array.isArray(value) ? value : typeof value === "string" ? value.split(/[\n,]+/) : [];
+  const seen = new Set<string>();
+  const titles: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== "string") continue;
+    const title = item.trim().replace(/\s+/g, " ");
+    if (!title || seen.has(title.toLowerCase())) continue;
+    seen.add(title.toLowerCase());
+    titles.push(title);
+  }
+  return titles;
+}
+
+/**
+ * The single keyword a job source receives for a search. One title goes as typed (so an admin's own operators still
+ * work); several are joined with OR, each multi-word title in quotes so Indeed matches the phrase, not the words.
+ */
+export function indeedKeyword(titles: readonly string[]): string {
+  const clean = titles.map((title) => title.trim()).filter(Boolean);
+  if (clean.length <= 1) return clean[0] ?? "";
+  return clean.map((title) => (/\s/.test(title) && !title.includes('"') ? `"${title}"` : title)).join(" OR ");
+}
+
+function titlesError(titles: string[], required: boolean): string | null {
+  if (required && !titles.length) return "Enter at least one job title.";
+  if (titles.length > maxSearchTitles) return `Up to ${maxSearchTitles} job titles per search.`;
+  if (titles.some((title) => title.length > maxTitleLength)) return `Each job title is limited to ${maxTitleLength} characters.`;
+  return null;
+}
+
+/** The posted-within window in days: the default when missing, otherwise an integer inside the allowed range. */
+export function parsePostedWithinDays(value: unknown, fallback = defaultPostedWithinDays): number | null {
+  if (value === undefined || value === null || value === "") return fallback;
+  const days = Number(value);
+  return Number.isInteger(days) && days >= minPostedWithinDays && days <= maxPostedWithinDays ? days : null;
+}
 
 export function normalizeOpportunitySettings(value: unknown): { settings: OpportunitySettings; error: string | null } {
   const record = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
@@ -48,12 +96,19 @@ export function normalizeOpportunitySettings(value: unknown): { settings: Opport
   if (!Array.isArray(rawSources) || rawSources.some((id) => !opportunitySourceIds.includes(id as JobSourceId))) return { settings: defaultOpportunitySettings, error: "Choose the job sources from the list." };
   const sources = [...new Set(rawSources as JobSourceId[])];
   if (!sources.length) return { settings: defaultOpportunitySettings, error: "Choose at least one job source for the searches." };
+  const defaultTitles = record.defaultTitles === undefined ? defaultOpportunitySettings.defaultTitles : parseTitles(record.defaultTitles);
+  const titleProblem = titlesError(defaultTitles, false);
+  if (titleProblem) return { settings: defaultOpportunitySettings, error: titleProblem };
+  const defaultLocation = record.defaultLocation === undefined ? defaultOpportunitySettings.defaultLocation : typeof record.defaultLocation === "string" ? record.defaultLocation.trim() : "";
+  if (defaultLocation.length > 160) return { settings: defaultOpportunitySettings, error: "The default location is limited to 160 characters." };
+  const postedWithinDays = parsePostedWithinDays(record.postedWithinDays, defaultOpportunitySettings.postedWithinDays);
+  if (postedWithinDays === null) return { settings: defaultOpportunitySettings, error: `Posted within must be between ${minPostedWithinDays} and ${maxPostedWithinDays} days.` };
   return {
     settings: {
       enabled: record.enabled === undefined ? defaultOpportunitySettings.enabled : record.enabled === true,
       days, time, maxListings,
       notify: record.notify === undefined ? defaultOpportunitySettings.notify : record.notify === true,
-      sources,
+      sources, defaultTitles, defaultLocation, postedWithinDays,
     },
     error: null,
   };
@@ -70,8 +125,11 @@ export function isOpportunityRunDue(settings: OpportunitySettings, now: Date, ti
 // ---------------------------------------------------------------------------------------------------------------------
 // Searches
 
-export type OpportunitySearchInput = { name: string; keyword: string; location: string; jobType: string; maxListings: number | null; active: boolean };
+/** A search: a group of job titles sent as one query, one location, and how far back the postings may go. */
+export type OpportunitySearchInput = { name: string; titles: string[]; location: string; postedWithinDays: number; jobType: string; maxListings: number | null; active: boolean };
 export type OpportunitySearch = OpportunitySearchInput & {
+  /** The query the job sources receive, built from the titles (`indeedKeyword`). */
+  keyword: string;
   id: number; createdById: number | null; createdByName: string | null; lastRunAt: string | null; lastFound: number; lastNew: number; createdAt: string; updatedAt: string;
 };
 
@@ -84,13 +142,16 @@ export function parseSearchInput(value: unknown): { input: OpportunitySearchInpu
   const errors: string[] = [];
   const text = (key: string, max: number) => (typeof body[key] === "string" ? (body[key] as string).trim().slice(0, max + 1) : "");
   const name = text("name", 120);
-  const keyword = text("keyword", 200);
+  // `titles` is the current shape; a bare `keyword` (older clients) becomes a single title.
+  const titles = parseTitles(body.titles !== undefined ? body.titles : body.keyword);
   const location = text("location", 160);
   const jobType = text("jobType", 60);
   if (!name) errors.push("Give the search a name.");
   if (name.length > 120) errors.push("The name is limited to 120 characters.");
-  if (!keyword) errors.push("Enter the keyword to search for.");
-  if (keyword.length > 200) errors.push("The keyword is limited to 200 characters.");
+  const titleProblem = titlesError(titles, true);
+  if (titleProblem) errors.push(titleProblem);
+  const postedWithinDays = parsePostedWithinDays(body.postedWithinDays);
+  if (postedWithinDays === null) errors.push(`Posted within must be between ${minPostedWithinDays} and ${maxPostedWithinDays} days.`);
   if (location.length > 160) errors.push("The location is limited to 160 characters.");
   if (jobType && !jobTypeOptions.some((option) => option.code === jobType)) errors.push("Choose a job type from the list.");
   let maxListings: number | null = null;
@@ -99,7 +160,7 @@ export function parseSearchInput(value: unknown): { input: OpportunitySearchInpu
     if (!Number.isInteger(maxListings) || maxListings < minMaxListings || maxListings > maxMaxListings) errors.push(`Listings per run must be between ${minMaxListings} and ${maxMaxListings}, or empty for the default.`);
   }
   const active = body.active === undefined ? true : body.active === true;
-  return { input: { name: name.slice(0, 120), keyword: keyword.slice(0, 200), location, jobType, maxListings, active }, errors };
+  return { input: { name: name.slice(0, 120), titles, location, postedWithinDays: postedWithinDays ?? defaultPostedWithinDays, jobType, maxListings, active }, errors };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

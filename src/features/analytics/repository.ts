@@ -1,5 +1,5 @@
 import { getDatabasePool, fromSqlDateTime, toSqlDateTime, type Queryable } from "@/lib/db";
-import { businessTimeZone, periodRange, startOfDayUtc, todayYmd, zonedParts, formatYmd, type CustomRange, type ReportPeriod } from "@/lib/dates";
+import { businessTimeZone, periodRange, startOfDayUtc, startOfWeekYmd, todayYmd, zonedParts, formatYmd, type CustomRange, type ReportPeriod } from "@/lib/dates";
 import { selectLeads } from "@/features/leads/repository";
 import type { LeadSummary } from "@/features/leads/model";
 import { statusLabel } from "@/features/list-values/model";
@@ -10,7 +10,7 @@ import { hasPrivilege } from "@/features/users/model";
 import type { UserAccount } from "@/features/users/model";
 import {
   bucketKindFor, buckets, closedCodes, median, percentile, spellsOf, stalledAssessment, statusSeries, summarizeTransitions,
-  type AnalyticsFilters, type AnalyticsReport, type BreakdownRow, type StalledLead, type StatusEvent, type Transition,
+  sortTeamBoard, type AnalyticsFilters, type AnalyticsReport, type BreakdownRow, type StalledLead, type StatusEvent, type TeamBoard, type TeamBoardMetric, type Transition,
 } from "./model";
 
 /** The Analytics screen's data (SPEC §7.16): one call builds every section for a period and a filter set. */
@@ -265,4 +265,86 @@ export async function listAnalyticsLeads(viewer: UserAccount, requested: Analyti
   const clauses = [where];
   if (statusCode) { clauses.push("st.code = ?"); params.push(statusCode); }
   return selectLeads(clauses.join(" AND "), params, "l.last_activity_at DESC", 200, db);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Team board (one row per salesperson, as things stand now)
+
+/** The Action Center's "needs attention" rule: quiet for longer than the status/action allows (TASK-05). */
+const quietClause = "l.record_state = 'active' AND st.code NOT IN ('lost', 'disqualified')";
+const repliesClause = "l.record_state = 'active' AND l.last_client_email_at IS NOT NULL AND l.last_client_email_at > COALESCE(l.last_team_email_at, '1970-01-01'::timestamp) AND l.last_client_email_at > l.last_activity_at";
+
+type QuietRow = { id: number; ownerId: number; statusId: number; bdActionId: number | null; lastActivityAt: string };
+
+async function quietCandidates(db: Queryable, ownerIds: number[], shortestDays: number, nowMs: number): Promise<QuietRow[]> {
+  if (!ownerIds.length) return [];
+  const { rows } = await db.query(
+    `SELECT l.id, l.owner_id AS "ownerId", l.status_id AS "statusId", l.bd_action_id AS "bdActionId", l.last_activity_at AS "lastActivityAt"
+     FROM leads l JOIN list_values st ON st.id = l.status_id WHERE ${quietClause} AND l.last_activity_at < ? AND l.owner_id = ANY(?)`,
+    [toSqlDateTime(new Date(nowMs - shortestDays * 86_400_000)), ownerIds],
+  );
+  return (rows as QuietRow[]).map((row) => ({ ...row, id: Number(row.id), ownerId: Number(row.ownerId), statusId: Number(row.statusId), bdActionId: row.bdActionId === null ? null : Number(row.bdActionId), lastActivityAt: fromSqlDateTime(row.lastActivityAt) ?? row.lastActivityAt }));
+}
+
+const isStalled = (lead: { statusId: number; bdActionId: number | null; lastActivityAt: string }, reminders: Parameters<typeof resolveInactivityDays>[1], nowMs: number) =>
+  new Date(lead.lastActivityAt).getTime() < nowMs - resolveInactivityDays(lead, reminders) * 86_400_000;
+
+/** Who the board shows: every active non-recruiter for team-report viewers, only the viewer otherwise. */
+async function boardPeople(viewer: UserAccount, db: Queryable): Promise<UserAccount[]> {
+  const people = (await listUsers({}, db)).filter((person) => person.active && person.role !== "recruiter");
+  return hasPrivilege(viewer, "view_team_reports") ? people : people.filter((person) => person.id === viewer.id);
+}
+
+/** The team board: counts per salesperson now (active, overdue, stalled, replies waiting), this week's activity, and when each person last did anything. */
+export async function buildTeamBoard(viewer: UserAccount, db: Queryable = getDatabasePool()): Promise<TeamBoard> {
+  const people = await boardPeople(viewer, db);
+  const ids = people.map((person) => person.id);
+  const settings = await getSettings(db);
+  const today = todayYmd();
+  const weekStartYmd = startOfWeekYmd(today);
+  const week = periodRange("this_week", undefined, undefined, settings.holidays.map((holiday) => holiday.date));
+  const nowMs = Date.now();
+  const countMap = async (sql: string, extra: unknown[] = []) => {
+    if (!ids.length) return new Map<number, number>();
+    const { rows } = await db.query(sql, [...extra, ids]);
+    return new Map((rows as { userId: number; count: number }[]).map((row) => [Number(row.userId), Number(row.count)]));
+  };
+  const shortest = Math.min(settings.reminders.inactivityDays, ...settings.reminders.rules.map((rule) => rule.days));
+  const [active, overdue, replies, created, activity, lastActivity, quiet] = await Promise.all([
+    countMap('SELECT owner_id AS "userId", COUNT(*)::int AS count FROM leads WHERE record_state = \'active\' AND owner_id = ANY(?) GROUP BY owner_id'),
+    countMap('SELECT owner_id AS "userId", COUNT(*)::int AS count FROM leads WHERE record_state = \'active\' AND follow_up_date < ? AND owner_id = ANY(?) GROUP BY owner_id', [today]),
+    countMap(`SELECT l.owner_id AS "userId", COUNT(*)::int AS count FROM leads l WHERE ${repliesClause} AND l.owner_id = ANY(?) GROUP BY l.owner_id`),
+    countMap('SELECT created_by AS "userId", COUNT(*)::int AS count FROM leads WHERE created_at >= ? AND created_at < ? AND created_by = ANY(?) GROUP BY created_by', [toSqlDateTime(week.start), toSqlDateTime(week.end)]),
+    ids.length ? db.query(
+      `SELECT user_id AS "userId", SUM(CASE WHEN activity_type = 'call' THEN 1 ELSE 0 END)::int AS calls, SUM(CASE WHEN activity_type = 'email' THEN 1 ELSE 0 END)::int AS emails, SUM(CASE WHEN activity_type = 'visit' THEN 1 ELSE 0 END)::int AS visits
+       FROM lead_activities WHERE occurred_at >= ? AND occurred_at < ? AND user_id = ANY(?) GROUP BY user_id`,
+      [toSqlDateTime(week.start), toSqlDateTime(week.end), ids],
+    ).then((result) => new Map((result.rows as { userId: number; calls: number; emails: number; visits: number }[]).map((row) => [Number(row.userId), { calls: Number(row.calls), emails: Number(row.emails), visits: Number(row.visits) }]))) : new Map<number, { calls: number; emails: number; visits: number }>(),
+    ids.length ? db.query('SELECT user_id AS "userId", MAX(occurred_at) AS "lastAt" FROM lead_activities WHERE user_id = ANY(?) GROUP BY user_id', [ids])
+      .then((result) => new Map((result.rows as { userId: number; lastAt: string }[]).map((row) => [Number(row.userId), fromSqlDateTime(row.lastAt)]))) : new Map<number, string | null>(),
+    quietCandidates(db, ids, shortest, nowMs),
+  ]);
+  const stalled = new Map<number, number>();
+  for (const lead of quiet) if (isStalled(lead, settings.reminders, nowMs)) stalled.set(lead.ownerId, (stalled.get(lead.ownerId) ?? 0) + 1);
+  const rows = people.map((person) => ({
+    userId: person.id, name: person.name, role: person.role,
+    activeLeads: active.get(person.id) ?? 0, overdueFollowUps: overdue.get(person.id) ?? 0, stalled: stalled.get(person.id) ?? 0, repliesWaiting: replies.get(person.id) ?? 0,
+    calls: activity.get(person.id)?.calls ?? 0, emails: activity.get(person.id)?.emails ?? 0, visits: activity.get(person.id)?.visits ?? 0, leadsCreated: created.get(person.id) ?? 0,
+    lastActivityAt: lastActivity.get(person.id) ?? null,
+  }));
+  return { weekStartYmd, rows: sortTeamBoard(rows) };
+}
+
+/** The leads behind one number of the board; a non-team viewer only sees their own. */
+export async function teamBoardLeads(viewer: UserAccount, userId: number, metric: TeamBoardMetric, db: Queryable = getDatabasePool()): Promise<LeadSummary[]> {
+  if (!hasPrivilege(viewer, "view_team_reports") && userId !== viewer.id) return [];
+  const today = todayYmd();
+  if (metric === "active") return selectLeads("l.record_state = 'active' AND l.owner_id = ?", [userId], "l.last_activity_at DESC", 200, db);
+  if (metric === "overdue") return selectLeads("l.record_state = 'active' AND l.follow_up_date < ? AND l.owner_id = ?", [today, userId], "l.follow_up_date ASC, l.id DESC", 200, db);
+  if (metric === "replies") return selectLeads(`${repliesClause} AND l.owner_id = ?`, [userId], "l.last_client_email_at DESC", 200, db);
+  const settings = await getSettings(db);
+  const nowMs = Date.now();
+  const shortest = Math.min(settings.reminders.inactivityDays, ...settings.reminders.rules.map((rule) => rule.days));
+  const candidates = await selectLeads(`${quietClause} AND l.last_activity_at < ? AND l.owner_id = ?`, [toSqlDateTime(new Date(nowMs - shortest * 86_400_000)), userId], "l.last_activity_at ASC", 500, db);
+  return candidates.filter((lead) => isStalled(lead, settings.reminders, nowMs)).slice(0, 200);
 }

@@ -10,7 +10,7 @@ import { maxHolidayNameLength, maxInactivityDays, maxInactivityRules, type AppSe
 import { defaultRoleLabels, systemRoles } from "@/features/users/model";
 import { jobSourceLabels, maxCacheHours, maxPrefetch, type JobSourceId, type JobSourceStatus } from "@/features/jobs/model";
 import { mapsSkuHints, mapsSkuIds, mapsSkuLabels, mapsSkuUnits, maxMapsBudget, type MapsOverview } from "@/features/maps/model";
-import { maxMaxListings, minMaxListings, opportunitySourceIds } from "@/features/opportunities/model";
+import { maxMaxListings, maxPostedWithinDays, maxSearchTitles, minMaxListings, minPostedWithinDays, opportunitySourceIds } from "@/features/opportunities/model";
 import { fetchSettings, updateSettings, type MailStatus } from "./client";
 import { runDigestNow } from "@/features/notifications/client";
 import { weekdayNames, type DigestJob } from "@/features/notifications/model";
@@ -149,6 +149,7 @@ export default function SettingsPanel() {
                   </Field>
                 </div>
                 <label className="checklist-item"><input type="checkbox" checked={settings.email.reportEmails} onChange={(event) => setSettings({ ...settings, email: { ...settings.email, reportEmails: event.target.checked } })} /> Send report emails (the weekly stalled-leads report to administrators)</label>
+                <label className="checklist-item"><input type="checkbox" checked={settings.email.watchMailboxes} onChange={(event) => setSettings({ ...settings, email: { ...settings.email, watchMailboxes: event.target.checked } })} /> Watch connected mailboxes for client emails (every 5 minutes; stamps each lead with the last email from the client and tells the owner about new replies)</label>
               </fieldset>
               <fieldset className="user-privileges job-sources-editor">
                 <legend><BriefcaseBusiness size={12} /> Job listing sources</legend>
@@ -235,6 +236,11 @@ export default function SettingsPanel() {
                 <div className="rule-row">
                   <Field label="Run at"><input type="time" value={settings.opportunities.time} onChange={(event) => setSettings({ ...settings, opportunities: { ...settings.opportunities, time: event.target.value } })} /></Field>
                   <Field label="Listings per search and source" hint={`${minMaxListings} to ${maxMaxListings}; a search can set its own cap.`}><input type="number" min={minMaxListings} max={maxMaxListings} value={settings.opportunities.maxListings} onChange={(event) => setSettings({ ...settings, opportunities: { ...settings.opportunities, maxListings: Number(event.target.value) } })} /></Field>
+                </div>
+                <div className="rule-row">
+                  <Field label="Default job titles" hint={`One per line, up to ${maxSearchTitles}. Pre-filled on a new search; a search sends its titles to Indeed as one query, so a group costs one call per page.`}><textarea rows={4} value={settings.opportunities.defaultTitles.join("\n")} onChange={(event) => setSettings({ ...settings, opportunities: { ...settings.opportunities, defaultTitles: event.target.value.split("\n") } })} /></Field>
+                  <Field label="Default location" hint="One city, region, or province per search, for example Ontario."><input value={settings.opportunities.defaultLocation} maxLength={160} onChange={(event) => setSettings({ ...settings, opportunities: { ...settings.opportunities, defaultLocation: event.target.value } })} /></Field>
+                  <Field label="Posted within (days)" hint={`${minPostedWithinDays} to ${maxPostedWithinDays}; how far back each search looks.`}><input type="number" min={minPostedWithinDays} max={maxPostedWithinDays} value={settings.opportunities.postedWithinDays} onChange={(event) => setSettings({ ...settings, opportunities: { ...settings.opportunities, postedWithinDays: Number(event.target.value) } })} /></Field>
                 </div>
                 <div className="weekday-picks" aria-label="Job sources for the searches">
                   {opportunitySourceIds.map((id) => (

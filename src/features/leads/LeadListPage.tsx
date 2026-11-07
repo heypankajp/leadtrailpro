@@ -27,7 +27,7 @@ const titles: Record<LeadListView, { title: string; eyebrow: string; blurb: stri
 };
 
 const sortLabels: Record<LeadSortKey, string> = {
-  last_activity: "Most recent activity", first_contact: "First contact date", follow_up: "Follow-up date", client_name: "Client name", owner: "Owner", created: "Date created",
+  last_activity: "Most recent activity", first_contact: "First contact date", follow_up: "Follow-up date", client_name: "Client name", owner: "Owner", created: "Date created", client_reply: "Client's last email",
 };
 
 type Filters = {

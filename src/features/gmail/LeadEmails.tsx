@@ -24,7 +24,9 @@ export default function LeadEmails({ leadId, addresses, attachments }: { leadId:
   const statusFetcher = useCallback(() => fetchGmailStatus(), []);
   const { data: status, error: statusError } = useAsyncData(statusFetcher, version);
   const connected = Boolean(status?.connectedEmail);
-  const canLoad = Boolean(status?.configured && (connected || status?.allMailboxes) && addresses.length);
+  // Loads even without an own mailbox: colleagues' mailboxes matched to this lead by the mailbox watch are searched too.
+  const canLoad = Boolean(status?.configured && addresses.length);
+  const ownMailbox = (email: LeadEmail) => email.mailbox.toLowerCase() === (status?.connectedEmail ?? "").toLowerCase();
   const emailsFetcher = useCallback(() => (canLoad ? fetchLeadEmails(leadId) : Promise.resolve({ emails: [], failures: 0 })), [canLoad, leadId]);
   const { data: result, error: emailsError, loading } = useAsyncData(emailsFetcher, `${addresses.join(",")}|${version}`);
   const [compose, setCompose] = useState<Compose | null>(null);
@@ -53,7 +55,8 @@ export default function LeadEmails({ leadId, addresses, attachments }: { leadId:
   const startCompose = () => setCompose({ to: addresses.join(", "), cc: "", subject: "", body: "", threadId: null, inReplyTo: null });
   const startReply = (email: LeadEmail) => {
     const replyTo = email.direction === "received" ? (email.from.match(/[^\s<>,;"']+@[^\s<>,;"']+/)?.[0] ?? email.from) : addresses[0] ?? "";
-    setCompose({ to: replyTo, cc: "", subject: /^re:/i.test(email.subject) ? email.subject : `Re: ${email.subject}`, body: "", threadId: email.threadId || null, inReplyTo: email.messageId || null });
+    // A thread id only exists inside the mailbox that holds it; a reply to a colleague's thread relies on the In-Reply-To header instead.
+    setCompose({ to: replyTo, cc: "", subject: /^re:/i.test(email.subject) ? email.subject : `Re: ${email.subject}`, body: "", threadId: ownMailbox(email) ? email.threadId || null : null, inReplyTo: email.messageId || null });
   };
 
   if (!status && !statusError) return <Loading text="Checking Gmail..." />;
@@ -74,7 +77,7 @@ export default function LeadEmails({ leadId, addresses, attachments }: { leadId:
         </div>
       )}
       {status?.configured && addresses.length === 0 && <p className="no-attachments">Add a client email address to the lead to see messages.</p>}
-      {status?.configured && addresses.length > 0 && !connected && !status.allMailboxes && <p className="no-attachments">Connect your Gmail to see emails exchanged with this client.</p>}
+      {status?.configured && addresses.length > 0 && !connected && !status.allMailboxes && <p className="no-attachments">Connect your Gmail to see and answer emails from your own mailbox. Emails that colleagues&apos; connected mailboxes exchanged with this client are listed below.</p>}
       {canLoad && loading && <Loading text="Loading emails..." />}
       <ErrorText message={emailsError} />
       {canLoad && !loading && result && (
@@ -95,7 +98,7 @@ export default function LeadEmails({ leadId, addresses, attachments }: { leadId:
                           <small>{formatDateTime(email.date)}</small>
                           {connected && <button type="button" className="text-button email-reply" onClick={() => startReply(email)}><Reply size={12} /> Reply</button>}
                         </div>
-                        <small>From {email.from} · To {email.to || "—"}{email.cc ? ` · Cc ${email.cc}` : ""}{status?.allMailboxes ? ` · Mailbox ${email.mailbox}` : ""}</small>
+                        <small>From {email.from} · To {email.to || "—"}{email.cc ? ` · Cc ${email.cc}` : ""}{!ownMailbox(email) ? ` · Mailbox ${email.mailbox}` : ""}</small>
                         <p className="email-body">{email.snippet}</p>
                       </article>
                     ))}

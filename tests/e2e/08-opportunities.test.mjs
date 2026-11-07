@@ -26,7 +26,7 @@ describe("Opportunity pool", () => {
     await page.clickButton("Add search");
     await page.dialogTitle("Add a search");
     await page.fill("Name", `Bakery staff ${runId}`);
-    await page.fill("Keyword", "baker");
+    await page.fill("Job titles", "baker");
     await page.fill("Location", "Mississauga, ON");
     await page.clickButton("Save search");
     await page.toast("saved");

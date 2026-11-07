@@ -4,14 +4,14 @@ import { useCallback, useState } from "react";
 import { AlertTriangle, Briefcase, Download, Layers, TrendingUp, Users } from "lucide-react";
 import { errorMessage } from "@/lib/api";
 import type { CustomRange, ReportPeriod } from "@/lib/dates";
-import { formatDate, formatShortDate } from "@/lib/format";
+import { formatDate, formatShortDate, relativeTime } from "@/lib/format";
 import { useAsyncData } from "@/lib/useAsyncData";
 import type { LeadSummary } from "@/features/leads/model";
 import { useApp } from "@/features/shell/AppContext";
 import { Dialog, EmptyState, ErrorText, Loading, StatusPill } from "@/features/shell/components";
 import { CategoryBars, StackedBars, colorFor, seriesColors, statusColors } from "./charts";
-import { fetchAnalytics, fetchAnalyticsLeads } from "./client";
-import { emptyAnalyticsFilters, type AnalyticsFilters, type AnalyticsReport } from "./model";
+import { fetchAnalytics, fetchAnalyticsLeads, fetchTeamBoard, fetchTeamBoardLeads } from "./client";
+import { emptyAnalyticsFilters, teamBoardMetricLabels, type AnalyticsFilters, type AnalyticsReport, type TeamBoard, type TeamBoardMetric, type TeamBoardRow } from "./model";
 
 type Props = { period: ReportPeriod; custom: CustomRange | null; ownerId: number | null };
 type Drill = { title: string; leads: LeadSummary[] | null; error: string };
@@ -38,16 +38,18 @@ export default function AnalyticsSections({ period, custom, ownerId }: Props) {
   const values = reference.listValues;
   const set = (patch: Partial<AnalyticsFilters>) => setFilters((current) => ({ ...current, ...patch }));
 
-  const drillTo = async (title: string, statusCode: string | null, drillOwner: number | null) => {
+  const drillWith = async (title: string, load: () => Promise<{ leads: LeadSummary[] }>) => {
     setDrill({ title, leads: null, error: "" });
-    try { setDrill({ title, leads: (await fetchAnalyticsLeads(effective, statusCode, drillOwner)).leads, error: "" }); } catch (caught) { setDrill({ title, leads: null, error: errorMessage(caught) }); }
+    try { setDrill({ title, leads: (await load()).leads, error: "" }); } catch (caught) { setDrill({ title, leads: null, error: errorMessage(caught) }); }
   };
+  const drillTo = (title: string, statusCode: string | null, drillOwner: number | null) => drillWith(title, () => fetchAnalyticsLeads(effective, statusCode, drillOwner));
 
   const statusSeries = (report: AnalyticsReport) => report.statuses.map((status, index) => ({ key: status.code, label: status.label, color: colorFor(status.code, index) }));
   const bucketLabel = (report: AnalyticsReport, label: string) => (report.bucketKind === "month" ? label.slice(0, 7) : formatShortDate(label));
 
   return (
     <>
+      {can("view_team_reports") && <TeamBoardSection drill={drillWith} />}
       <div className="report-toolbar analytics-filters" aria-label="Pipeline filters">
         <select aria-label="Status" value={filters.statusId ?? ""} onChange={(event) => set({ statusId: event.target.value ? Number(event.target.value) : null })}><option value="">All statuses</option>{values.status.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}</select>
         <select aria-label="Lead type" value={filters.leadTypeId ?? ""} onChange={(event) => set({ leadTypeId: event.target.value ? Number(event.target.value) : null })}><option value="">All lead types</option>{values.lead_type.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}</select>
@@ -211,5 +213,47 @@ export default function AnalyticsSections({ period, custom, ownerId }: Props) {
         </Dialog>
       )}
     </>
+  );
+}
+
+/**
+ * Team board (RPT-02, November 7, 2026): one row per salesperson as things stand now, the people with the most waiting on
+ * them first. Every count opens the leads behind it, so a manager can read the lead, comment, reassign, or assign a task.
+ */
+function TeamBoardSection({ drill }: { drill: (title: string, load: () => Promise<{ leads: LeadSummary[] }>) => void }) {
+  const { dataVersion } = useApp();
+  const fetcher = useCallback(() => fetchTeamBoard(), []);
+  const { data, error } = useAsyncData<TeamBoard>(fetcher, dataVersion);
+  const count = (row: TeamBoardRow, metric: TeamBoardMetric, value: number, alert: boolean) => (
+    value > 0
+      ? <button type="button" className={`link-button board-number${alert ? " is-alert" : ""}`} onClick={() => drill(`${row.name} · ${teamBoardMetricLabels[metric]}`, () => fetchTeamBoardLeads(row.userId, metric))}>{value}</button>
+      : <span className="board-zero">0</span>
+  );
+  return (
+    <section className="panel analytics-panel team-board" aria-label="Team board">
+      <div className="panel-heading"><div><h2>Team board</h2><p>Where each salesperson stands right now, the people with the most waiting on them first · activity since Monday {data ? formatDate(data.weekStartYmd) : ""}. Click a number for the leads.</p></div></div>
+      <ErrorText message={error} />
+      {!data && !error && <Loading />}
+      {data && (
+        <table className="opp-table">
+          <thead><tr><th>Salesperson</th><th>Active leads</th><th>Overdue follow-ups</th><th>Stalled</th><th>Client replies waiting</th><th>This week</th><th>Leads created</th><th>Last active</th></tr></thead>
+          <tbody>
+            {data.rows.map((row) => (
+              <tr key={row.userId}>
+                <td><strong>{row.name}</strong>{row.role !== "sales_manager" && <small className="muted-cell"> · {row.role === "admin" ? "Admin" : row.role}</small>}</td>
+                <td>{count(row, "active", row.activeLeads, false)}</td>
+                <td>{count(row, "overdue", row.overdueFollowUps, true)}</td>
+                <td>{count(row, "stalled", row.stalled, true)}</td>
+                <td>{count(row, "replies", row.repliesWaiting, true)}</td>
+                <td><small>{row.calls} calls · {row.emails} emails · {row.visits} visits</small></td>
+                <td>{row.leadsCreated}</td>
+                <td><small>{row.lastActivityAt ? relativeTime(row.lastActivityAt) : "never"}</small></td>
+              </tr>
+            ))}
+            {data.rows.length === 0 && <tr><td colSpan={8} className="empty-state">No salespeople to show.</td></tr>}
+          </tbody>
+        </table>
+      )}
+    </section>
   );
 }

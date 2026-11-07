@@ -11,6 +11,7 @@ import { suggestFollowUp } from "@/lib/natural-dates";
 import { useAsyncData } from "@/lib/useAsyncData";
 import { documentLabels, previewableMimeTypes, type LeadAttachment } from "@/features/attachments/model";
 import LeadEmails from "@/features/gmail/LeadEmails";
+import { replyWaiting } from "@/features/gmail/watch-model";
 import { reasonListFor, type ListKey, type ListValue } from "@/features/list-values/model";
 import CollaborationTab from "@/features/messages/CollaborationTab";
 import RichText from "@/features/shell/RichText";
@@ -325,6 +326,7 @@ function OverviewTab({ detail, canEdit, onQuickUpdate, onScheduleFollowUp }: {
           ) : <strong>{lead.clientResponse ?? "Not set"}</strong>}
         </div>
         <KeyValue label="NEXT FOLLOW-UP"><strong className={overdue ? "overdue" : lead.followUpDate === reference.today ? "due-today" : ""}>{formatDate(lead.followUpDate)}{overdue ? " · overdue" : ""}</strong></KeyValue>
+        <KeyValue label="CLIENT LAST EMAIL">{lead.lastClientEmailAt ? <strong className={replyWaiting(lead) ? "overdue" : ""}>{formatDateTime(lead.lastClientEmailAt)}{replyWaiting(lead) ? " · awaiting your reply" : ""}</strong> : <span className="detail-muted">None seen in a connected mailbox</span>}</KeyValue>
         <KeyValue label="FIRST CONTACT">{formatDate(lead.firstContactDate)}</KeyValue>
         <KeyValue label="CONTRACT SIGNED">{formatDate(lead.contractSignedDate, "Not signed")}</KeyValue>
         <KeyValue label="LEAD CATEGORY">{lead.leadCategory ?? "Not set"}</KeyValue>

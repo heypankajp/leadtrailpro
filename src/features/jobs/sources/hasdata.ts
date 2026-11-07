@@ -65,7 +65,7 @@ export function createHasDataSource(config: HasDataConfig | null): JobSourceAdap
       return mapHasData(data, input.companyName, input.normalize);
     },
     async searchListings(input: SearchListingsInput): Promise<SearchPage> {
-      const url = listingUrl(input.keyword, input.location || "Canada", "30");
+      const url = listingUrl(input.keyword, input.location || "Canada", String(input.postedWithinDays || 30));
       if (input.pageToken) url.searchParams.set("nextPage", input.pageToken);
       const data = await request(url);
       const rows = parseHasDataRows(data);

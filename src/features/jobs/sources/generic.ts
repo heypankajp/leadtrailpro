@@ -39,6 +39,7 @@ export function createGenericSource(config: { url: string; key: string } | null)
     async searchListings(input: SearchListingsInput): Promise<SearchPage> {
       const url = new URL(config!.url);
       url.searchParams.set("keyword", input.keyword);
+      url.searchParams.set("days", String(input.postedWithinDays || 30));
       if (input.location) url.searchParams.set("location", input.location);
       if (input.jobType) url.searchParams.set("job_type", input.jobType);
       url.searchParams.set("page", String(input.page));

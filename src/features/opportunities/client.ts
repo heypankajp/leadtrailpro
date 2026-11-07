@@ -6,7 +6,8 @@ export const fetchOpportunity = (id: number) => api<{ opportunity: Opportunity }
 export const markOpportunityNotRelevant = (id: number, reasonId: number, note: string) => api<{ opportunity: Opportunity }>(`/api/opportunities/${id}`, { method: "PATCH", json: { action: "not_relevant", reasonId, note } });
 export const restoreOpportunity = (id: number) => api<{ opportunity: Opportunity }>(`/api/opportunities/${id}`, { method: "PATCH", json: { action: "restore" } });
 export const reopenOpportunity = (id: number, ownerId: number) => api<{ lead: { id: number; clientName: string; ownerName: string } }>(`/api/opportunities/${id}/reopen`, { method: "POST", json: { ownerId } });
-export const fetchSearches = () => api<{ searches: OpportunitySearch[] }>("/api/opportunities/searches");
+export type SearchDefaults = { titles: string[]; location: string; postedWithinDays: number };
+export const fetchSearches = () => api<{ searches: OpportunitySearch[]; defaults: SearchDefaults }>("/api/opportunities/searches");
 export const createSearch = (input: OpportunitySearchInput) => api<{ search: OpportunitySearch }>("/api/opportunities/searches", { method: "POST", json: input });
 export const updateSearch = (id: number, input: OpportunitySearchInput) => api<{ search: OpportunitySearch }>(`/api/opportunities/searches/${id}`, { method: "PATCH", json: input });
 export const deleteSearch = (id: number) => api<{ ok: true }>(`/api/opportunities/searches/${id}`, { method: "DELETE" });

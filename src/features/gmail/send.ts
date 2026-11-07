@@ -1,7 +1,7 @@
 import MailComposer from "nodemailer/lib/mail-composer";
 import { getDatabasePool } from "@/lib/db";
 import { HttpError } from "@/lib/http";
-import { accessTokenFor, decryptStoredToken, googleConfig } from "./gmail";
+import { accessTokenFor, decryptStoredToken, gmailApiUri, googleConfig } from "./gmail";
 
 /**
  * Sending through the Gmail API with a connected mailbox's token (MAIL-02 groundwork, system email): the message is
@@ -36,7 +36,7 @@ export async function sendFromMailbox(mailbox: { email: string; refreshToken: st
     inReplyTo: input.inReplyTo ?? undefined, references: input.inReplyTo ?? undefined,
   });
   const raw = (await composer.compile().build()).toString("base64url");
-  const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+  const response = await fetch(`${gmailApiUri()}/gmail/v1/users/me/messages/send`, {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     body: JSON.stringify(input.threadId ? { raw, threadId: input.threadId } : { raw }),

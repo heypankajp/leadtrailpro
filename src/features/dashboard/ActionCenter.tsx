@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { AlertTriangle, ArrowRight, Clock3, ChevronRight, ListTodo, Mail, MapPin, Phone, Plus, Target } from "lucide-react";
+import { AlertTriangle, ArrowRight, Clock3, ChevronRight, ListTodo, Mail, MailOpen, MapPin, Phone, Plus, Target } from "lucide-react";
 import { formatDate, formatDateTime, percentChange, relativeTime } from "@/lib/format";
 import { useAsyncData } from "@/lib/useAsyncData";
 import type { LeadSummary } from "@/features/leads/model";
@@ -127,6 +127,23 @@ export default function ActionCenter() {
           </div>
 
           <div className="dashboard-grid reminders-grid">
+            <section className="panel reminder-panel">
+              <div className="panel-heading">
+                <div><h2>Client replies waiting</h2><p>Clients who emailed after {data.teamWide ? "the team's" : "your"} last email or action on the lead</p></div>
+              </div>
+              {data.clientReplies.length === 0 ? <EmptyState title="No client email is waiting for an answer" /> : (
+                <div className="followup-list">
+                  {data.clientReplies.slice(0, 6).map((lead) => (
+                    <button className="followup-row" key={lead.id} onClick={() => openLead(lead.id)}>
+                      <span className="reminder-icon reply-icon"><MailOpen size={14} /></span>
+                      <span className="followup-info"><strong>{lead.clientName}</strong><small>Client wrote {relativeTime(lead.lastClientEmailAt)} · {lead.ownerName}</small></span>
+                      <StatusPill status={lead.statusLabel} code={lead.statusCode} />
+                      <ChevronRight className="followup-chevron" size={16} />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
             <section className="panel reminder-panel">
               <div className="panel-heading">
                 <div><h2>Needs attention</h2><p>Active leads quiet for longer than their limit · default {data.inactivityDays} days{data.inactivityRuleCount ? ` · ${data.inactivityRuleCount} status/action ${data.inactivityRuleCount === 1 ? "rule" : "rules"}` : ""}</p></div>

@@ -64,6 +64,7 @@ export function createAdzunaSource(config: AdzunaConfig | null): JobSourceAdapte
     async searchListings(input: SearchListingsInput): Promise<SearchPage> {
       const url = baseUrl(input.country, input.page);
       url.searchParams.set("what", input.keyword);
+      url.searchParams.set("max_days_old", String(input.postedWithinDays || 30));
       if (input.location) url.searchParams.set("where", input.location);
       const flag = jobTypeParams[input.jobType];
       if (flag) url.searchParams.set(flag[0], flag[1]);

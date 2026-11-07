@@ -1,8 +1,9 @@
 "use client";
 
-import { Clock3, MoreHorizontal } from "lucide-react";
+import { Clock3, MailOpen, MoreHorizontal } from "lucide-react";
 import { formatDate, relativeTime } from "@/lib/format";
 import { Avatar, StatusPill } from "@/features/shell/components";
+import { replyWaiting } from "@/features/gmail/watch-model";
 import type { LeadSummary } from "./model";
 
 export type LeadTableProps = {
@@ -49,6 +50,7 @@ export default function LeadTable({ leads, selected, today, view, canSelect, can
                     <Avatar name={lead.clientName} seed={lead.id} />
                     <span><strong>{lead.clientName}</strong><small>{lead.clientExecutive || "No contact yet"}{lead.city ? ` · ${lead.city}` : ""}</small></span>
                   </button>
+                  {lead.lastClientEmailAt && <small className={replyWaiting(lead) ? "reply-badge reply-waiting" : "reply-badge"}><MailOpen size={11} /> Client wrote {relativeTime(lead.lastClientEmailAt)}{replyWaiting(lead) ? " · awaiting reply" : ""}</small>}
                 </td>
                 <td><StatusPill status={lead.statusLabel} code={lead.statusCode} /></td>
                 <td><span className="action-cell">{lead.bdAction ?? "—"}</span><small className="activity-time">{relativeTime(lead.lastActivityAt)}</small></td>

@@ -4,7 +4,7 @@ import type { JobSourceId } from "../model.ts";
 export type CompanyJobsInput = { companyName: string; website: string; address: string; city: string; country: string; /** The trip planner's company-name normaliser (features/trips/matching). */ normalize: (name: string) => string };
 
 /** One page of a keyword search (opportunity pool, SPEC §7.14). `page` is 1-based; `pageToken` is the source's own cursor when it uses one. */
-export type SearchListingsInput = { keyword: string; location: string; jobType: string; country: string; page: number; pageToken: string | null };
+export type SearchListingsInput = { keyword: string; location: string; jobType: string; /** Only postings from the last N days (the search's posted-within window). */ postedWithinDays: number; country: string; page: number; pageToken: string | null };
 /** A listing with the company it belongs to and the key that identifies it inside its source (see `listingKey`). */
 export type FoundRow = { company: string; listing: JobListing; sourceKey: string };
 export type SearchPage = { rows: FoundRow[]; hasMore: boolean; nextPageToken: string | null };

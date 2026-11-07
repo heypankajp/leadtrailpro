@@ -151,6 +151,7 @@ describe("Administration and reports", () => {
     await page.wait(By.xpath("//h2[normalize-space()='Pipeline now']"));
     await page.wait(By.xpath("//h2[normalize-space()='Stalled leads']"));
     await page.wait(By.xpath("//h2[normalize-space()='Leaderboard']"));
+    await page.wait(By.xpath("//section[contains(@class,'team-board')]//table//th[normalize-space()='Client replies waiting']"));
     await page.click(By.xpath("//div[contains(@class,'report-periods')]//button[normalize-space()='Last 30 days']"), { global: true });
     await page.wait(By.xpath("//h2[normalize-space()='Status over time']"));
   });

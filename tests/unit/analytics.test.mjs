@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
   bucketKindFor, buckets, median, parseAnalyticsFilters, percentile, spellsOf, stalledAssessment, statusSeries, summarizeTransitions, weekStart,
+  sortTeamBoard, teamBoardAttention,
 } from "../../src/features/analytics/model.ts";
 
 describe("Analytics rules", () => {
@@ -58,5 +59,20 @@ describe("Analytics rules", () => {
   test("filters parse ids, trimmed text, and the source choice", () => {
     const params = new URLSearchParams("ownerId=3&statusId=x&industry=%20Food%20&source=pool&jobType=full");
     assert.deepEqual(parseAnalyticsFilters((key) => params.get(key)), { ownerId: 3, statusId: null, leadTypeId: null, cityId: null, industry: "Food", client: "", source: "pool", jobType: "full" });
+  });
+});
+
+describe("team board (RPT-02)", () => {
+  test("rows sort by what is waiting on the person: replies first, then overdue, then stalled, then by name", () => {
+    const rows = [
+      { name: "Cara", overdueFollowUps: 0, stalled: 0, repliesWaiting: 0 },
+      { name: "Ben", overdueFollowUps: 2, stalled: 1, repliesWaiting: 0 },
+      { name: "Ana", overdueFollowUps: 0, stalled: 0, repliesWaiting: 2 },
+      { name: "Abe", overdueFollowUps: 0, stalled: 0, repliesWaiting: 0 },
+    ];
+    assert.equal(teamBoardAttention(rows[1]), 5);
+    assert.equal(teamBoardAttention(rows[2]), 6);
+    assert.deepEqual(sortTeamBoard(rows).map((row) => row.name), ["Ana", "Ben", "Abe", "Cara"]);
+    assert.equal(rows[0].name, "Cara", "the input is not reordered");
   });
 });

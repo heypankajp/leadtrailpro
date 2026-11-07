@@ -8,20 +8,23 @@ import { addActivity, getLead, setLeadState, transferLead, updateLead } from "@/
 import type { LeadSummary } from "@/features/leads/model";
 import type { UserAccount } from "@/features/users/model";
 import { claimOpportunityForLead } from "./claim";
-import { closedStatusCodes, reasonScopeFor, type Opportunity, type OpportunityListing, type OpportunityPage, type OpportunityRun, type OpportunitySearch, type OpportunitySearchInput, type OpportunityStatus, type ReasonScope } from "./model";
+import { closedStatusCodes, defaultPostedWithinDays, indeedKeyword, parseTitles, reasonScopeFor, type Opportunity, type OpportunityListing, type OpportunityPage, type OpportunityRun, type OpportunitySearch, type OpportunitySearchInput, type OpportunityStatus, type ReasonScope } from "./model";
 
 /** Reads and the people's actions on the opportunity pool (OPP-*); the search runs live in `runner.ts`. */
 
 // ---- Searches ----
 
-type SearchRow = { id: number; name: string; keyword: string; location: string; jobType: string; maxListings: number | null; active: boolean; createdById: number | null; createdByName: string | null; lastRunAt: string | null; lastFound: number; lastNew: number; createdAt: string; updatedAt: string };
+type SearchRow = { id: number; name: string; keyword: string; titles: unknown; postedWithinDays: number; location: string; jobType: string; maxListings: number | null; active: boolean; createdById: number | null; createdByName: string | null; lastRunAt: string | null; lastFound: number; lastNew: number; createdAt: string; updatedAt: string };
 
 const searchColumns = `
-  s.id, s.name, s.keyword, s.location, s.job_type AS "jobType", s.max_listings AS "maxListings", s.is_active AS active, s.created_by AS "createdById",
+  s.id, s.name, s.keyword, s.titles, s.posted_within_days AS "postedWithinDays", s.location, s.job_type AS "jobType", s.max_listings AS "maxListings", s.is_active AS active, s.created_by AS "createdById",
   CONCAT(u.first_name, ' ', u.last_name) AS "createdByName", s.last_run_at AS "lastRunAt", s.last_found AS "lastFound", s.last_new AS "lastNew", s.created_at AS "createdAt", s.updated_at AS "updatedAt"`;
 
+/** Titles stored as JSON (migration 15); a row saved before that has only its keyword. */
+const searchTitles = (row: SearchRow): string[] => { const titles = parseTitles(typeof row.titles === "string" ? (JSON.parse(row.titles) as unknown) : row.titles); return titles.length ? titles : [row.keyword]; };
+
 const toSearch = (row: SearchRow): OpportunitySearch => ({
-  id: Number(row.id), name: row.name, keyword: row.keyword, location: row.location, jobType: row.jobType, maxListings: row.maxListings === null ? null : Number(row.maxListings),
+  id: Number(row.id), name: row.name, keyword: row.keyword, titles: searchTitles(row), postedWithinDays: Number(row.postedWithinDays) || defaultPostedWithinDays, location: row.location, jobType: row.jobType, maxListings: row.maxListings === null ? null : Number(row.maxListings),
   active: Boolean(row.active), createdById: row.createdById === null ? null : Number(row.createdById), createdByName: row.createdByName?.trim() || null,
   lastRunAt: fromSqlDateTime(row.lastRunAt), lastFound: Number(row.lastFound), lastNew: Number(row.lastNew),
   createdAt: fromSqlDateTime(row.createdAt) ?? row.createdAt, updatedAt: fromSqlDateTime(row.updatedAt) ?? row.updatedAt,
@@ -41,11 +44,11 @@ export async function getSearch(id: number, db: Queryable = getDatabasePool()): 
 export async function createSearch(input: OpportunitySearchInput, actor: UserAccount): Promise<OpportunitySearch> {
   return withTransaction(async (connection) => {
     const result = await connection.query(
-      "INSERT INTO opportunity_searches (name, keyword, location, job_type, max_listings, is_active, created_by) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id",
-      [input.name, input.keyword, input.location, input.jobType, input.maxListings, input.active, actor.id],
+      "INSERT INTO opportunity_searches (name, keyword, titles, posted_within_days, location, job_type, max_listings, is_active, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+      [input.name, indeedKeyword(input.titles), JSON.stringify(input.titles), input.postedWithinDays, input.location, input.jobType, input.maxListings, input.active, actor.id],
     );
     const search = (await getSearch(insertId(result), connection))!;
-    await recordAudit(connection, { actorId: actor.id, action: "opportunity_search.created", entityType: "opportunity_search", entityId: search.id, after: { ...input }, details: `${actor.name} added the search "${input.name}" (${input.keyword})` });
+    await recordAudit(connection, { actorId: actor.id, action: "opportunity_search.created", entityType: "opportunity_search", entityId: search.id, after: { ...input }, details: `${actor.name} added the search "${input.name}" (${indeedKeyword(input.titles)})` });
     return search;
   });
 }
@@ -55,13 +58,13 @@ export async function updateSearch(id: number, input: OpportunitySearchInput, ac
     const before = await getSearch(id, connection);
     if (!before) throw new HttpError(404, "Search not found.");
     await connection.query(
-      "UPDATE opportunity_searches SET name = ?, keyword = ?, location = ?, job_type = ?, max_listings = ?, is_active = ? WHERE id = ?",
-      [input.name, input.keyword, input.location, input.jobType, input.maxListings, input.active, id],
+      "UPDATE opportunity_searches SET name = ?, keyword = ?, titles = ?, posted_within_days = ?, location = ?, job_type = ?, max_listings = ?, is_active = ? WHERE id = ?",
+      [input.name, indeedKeyword(input.titles), JSON.stringify(input.titles), input.postedWithinDays, input.location, input.jobType, input.maxListings, input.active, id],
     );
     const search = (await getSearch(id, connection))!;
     await recordAudit(connection, {
       actorId: actor.id, action: "opportunity_search.updated", entityType: "opportunity_search", entityId: id,
-      before: { name: before.name, keyword: before.keyword, location: before.location, jobType: before.jobType, maxListings: before.maxListings, active: before.active }, after: { ...input },
+      before: { name: before.name, titles: before.titles, keyword: before.keyword, postedWithinDays: before.postedWithinDays, location: before.location, jobType: before.jobType, maxListings: before.maxListings, active: before.active }, after: { ...input, keyword: indeedKeyword(input.titles) },
       details: `${actor.name} changed the search "${search.name}"`,
     });
     return search;

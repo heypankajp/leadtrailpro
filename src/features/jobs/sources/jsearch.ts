@@ -31,6 +31,14 @@ export function mapJSearch(data: Record<string, unknown>, companyName: string, n
 
 const employmentTypes: Record<string, string> = { full_time: "FULLTIME", part_time: "PARTTIME", contract: "CONTRACTOR" };
 
+/** JSearch only knows four windows; the search's posted-within days pick the smallest one that covers them. */
+export function jsearchDatePosted(days: number): "today" | "3days" | "week" | "month" {
+  if (days <= 1) return "today";
+  if (days <= 3) return "3days";
+  if (days <= 7) return "week";
+  return "month";
+}
+
 export function createJSearchSource(apiKey: string | null): JobSourceAdapter {
   const headers = () => ({ "x-rapidapi-key": apiKey!, "x-rapidapi-host": "jsearch.p.rapidapi.com" });
   return {
@@ -50,7 +58,7 @@ export function createJSearchSource(apiKey: string | null): JobSourceAdapter {
       url.searchParams.set("query", `${input.keyword}${input.location ? ` in ${input.location}` : ""}`);
       url.searchParams.set("page", String(input.page));
       url.searchParams.set("num_pages", "1");
-      url.searchParams.set("date_posted", "month");
+      url.searchParams.set("date_posted", jsearchDatePosted(input.postedWithinDays));
       url.searchParams.set("country", (input.country || "ca").toLowerCase());
       if (employmentTypes[input.jobType]) url.searchParams.set("employment_types", employmentTypes[input.jobType]);
       const rows = parseJSearchRows(await fetchJson(url.toString(), { headers: headers() }));

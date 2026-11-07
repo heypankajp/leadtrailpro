@@ -10,7 +10,7 @@ import type { LeadInput } from "@/features/leads/model";
 import { useApp } from "@/features/shell/AppContext";
 import { Dialog, EmptyState, ErrorText, Field, Loading, Pagination, Tabs, type TabOption } from "@/features/shell/components";
 import { createSearch, deleteSearch, fetchOpportunities, fetchRuns, fetchSearches, markOpportunityNotRelevant, reopenOpportunity, restoreOpportunity, runSearchesNow, updateSearch } from "./client";
-import { jobTypeOptions, maxMaxListings, minMaxListings, type Opportunity, type OpportunitySearch, type OpportunitySearchInput, type OpportunityStatus } from "./model";
+import { jobTypeOptions, maxMaxListings, maxPostedWithinDays, maxSearchTitles, minMaxListings, minPostedWithinDays, type Opportunity, type OpportunitySearch, type OpportunitySearchInput, type OpportunityStatus } from "./model";
 
 type Tab = OpportunityStatus | "searches";
 const pageSize = 50;
@@ -240,12 +240,12 @@ function NotRelevantDialog({ opportunity, reasons, onClose, onDone }: { opportun
   );
 }
 
-const emptySearch: OpportunitySearchInput = { name: "", keyword: "", location: "", jobType: "", maxListings: null, active: true };
+const emptySearch: OpportunitySearchInput = { name: "", titles: [], location: "", postedWithinDays: 30, jobType: "", maxListings: null, active: true };
 
 /** Administrators: the shared keyword searches and the recent runs. */
 function SearchesPanel() {
   const { notify, dataVersion } = useApp();
-  const fetcher = useCallback(async () => { const [searches, runs] = await Promise.all([fetchSearches(), fetchRuns()]); return { searches: searches.searches, runs: runs.runs }; }, []);
+  const fetcher = useCallback(async () => { const [searches, runs] = await Promise.all([fetchSearches(), fetchRuns()]); return { searches: searches.searches, defaults: searches.defaults, runs: runs.runs }; }, []);
   const { data, error, reload } = useAsyncData(fetcher, dataVersion);
   const [editing, setEditing] = useState<{ id: number | null; input: OpportunitySearchInput } | null>(null);
   const remove = async (search: OpportunitySearch) => {
@@ -257,24 +257,25 @@ function SearchesPanel() {
       <div className="panel opp-panel">
         <div className="opp-toolbar">
           <div><strong>Searches</strong><small className="field-hint"> · each one is sent to every enabled job source on the schedule under Settings → Opportunity searches</small></div>
-          <button type="button" className="button button-outline button-small" onClick={() => setEditing({ id: null, input: { ...emptySearch } })}><Plus size={13} /> Add search</button>
+          <button type="button" className="button button-outline button-small" onClick={() => setEditing({ id: null, input: { ...emptySearch, titles: data?.defaults.titles ?? [], location: data?.defaults.location ?? "", postedWithinDays: data?.defaults.postedWithinDays ?? 30 } })}><Plus size={13} /> Add search</button>
         </div>
         {error && <ErrorText message={error} />}
-        {!data ? <Loading /> : data.searches.length === 0 ? <EmptyState title="No searches yet" text="Add a keyword and a location, for example “baker” in “Mississauga, ON”." /> : (
+        {!data ? <Loading /> : data.searches.length === 0 ? <EmptyState title="No searches yet" text="Add a group of job titles and one location, for example “baker” and “pastry chef” in “Mississauga, ON”." /> : (
           <table className="opp-table">
-            <thead><tr><th>Name</th><th>Keyword</th><th>Location</th><th>Job type</th><th>Cap</th><th>Last run</th><th aria-label="Actions" /></tr></thead>
+            <thead><tr><th>Name</th><th>Job titles</th><th>Location</th><th>Posted within</th><th>Job type</th><th>Cap</th><th>Last run</th><th aria-label="Actions" /></tr></thead>
             <tbody>
               {data.searches.map((search) => (
                 <tr key={search.id} className={search.active ? "" : "opp-inactive"}>
                   <td><strong>{search.name}</strong>{!search.active && <small className="muted-cell">Paused</small>}</td>
-                  <td>{search.keyword}</td>
+                  <td>{search.titles.join(", ")}</td>
                   <td>{search.location || "—"}</td>
+                  <td>{search.postedWithinDays} days</td>
                   <td>{jobTypeOptions.find((option) => option.code === search.jobType)?.label ?? "Any"}</td>
                   <td>{search.maxListings ?? "default"}</td>
                   <td>{search.lastRunAt ? <>{relativeTime(search.lastRunAt)}<small className="muted-cell">{search.lastFound} found · {search.lastNew} new</small></> : "never"}</td>
                   <td>
                     <div className="opp-actions">
-                      <button type="button" className="button button-outline button-small" onClick={() => setEditing({ id: search.id, input: { name: search.name, keyword: search.keyword, location: search.location, jobType: search.jobType, maxListings: search.maxListings, active: search.active } })}><Pencil size={12} /> Edit</button>
+                      <button type="button" className="button button-outline button-small" onClick={() => setEditing({ id: search.id, input: { name: search.name, titles: search.titles, location: search.location, postedWithinDays: search.postedWithinDays, jobType: search.jobType, maxListings: search.maxListings, active: search.active } })}><Pencil size={12} /> Edit</button>
                       <button type="button" className="button button-outline button-small" onClick={() => void remove(search)}><Trash2 size={12} /> Remove</button>
                     </div>
                   </td>
@@ -324,7 +325,7 @@ function SearchesPanel() {
 }
 
 function SearchFormDialog({ initial, title, onClose, onSave }: { initial: OpportunitySearchInput; title: string; onClose: () => void; onSave: (input: OpportunitySearchInput) => Promise<void> }) {
-  const [form, setForm] = useState({ ...initial, maxListings: initial.maxListings === null ? "" : String(initial.maxListings) });
+  const [form, setForm] = useState({ ...initial, titles: initial.titles.join("\n"), postedWithinDays: String(initial.postedWithinDays), maxListings: initial.maxListings === null ? "" : String(initial.maxListings) });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const set = (key: keyof typeof form) => (event: { target: { value: string } }) => setForm((current) => ({ ...current, [key]: event.target.value }));
@@ -333,7 +334,7 @@ function SearchFormDialog({ initial, title, onClose, onSave }: { initial: Opport
     setBusy(true);
     setError("");
     try {
-      await onSave({ name: form.name, keyword: form.keyword, location: form.location, jobType: form.jobType, maxListings: form.maxListings === "" ? null : Number(form.maxListings), active: form.active });
+      await onSave({ name: form.name, titles: form.titles.split("\n").map((title) => title.trim()).filter(Boolean), location: form.location, postedWithinDays: Number(form.postedWithinDays) || 30, jobType: form.jobType, maxListings: form.maxListings === "" ? null : Number(form.maxListings), active: form.active });
     } catch (caught) {
       setError(errorMessage(caught, "The search could not be saved."));
       setBusy(false);
@@ -343,8 +344,9 @@ function SearchFormDialog({ initial, title, onClose, onSave }: { initial: Opport
     <Dialog title={title} eyebrow="OPPORTUNITY SEARCHES" onClose={onClose}>
       <form className="lead-form" onSubmit={submit}>
         <Field label="Name" required wide><input value={form.name} onChange={set("name")} required maxLength={120} placeholder="e.g. Bakery staff in Peel" autoFocus /></Field>
-        <Field label="Keyword" required hint="What the job sources search for, as a person would type it."><input value={form.keyword} onChange={set("keyword")} required maxLength={200} placeholder="e.g. baker" /></Field>
-        <Field label="Location" hint="City or region; leave empty for the whole country."><input value={form.location} onChange={set("location")} maxLength={160} placeholder="e.g. Mississauga, ON" /></Field>
+        <Field label="Job titles" required wide hint={`One per line, up to ${maxSearchTitles}. Indeed receives them as one query, so one search covers the whole group.`}><textarea value={form.titles} onChange={set("titles")} required rows={4} placeholder={"e.g. baker\npastry chef"} /></Field>
+        <Field label="Location" hint="One city, region, or province; leave empty for the whole country."><input value={form.location} onChange={set("location")} maxLength={160} placeholder="e.g. Mississauga, ON" /></Field>
+        <Field label="Posted within (days)" hint={`${minPostedWithinDays} to ${maxPostedWithinDays}.`}><input type="number" min={minPostedWithinDays} max={maxPostedWithinDays} value={form.postedWithinDays} onChange={set("postedWithinDays")} required /></Field>
         <Field label="Job type"><select value={form.jobType} onChange={set("jobType")}>{jobTypeOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}</select></Field>
         <Field label="Listings per source" hint={`${minMaxListings} to ${maxMaxListings}; empty uses the default from Settings.`}><input type="number" min={minMaxListings} max={maxMaxListings} value={form.maxListings} onChange={set("maxListings")} placeholder="default" /></Field>
         <label className="checklist-item"><input type="checkbox" checked={form.active} onChange={(event) => setForm((current) => ({ ...current, active: event.target.checked }))} /> Active (runs on the schedule and with Run now)</label>

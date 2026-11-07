@@ -754,6 +754,46 @@ const migrations = [
       );
     },
   },
+  {
+    version: 14,
+    name: "Mailbox watch: emails matched to leads, the client's last email per lead, scan watermarks per connected mailbox (SPEC §10.1, MAIL-01)",
+    async run(client) {
+      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS last_client_email_at TIMESTAMP(0) NULL");
+      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS last_team_email_at TIMESTAMP(0) NULL");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_last_client_email ON leads (last_client_email_at)");
+      await client.query("ALTER TABLE gmail_connections ADD COLUMN IF NOT EXISTS watch_since TIMESTAMP(0) NULL");
+      await client.query("ALTER TABLE gmail_connections ADD COLUMN IF NOT EXISTS watch_checked_at TIMESTAMP(0) NULL");
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS lead_emails (
+          id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          lead_id INTEGER NOT NULL,
+          user_id INTEGER NOT NULL,
+          mailbox VARCHAR(254) NOT NULL,
+          gmail_message_id VARCHAR(64) NOT NULL,
+          thread_id VARCHAR(64) NOT NULL DEFAULT '',
+          direction VARCHAR(10) NOT NULL CHECK (direction IN ('sent', 'received')),
+          from_address VARCHAR(254) NOT NULL,
+          subject VARCHAR(500) NOT NULL DEFAULT '',
+          received_at TIMESTAMP(0) NOT NULL,
+          created_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW},
+          CONSTRAINT fk_lead_emails_lead FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE,
+          CONSTRAINT fk_lead_emails_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+          CONSTRAINT uq_lead_emails UNIQUE (mailbox, gmail_message_id, lead_id)
+        )
+      `);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_lead_emails_lead ON lead_emails (lead_id, received_at)");
+    },
+  },
+  {
+    version: 15,
+    name: "Opportunity searches: a group of job titles per search, the posted-within window in days (SPEC §3.22, OPP-03)",
+    async run(client) {
+      await client.query("ALTER TABLE opportunity_searches ADD COLUMN IF NOT EXISTS titles JSONB NOT NULL DEFAULT '[]'::jsonb");
+      await client.query("ALTER TABLE opportunity_searches ADD COLUMN IF NOT EXISTS posted_within_days INTEGER NOT NULL DEFAULT 30");
+      await client.query("ALTER TABLE opportunity_searches ALTER COLUMN keyword TYPE VARCHAR(500)");
+      await client.query("UPDATE opportunity_searches SET titles = jsonb_build_array(keyword) WHERE titles = '[]'::jsonb AND keyword <> ''");
+    },
+  },
 ];
 
 if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port > 65535 || !/^[a-z_][a-z0-9_]*$/.test(databaseName)) {

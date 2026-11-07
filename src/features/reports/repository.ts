@@ -184,7 +184,7 @@ export async function buildDashboard(viewer: UserAccount, scope: "mine" | "team"
   const nowMs = Date.now();
 
   // The dashboard's queries are independent, so they run concurrently on the pool (NFR-01: the Action Center stays fast as the lead base grows).
-  const [thisCounts, lastCounts, overdue, dueToday, dueTomorrow, template, weekLeads, monthConversions, ownCounts, candidates, openTasks, recentLeads] = await Promise.all([
+  const [thisCounts, lastCounts, overdue, dueToday, dueTomorrow, template, weekLeads, monthConversions, ownCounts, candidates, openTasks, recentLeads, clientReplies] = await Promise.all([
     activityCounts(db, userIds, thisWeek),
     activityCounts(db, userIds, lastWeek),
     selectLeads(`l.record_state = 'active' AND l.follow_up_date < ? ${ownerClause}`, [today, ...ownerParams], "l.follow_up_date ASC, l.id DESC", 50, db),
@@ -197,6 +197,7 @@ export async function buildDashboard(viewer: UserAccount, scope: "mine" | "team"
     selectLeads(`l.record_state = 'active' AND st.code NOT IN ('lost', 'disqualified') AND l.last_activity_at < ? ${ownerClause}`, [toSqlDateTime(new Date(nowMs - shortest * 86_400_000)), ...ownerParams], "l.last_activity_at ASC", 300, db),
     listTasks({ assigneeId: teamWide ? undefined : viewer.id, status: "open", limit: 200 }, db),
     selectLeads(`l.record_state = 'active' ${ownerClause}`, ownerParams, "l.last_activity_at DESC", 8, db),
+    selectLeads(`l.record_state = 'active' AND l.last_client_email_at IS NOT NULL AND l.last_client_email_at > COALESCE(l.last_team_email_at, '1970-01-01'::timestamp) AND l.last_client_email_at > l.last_activity_at ${ownerClause}`, ownerParams, "l.last_client_email_at DESC", 20, db),
   ]);
   const followUps = { overdue, today: dueToday, tomorrow: dueTomorrow };
   const weekVisits = (ownCounts ?? thisCounts).get(viewer.id)?.visits ?? 0;
@@ -228,6 +229,7 @@ export async function buildDashboard(viewer: UserAccount, scope: "mine" | "team"
     followUps,
     targets,
     inactiveLeads,
+    clientReplies,
     inactivityDays: settings.reminders.inactivityDays,
     inactiveLimits,
     inactivityRuleCount: reminders.rules.length,

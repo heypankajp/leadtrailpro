@@ -53,6 +53,9 @@ export type LeadSummary = LeadInput & {
   recordState: LeadRecordState;
   stateReason: string | null;
   lastActivityAt: string;
+  /** MAIL-01 mailbox watch: when a client address last wrote to a connected mailbox, and when the team last emailed the client. */
+  lastClientEmailAt: string | null;
+  lastTeamEmailAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -101,7 +104,7 @@ export type LeadActivity = {
   createdAt: string;
 };
 
-export const leadSortKeys = ["last_activity", "first_contact", "follow_up", "client_name", "owner", "created"] as const;
+export const leadSortKeys = ["last_activity", "first_contact", "follow_up", "client_name", "owner", "created", "client_reply"] as const;
 export type LeadSortKey = (typeof leadSortKeys)[number];
 
 export type LeadFilters = {

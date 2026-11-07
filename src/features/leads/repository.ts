@@ -15,9 +15,11 @@ import type { ActivityType, LeadActivity, LeadFilters, LeadInput, LeadPage, Lead
 
 // ---- Row mapping ----
 
-type LeadRow = Omit<LeadSummary, "clientEmails" | "lastActivityAt" | "createdAt" | "updatedAt" | "statusLabel"> & {
+type LeadRow = Omit<LeadSummary, "clientEmails" | "lastActivityAt" | "lastClientEmailAt" | "lastTeamEmailAt" | "createdAt" | "updatedAt" | "statusLabel"> & {
   clientEmails: string | string[];
   lastActivityAt: string;
+  lastClientEmailAt: string | null;
+  lastTeamEmailAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -38,6 +40,7 @@ export const leadSelect = `
     l.contact_remark AS "contactRemark", l.client_emails AS "clientEmails", l.industry, COALESCE(l.positions, '') AS positions,
     l.first_contact_date AS "firstContactDate", l.follow_up_date AS "followUpDate", l.contract_signed_date AS "contractSignedDate",
     l.record_state AS "recordState", l.state_reason AS "stateReason", l.last_activity_at AS "lastActivityAt",
+    l.last_client_email_at AS "lastClientEmailAt", l.last_team_email_at AS "lastTeamEmailAt",
     l.created_at AS "createdAt", l.updated_at AS "updatedAt"
   FROM leads l
   JOIN users o ON o.id = l.owner_id
@@ -79,6 +82,8 @@ export function toLead(row: LeadRow): LeadSummary {
     cityId: row.cityId === null ? null : Number(row.cityId),
     clientEmails: parseEmails(row.clientEmails),
     lastActivityAt: fromSqlDateTime(row.lastActivityAt) ?? row.lastActivityAt,
+    lastClientEmailAt: fromSqlDateTime(row.lastClientEmailAt),
+    lastTeamEmailAt: fromSqlDateTime(row.lastTeamEmailAt),
     createdAt: fromSqlDateTime(row.createdAt) ?? row.createdAt,
     updatedAt: fromSqlDateTime(row.updatedAt) ?? row.updatedAt,
   };
@@ -129,6 +134,7 @@ const sortColumns: Record<LeadFilters["sort"], string> = {
   client_name: "l.client_name",
   owner: '"ownerName"',
   created: "l.created_at",
+  client_reply: "l.last_client_email_at",
 };
 
 export async function listLeads(filters: LeadFilters, viewer: UserAccount): Promise<LeadPage> {
@@ -168,6 +174,7 @@ export async function listLeads(filters: LeadFilters, viewer: UserAccount): Prom
   const sortColumn = sortColumns[filters.sort];
   const orderBy = filters.sort === "follow_up"
     ? `l.follow_up_date ${direction} NULLS LAST, l.id DESC`
+    : filters.sort === "client_reply" ? `l.last_client_email_at ${direction} NULLS LAST, l.id DESC`
     : `${sortColumn} ${direction}, l.id DESC`;
   const offset = (filters.page - 1) * filters.pageSize;
   const db = getDatabasePool();

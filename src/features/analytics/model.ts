@@ -164,4 +164,22 @@ export type AnalyticsReport = {
   leaderboard: { ownerId: number; name: string; leadsCreated: number; conversions: number; activities: number; overdueFollowUps: number; opportunitiesTaken: number }[];
 };
 export type BreakdownRow = { label: string; leads: number; clients: number };
+
+/** Team board (RPT, November 7, 2026): one row per salesperson as things stand now, plus this week's activity. */
+export const teamBoardMetrics = ["active", "overdue", "stalled", "replies"] as const;
+export type TeamBoardMetric = (typeof teamBoardMetrics)[number];
+export const teamBoardMetricLabels: Record<TeamBoardMetric, string> = { active: "Active leads", overdue: "Overdue follow-ups", stalled: "Stalled leads", replies: "Client replies waiting" };
+export type TeamBoardRow = {
+  userId: number; name: string; role: string;
+  activeLeads: number; overdueFollowUps: number; stalled: number; repliesWaiting: number;
+  /** This week, from Monday in the business time zone. */
+  calls: number; emails: number; visits: number; leadsCreated: number;
+  /** The person's most recent timeline entry on any lead. */
+  lastActivityAt: string | null;
+};
+export type TeamBoard = { weekStartYmd: string; rows: TeamBoardRow[] };
+/** How much a row needs a manager's eye: what is waiting on the person, weighted, so the board sorts the stuck people first. */
+export const teamBoardAttention = (row: Pick<TeamBoardRow, "overdueFollowUps" | "stalled" | "repliesWaiting">) => row.repliesWaiting * 3 + row.overdueFollowUps * 2 + row.stalled;
+export const sortTeamBoard = <T extends Pick<TeamBoardRow, "overdueFollowUps" | "stalled" | "repliesWaiting" | "name">>(rows: T[]): T[] =>
+  [...rows].sort((a, b) => teamBoardAttention(b) - teamBoardAttention(a) || a.name.localeCompare(b.name));
 export type StalledLead = { id: number; clientName: string; ownerId: number; ownerName: string; statusCode: string; statusLabel: string; daysInStatus: number; allowedDays: number; daysSinceActivity: number; followUpDate: string | null; overdueDays: number | null; score: number; reasons: string[] };

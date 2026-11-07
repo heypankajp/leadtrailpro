@@ -40,6 +40,8 @@ export type Dashboard = {
   followUps: { overdue: LeadSummary[]; today: LeadSummary[]; tomorrow: LeadSummary[] };
   targets: TargetProgress;
   inactiveLeads: LeadSummary[];
+  /** MAIL-01: active leads whose client wrote after the team's last email and last activity, newest first. */
+  clientReplies: LeadSummary[];
   inactivityDays: number;
   /** TASK-05: the number of quiet days that flagged each lead in inactiveLeads, keyed by lead id. */
   inactiveLimits: Record<string, number>;

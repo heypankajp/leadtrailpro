@@ -4,6 +4,7 @@ import { handleRouteError, jsonError, readJsonBody, requireSameOrigin } from "@/
 import { runDigestJobs } from "@/features/notifications/digests";
 import { runScheduledOpportunities } from "@/features/opportunities/runner";
 import { runStalledReport } from "@/features/analytics/report-email";
+import { runMailboxWatch } from "@/features/gmail/watch";
 import { getRequestUser, hasPrivilege } from "@/features/users/session";
 
 const keyMatches = (supplied: string | null) => {
@@ -15,7 +16,7 @@ const keyMatches = (supplied: string | null) => {
 };
 
 /**
- * Scheduled jobs (TASK-06 digests, OPP-06 opportunity searches). The scheduler (scripts/jobs.mjs or an external cron) calls this every minute with
+ * Scheduled jobs (TASK-06 digests, OPP-06 opportunity searches, the weekly report, the MAIL-01 mailbox watch). The scheduler (scripts/jobs.mjs or an external cron) calls this every minute with
  * `X-Jobs-Key`; whatever is due runs once. An administrator may instead force a digest for themselves from Settings.
  */
 export async function POST(request: Request) {
@@ -26,7 +27,8 @@ export async function POST(request: Request) {
       const digests = await runDigestJobs({ force: body.force === true ? job : null });
       const opportunities = await runScheduledOpportunities().catch((error: unknown) => { console.error("Scheduled opportunity search failed.", error instanceof Error ? error.message : error); return null; });
       const stalledReport = await runStalledReport().catch((error: unknown) => { console.error("Stalled-leads report failed.", error instanceof Error ? error.message : error); return null; });
-      return NextResponse.json({ ...digests, ran: [...digests.ran, ...(opportunities ? [{ job: "opportunities" as const, ...opportunities }] : []), ...(stalledReport ? [{ job: "stalled_report" as const, ...stalledReport }] : [])] });
+      const mailboxWatch = await runMailboxWatch().catch((error: unknown) => { console.error("Mailbox watch failed.", error instanceof Error ? error.message : error); return null; });
+      return NextResponse.json({ ...digests, ran: [...digests.ran, ...(opportunities ? [{ job: "opportunities" as const, ...opportunities }] : []), ...(stalledReport ? [{ job: "stalled_report" as const, ...stalledReport }] : []), ...(mailboxWatch ? [{ job: "mailbox_watch" as const, ...mailboxWatch }] : [])] });
     }
     requireSameOrigin(request);
     const user = await getRequestUser();

@@ -26,6 +26,9 @@ export function googleEndpoints() {
   };
 }
 
+/** Gmail REST base URL; GMAIL_API_URI points it at a stand-in during tests. */
+export const gmailApiUri = () => (process.env.GMAIL_API_URI?.trim() || "https://gmail.googleapis.com").replace(/\/+$/, "");
+
 /** The OAuth client (type "Web application") shared by Gmail linking and Sign in with Google (AUTH-03). */
 export function googleOAuthClient() {
   const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
@@ -184,14 +187,14 @@ async function mailboxEmails(googleEmail: string, refreshToken: string, addresse
   const clause = addresses.join(" OR ");
   const query = `from:(${clause}) OR to:(${clause}) OR cc:(${clause})`;
   const list = await fetch(
-    `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=20&q=${encodeURIComponent(query)}`,
+    `${gmailApiUri()}/gmail/v1/users/me/messages?maxResults=20&q=${encodeURIComponent(query)}`,
     { headers, cache: "no-store" },
   );
   if (!list.ok) throw new Error("Gmail could not list messages.");
   const { messages = [] } = await list.json() as { messages?: { id: string }[] };
   const details = await Promise.all(messages.map(async ({ id }) => {
     const response = await fetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`,
+      `${gmailApiUri()}/gmail/v1/users/me/messages/${id}?format=full`,
       { headers, cache: "no-store" },
     );
     return response.ok ? await response.json() as GmailMessage : null;
@@ -221,13 +224,16 @@ async function mailboxEmails(googleEmail: string, refreshToken: string, addresse
   });
 }
 
-export async function recentLeadEmails(addresses: string[], scope: { userId: number } | "all") {
+/**
+ * Mailboxes searched: every connected one for team-report viewers; otherwise the viewer's own plus any colleague's mailbox in
+ * which the mailbox watch (watch.ts) has stored mail for this lead, so a person helping on a lead sees the client thread.
+ */
+export async function recentLeadEmails(addresses: string[], scope: { userId: number; leadId?: number } | "all") {
   const config = googleConfig();
   if (!config || addresses.length === 0) return { emails: [] as LeadEmail[], failures: 0 };
-  const { rows } = await getDatabasePool().query(
-    `SELECT google_email, refresh_token_encrypted FROM gmail_connections ${scope === "all" ? "" : "WHERE user_id = ?"}`,
-    scope === "all" ? [] : [scope.userId],
-  );
+  const where = scope === "all" ? "" : scope.leadId ? "WHERE user_id = ? OR LOWER(google_email) IN (SELECT mailbox FROM lead_emails WHERE lead_id = ?)" : "WHERE user_id = ?";
+  const params = scope === "all" ? [] : scope.leadId ? [scope.userId, scope.leadId] : [scope.userId];
+  const { rows } = await getDatabasePool().query(`SELECT google_email, refresh_token_encrypted FROM gmail_connections ${where}`, params);
   let failures = 0;
   const results = await Promise.all(rows.map(async (row) => {
     try {

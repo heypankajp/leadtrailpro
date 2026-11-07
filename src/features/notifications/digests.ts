@@ -42,6 +42,7 @@ async function dailyDigest(user: UserAccount, today: string): Promise<{ title: s
     `Follow-ups tomorrow (${dashboard.followUps.tomorrow.length})${dashboard.followUps.tomorrow.length ? ":\n" + list(dashboard.followUps.tomorrow.map((lead) => lead.clientName)) : ""}`,
     `Tasks: ${dashboard.openTasks.length} open, ${overdueTasks.length} overdue, ${dueTodayTasks.length} due today${overdueTasks.length || dueTodayTasks.length ? ":\n" + list([...overdueTasks, ...dueTodayTasks].map((task) => `${task.title}${task.leadName ? ` (${task.leadName})` : ""}, due ${task.dueAt ? task.dueAt.slice(0, 16).replace("T", " ") : "—"}`)) : ""}`,
     `Needs attention (${dashboard.inactiveLeads.length})${dashboard.inactiveLeads.length ? ":\n" + list(dashboard.inactiveLeads.map((lead) => `${lead.clientName}, quiet for more than ${dashboard.inactiveLimits[lead.id] ?? dashboard.inactivityDays} days`)) : ""}`,
+    `Client replies waiting (${dashboard.clientReplies.length})${dashboard.clientReplies.length ? ":\n" + list(dashboard.clientReplies.map((lead) => `${lead.clientName}, wrote ${(lead.lastClientEmailAt ?? "").slice(0, 16).replace("T", " ")} UTC`)) : ""}`,
     row ? `Yesterday: ${row.calls} calls, ${row.emails} emails, ${row.visits} visits, ${row.leadsCreated} leads created, ${row.conversions} conversions.` : "",
     appLink("home") ? `Open your Action Center: ${appLink("home")}` : "",
   ].filter(Boolean);

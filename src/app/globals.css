@@ -1005,7 +1005,7 @@ h1 { margin: 9px 0 5px; color: #242941; font-size: 25px; font-weight: 690; lette
 .metric-blue .metric-compare i { color: #6879e9; }
 .metric-purple .metric-compare i { color: #a389df; }
 .metric-orange .metric-compare i { color: #edb374; }
-.reminders-grid { margin-top: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.reminders-grid { margin-top: 16px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
 .reminder-panel { padding: 16px; }
 .reminder-icon { width: 31px; height: 31px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 9px; color: #965b21; background: #fff3e6; }
 .followup-owner { color: #626a7b; font-size: 9px; white-space: nowrap; }
@@ -1303,3 +1303,15 @@ h1 { margin: 9px 0 5px; color: #242941; font-size: 25px; font-weight: 690; lette
 .maps-usage-card.is-compact .maps-usage-tile { padding: 7px 9px; }
 @media (max-width: 760px) { .maps-usage-grid { grid-template-columns: 1fr; } }
 @media print { .maps-usage-card { display: none; } }
+
+/* MAIL-01 mailbox watch: the client's last email on the lead list, the lead page, and the Action Center. */
+.reply-badge { display: inline-flex; align-items: center; gap: 4px; margin-top: 3px; color: #5e6478; font-size: 9px; }
+.reply-badge.reply-waiting { color: #b14630; font-weight: 620; }
+.reply-icon { color: #2f5fb3; background: #e8effc; }
+.detail-muted { color: #62697b; font-size: 11px; }
+
+/* Team board (Analytics): clickable counts, alerts in red. */
+.team-board { margin-bottom: 16px; }
+.team-board .board-number { font-weight: 620; }
+.team-board .board-number.is-alert { color: #bf3c31; }
+.team-board .board-zero { color: #9aa0b2; }

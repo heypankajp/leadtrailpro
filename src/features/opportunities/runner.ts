@@ -26,7 +26,7 @@ type ExistingRow = ExistingOpportunity & { id: number; companyKey: string };
 
 const maxTimelineEntriesPerLead = 5;
 
-async function collect(search: { keyword: string; location: string; jobType: string }, cap: number, db: Queryable, notes: string[]): Promise<{ found: FoundListing[]; failures: number; attempted: number }> {
+async function collect(search: { keyword: string; location: string; jobType: string; postedWithinDays: number }, cap: number, db: Queryable, notes: string[]): Promise<{ found: FoundListing[]; failures: number; attempted: number }> {
   const all = await getSettings(db);
   const settings = all.jobSources;
   const adapters = listSourceAdapters();
@@ -51,7 +51,7 @@ async function collect(search: { keyword: string; location: string; jobType: str
       let rows: FoundRow[];
       let hasMore: boolean;
       try {
-        const result = await scheduled(adapter, () => adapter.searchListings({ keyword: search.keyword, location: search.location, jobType: search.jobType, country: jobsCountry(), page, pageToken }));
+        const result = await scheduled(adapter, () => adapter.searchListings({ keyword: search.keyword, location: search.location, jobType: search.jobType, postedWithinDays: search.postedWithinDays, country: jobsCountry(), page, pageToken }));
         await recordUsage(db, id, false);
         rows = result.rows;
         hasMore = result.hasMore;
