@@ -53,7 +53,7 @@ Ports: the app listens on 3000; the Docker database is published on 127.0.0.1:54
 
    Expected: `Connected: PostgreSQL 17 … database leadtrailpro, role leadtrailpro_app.`, the table and migration counts, and `Database check passed.`
 
-5. Open [http://localhost:3000](http://localhost:3000) and click **Sign in with Google** with one of the accounts in `seed/accounts.csv`. Two things must be true in the Google Cloud console: the OAuth client lists `http://localhost:3000/api/auth/google/callback` as a redirect URI, and the account is a test user on the consent screen (until Google verifies the app). Before signing in, `curl http://localhost:3000/api/auth/session` answers `{"user":null,"needsSetup":false,"googleSignIn":true}`. Only if the accounts file were empty would the screen offer **First time setup** with the `USER_MANAGEMENT_KEY` from `.env.local` instead.
+5. Open [http://localhost:3000](http://localhost:3000) and click **Sign in with Google** with one of the accounts in `seed/accounts.csv`. Two things must be true in the Google Cloud console: the OAuth client lists `http://localhost:3000/api/auth/google/callback` as a redirect URI, and the consent screen is published (it has been since November 6, 2026; while it is in Testing the account must be a test user). Before signing in, `curl http://localhost:3000/api/auth/session` answers `{"user":null,"needsSetup":false,"googleSignIn":true}`. Only if the accounts file were empty would the screen offer **First time setup** with the `USER_MANAGEMENT_KEY` from `.env.local` instead.
 
 6. Optional sample data (demo accounts, leads, activities, tasks):
 
@@ -126,7 +126,7 @@ Keep Git's line endings as they are (`git config core.autocrlf false` before clo
    docker compose -f compose.yaml -f compose.prod.yaml run --rm setup
    ```
 
-3. Edit `.env.local`: set `APP_URL` to the address users will type (`https://sales.example.com`; for a plain-http test host `http://<host>:3000`, which also makes the session cookie work without TLS), and either keep `MAIL_PROVIDER=stub` or fill in the `SMTP_*` lines (`docker compose -f compose.yaml -f compose.prod.yaml run --rm app npm run mail:test -- --send` checks them). Also paste the Google OAuth client values (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GMAIL_TOKEN_KEY`, `MAIL_PROVIDER=gmail`), register `https://<your domain>/api/auth/google/callback` on that client, and list every seeded address as a test user on the consent screen until Google verifies the app.
+3. Edit `.env.local`: set `APP_URL` to the address users will type (`https://sales.example.com`; for a plain-http test host `http://<host>:3000`, which also makes the session cookie work without TLS), and either keep `MAIL_PROVIDER=stub` or fill in the `SMTP_*` lines (`docker compose -f compose.yaml -f compose.prod.yaml run --rm app npm run mail:test -- --send` checks them). Also paste the Google OAuth client values (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GMAIL_TOKEN_KEY`, `MAIL_PROVIDER=gmail`), register `https://<your domain>/api/auth/google/callback` on that client, and the consent screen must be published (it is); no test users are needed, and each person's first consent shows Google's unverified-app warning, which they pass through Advanced.
 
 4. Build, start, check, and watch:
 
