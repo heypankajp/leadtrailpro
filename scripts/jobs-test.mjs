@@ -4,6 +4,7 @@
  *
  *   npm run jobs:test -- "OceanMD" Toronto            # every configured source
  *   npm run jobs:test -- "OceanMD" Toronto --source adzuna
+ *   npm run jobs:test -- --balance                      # HasData credits left on the account (free call, nothing spent)
  *
  * Reads ADZUNA_APP_ID/ADZUNA_APP_KEY, JSEARCH_API_KEY, HASDATA_API_KEY/HASDATA_INDEED_DOMAIN, JOBS_API_URL/JOBS_API_KEY,
  * and JOBS_COUNTRY from .env.local. Each run spends one call per source (Adzuna one hit, HasData ten credits).
@@ -14,9 +15,25 @@ import { createAdzunaSource } from "../src/features/jobs/sources/adzuna.ts";
 import { createGenericSource } from "../src/features/jobs/sources/generic.ts";
 import { createHasDataSource } from "../src/features/jobs/sources/hasdata.ts";
 import { createJSearchSource } from "../src/features/jobs/sources/jsearch.ts";
+import { fetchHasDataUsage } from "../src/features/jobs/sources/hasdata.ts";
+import { parseHasDataUsage } from "../src/features/jobs/model.ts";
 
 const env = (name) => process.env[name]?.trim() || null;
 const args = process.argv.slice(2);
+
+// --balance: only ask HasData for the account's credit balance (a free call), as Settings → Job listing sources does.
+if (args.includes("--balance")) {
+  if (!env("HASDATA_API_KEY")) { console.error("HASDATA_API_KEY is empty in .env.local."); process.exit(1); }
+  try {
+    const account = parseHasDataUsage(await fetchHasDataUsage(env("HASDATA_API_KEY")));
+    if (!account) { console.error("HasData answered, but not with the expected totalCredits/availableCredits fields."); process.exit(1); }
+    console.log(`HasData account: ${account.availableCredits.toLocaleString()} of ${account.totalCredits.toLocaleString()} credits available (${Math.floor(account.availableCredits / 10)} Indeed calls at 10 credits each).`);
+  } catch (error) {
+    console.error(`HasData balance check failed: ${error instanceof Error ? error.message : error}`);
+    process.exit(1);
+  }
+  process.exit(0);
+}
 const sourceIndex = args.indexOf("--source");
 const only = sourceIndex !== -1 ? args[sourceIndex + 1] : null;
 const positional = args.filter((arg, index) => sourceIndex === -1 || (index !== sourceIndex && index !== sourceIndex + 1));

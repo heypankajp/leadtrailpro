@@ -115,6 +115,10 @@ The keys live only in `.env.local`, which Git ignores; never put them in `.env.s
 
 With `TRIPS_PROVIDER=stub` the trip planner never calls these sources (its companies are fictional); `npm run jobs:test -- "<company>" <city>` is the way to see them answer for a real company.
 
+### Job-source usage, credits, and alerts
+
+Every call to a job-listing source is counted per day and per month against the budgets under **Settings → Job listing sources**, and a source is no longer asked once its daily or monthly budget is spent. Since November 7, 2026 the same panel shows the credits those calls cost (HasData charges 10 credits per Indeed call) and, for HasData, the account's live balance read from their usage endpoint, so the number is the same one their dashboard shows even when several stacks share the key. Administrators get a bell notification when a source reaches the warning level (default 80 percent, set in the same panel) and again when its monthly budget is spent. Everyone who opens **Opportunities** or the trip planner sees a usage card with this month's calls, credits, what is left, and the account balance; it refreshes after each run and every 30 seconds while the page is open. `npm run jobs:test -- --balance` asks HasData for the balance from the command line without spending anything.
+
 ### Google Maps key and the usage budget
 
 The Sales Trip Planner searches with Google Maps Platform: the Geocoding API for the trip address, Places API (New) for the companies (with website and phone), and the Routes API for driving minutes. One key serves all three, and the app calls Google only from the server, never from the browser.

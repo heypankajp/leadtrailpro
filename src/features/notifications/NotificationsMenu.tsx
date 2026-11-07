@@ -18,7 +18,7 @@ const icon = (type: AppNotification["type"]) => {
     case "file_uploaded": return <Paperclip size={14} />;
     case "mention": return <AtSign size={14} />;
     case "daily_digest": case "weekly_digest": return <Mail size={14} />;
-    case "opportunities_found": case "listing_found": return <Briefcase size={14} />;
+    case "opportunities_found": case "listing_found": case "jobs_usage": return <Briefcase size={14} />;
     case "maps_usage": return <MapPinned size={14} />;
     case "email_received": return <MailOpen size={14} />;
     default: return <MessageSquare size={14} />;

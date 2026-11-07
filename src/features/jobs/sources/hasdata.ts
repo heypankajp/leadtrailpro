@@ -11,6 +11,17 @@ import { fetchJson, httpUrl, text, ymd, type CompanyJobsInput, type FoundRow, ty
  */
 export type HasDataConfig = { apiKey: string; domain: string | null };
 
+/** HasData's REST base; HASDATA_API_URI points it at a stand-in during tests. */
+export const hasDataApiUri = () => (process.env.HASDATA_API_URI?.trim() || "https://api.hasdata.com").replace(/\/+$/, "");
+
+/**
+ * The account's credit balance (docs.hasdata.com/credits-and-concurrency: `GET /user/me/usage`, free). Returns the raw JSON
+ * for `parseHasDataUsage`; throws on a non-2xx answer so the caller can treat the balance as unknown.
+ */
+export async function fetchHasDataUsage(apiKey: string): Promise<unknown> {
+  return fetchJson(`${hasDataApiUri()}/user/me/usage`, { headers: { "x-api-key": apiKey } });
+}
+
 /**
  * The API validates `domain` against the full Indeed host names (`ca.indeed.com`, `www.indeed.com`, …), so a bare
  * country code from HASDATA_INDEED_DOMAIN (`ca`) is expanded; a value that already contains a dot is used as given.
@@ -48,7 +59,7 @@ export function mapHasData(data: Record<string, unknown>, companyName: string, n
 export function createHasDataSource(config: HasDataConfig | null): JobSourceAdapter {
   const request = (url: URL) => fetchJson(url.toString(), { headers: { "x-api-key": config!.apiKey, "Content-Type": "application/json" } });
   const listingUrl = (keyword: string, location: string, days: string) => {
-    const url = new URL("https://api.hasdata.com/scrape/indeed/listing");
+    const url = new URL(`${hasDataApiUri()}/scrape/indeed/listing`);
     url.searchParams.set("keyword", keyword);
     url.searchParams.set("location", location);
     url.searchParams.set("datePosted", days);

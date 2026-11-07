@@ -174,7 +174,7 @@ export default function SettingsPanel() {
                         </div>
                         <span className="rule-days"><input aria-label={`${jobSourceLabels[id]} daily budget`} type="number" min={0} value={budget.daily} onChange={(event) => setBudget({ daily: Number(event.target.value) })} /> / day</span>
                         <span className="rule-days"><input aria-label={`${jobSourceLabels[id]} monthly budget`} type="number" min={0} value={budget.monthly} onChange={(event) => setBudget({ monthly: Number(event.target.value) })} /> / month</span>
-                        <small className="job-source-usage">{status ? `${status.usage.today} today · ${status.usage.month} this month${status.usage.failuresToday ? ` · ${status.usage.failuresToday} failed today` : ""}` : ""}</small>
+                        <small className="job-source-usage">{status ? `${status.usage.today} today · ${status.usage.month} this month${status.creditsPerCall ? ` · ${status.usage.month * status.creditsPerCall} credits` : ""}${status.usage.failuresToday ? ` · ${status.usage.failuresToday} failed today` : ""}${status.account ? ` · account: ${status.account.availableCredits.toLocaleString()} of ${status.account.totalCredits.toLocaleString()} credits left` : ""}` : ""}</small>
                         <span className="job-source-move">
                           <button type="button" className="icon-button" aria-label={`Move ${jobSourceLabels[id]} up`} disabled={index === 0} onClick={() => move(-1)}><ArrowUp size={12} /></button>
                           <button type="button" className="icon-button" aria-label={`Move ${jobSourceLabels[id]} down`} disabled={index === settings.jobSources.order.length - 1} onClick={() => move(1)}><ArrowDown size={12} /></button>
@@ -184,6 +184,7 @@ export default function SettingsPanel() {
                   })}
                 </div>
                 <div className="digest-grid">
+                  <Field label="Warn administrators at (%)" hint="Of a source's monthly call budget; a second alert goes out when it is spent."><input type="number" min={1} max={100} value={settings.jobSources.warnAtPercent} onChange={(event) => setSettings({ ...settings, jobSources: { ...settings.jobSources, warnAtPercent: Number(event.target.value) } })} /></Field>
                   <Field label="Keep listings for (hours)" hint={`1 to ${maxCacheHours}. A company is not asked about again within this time.`}><input type="number" min={1} max={maxCacheHours} value={settings.jobSources.cacheHours} onChange={(event) => setSettings({ ...settings, jobSources: { ...settings.jobSources, cacheHours: Number(event.target.value) } })} required /></Field>
                   <Field label="Companies checked per trip" hint={`0 to ${maxPrefetch}. The nearest ones are checked when a trip is created; the rest on demand.`}><input type="number" min={0} max={maxPrefetch} value={settings.jobSources.prefetch} onChange={(event) => setSettings({ ...settings, jobSources: { ...settings.jobSources, prefetch: Number(event.target.value) } })} required /></Field>
                 </div>

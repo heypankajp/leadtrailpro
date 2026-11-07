@@ -6,6 +6,7 @@ import { errorMessage } from "@/lib/api";
 import { formatDate, formatDateTime, statusClass } from "@/lib/format";
 import { useAsyncData } from "@/lib/useAsyncData";
 import { useApp } from "@/features/shell/AppContext";
+import JobsUsageCard from "@/features/jobs/JobsUsageCard";
 import MapsUsageCard from "@/features/maps/MapsUsageCard";
 import { Dialog, EmptyState, ErrorText, Loading } from "@/features/shell/components";
 import { fetchResultJobs, fetchTrip, rerunTrip, tripExportUrl, updateTripResult, type TripDetail } from "./client";
@@ -107,6 +108,7 @@ export default function TripResultsPage({ tripId }: { tripId: number }) {
       </div>
 
       {trip.provider === "google" && <MapsUsageCard compact refreshKey={runs} />}
+      {trip.provider === "google" && <JobsUsageCard compact refreshKey={runs} />}
 
       <div className="trip-print-header">
         <h1>Field visit report: {trip.title}</h1>

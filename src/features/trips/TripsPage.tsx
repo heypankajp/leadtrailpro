@@ -6,6 +6,7 @@ import { errorMessage } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import { useAsyncData } from "@/lib/useAsyncData";
 import { useApp } from "@/features/shell/AppContext";
+import JobsUsageCard from "@/features/jobs/JobsUsageCard";
 import MapsUsageCard from "@/features/maps/MapsUsageCard";
 import { EmptyState, ErrorText, Field, Loading } from "@/features/shell/components";
 import { createTrip, fetchTrips } from "./client";
@@ -53,6 +54,7 @@ export default function TripsPage() {
       {provider && !provider.configured && <div className="integration-note"><ShieldCheck size={16} /><span><strong>Not configured.</strong> {provider.message}</span></div>}
       {provider && provider.configured && provider.message && <div className="integration-note"><ShieldCheck size={16} /><span>{provider.message}</span></div>}
       {provider?.name === "google" && <MapsUsageCard />}
+      {provider?.name === "google" && <JobsUsageCard compact />}
 
       <section className="panel trip-panel">
         <div className="panel-heading"><div><h2>New trip</h2><p>Up to {maxTripResults} companies within a distance or a driving time of the address.</p></div></div>

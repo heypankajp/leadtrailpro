@@ -1,4 +1,5 @@
 import type { JobListing } from "../trips/model.ts";
+import { monthKeyOf, nextResetYmd, reachedThresholds, usagePercent } from "../maps/model.ts";
 
 /**
  * Job-listing sources (TRIP-06, OPP-01; SPEC §7.13). Several sources are combined behind one lookup: a per-company
@@ -26,7 +27,7 @@ export const jobSourceEnvHints: Record<JobSourceId, string> = {
 };
 
 export type JobSourceBudget = { enabled: boolean; daily: number; monthly: number };
-export type JobSourceSettings = { order: JobSourceId[]; budgets: Record<JobSourceId, JobSourceBudget>; cacheHours: number; prefetch: number };
+export type JobSourceSettings = { order: JobSourceId[]; budgets: Record<JobSourceId, JobSourceBudget>; cacheHours: number; prefetch: number; /** Administrators are told when a source reaches this share of its monthly budget (and again at 100%). */ warnAtPercent: number };
 
 /** Defaults sized for the free tiers: Adzuna 250 a day, JSearch about 200 a month, HasData 100 a month free (more on a plan). */
 export const defaultJobSources: JobSourceSettings = {
@@ -40,6 +41,7 @@ export const defaultJobSources: JobSourceSettings = {
   },
   cacheHours: 24,
   prefetch: 20,
+  warnAtPercent: 80,
 };
 
 export const maxCacheHours = 24 * 30;
@@ -71,7 +73,9 @@ export function normalizeJobSources(value: unknown): { jobSources: JobSourceSett
   if (!Number.isInteger(cacheHours) || cacheHours < 1 || cacheHours > maxCacheHours) return { jobSources: defaultJobSources, error: `Cache hours must be between 1 and ${maxCacheHours}.` };
   const prefetch = record.prefetch === undefined ? defaultJobSources.prefetch : Number(record.prefetch);
   if (!Number.isInteger(prefetch) || prefetch < 0 || prefetch > maxPrefetch) return { jobSources: defaultJobSources, error: `Prefetch must be between 0 and ${maxPrefetch} companies.` };
-  return { jobSources: { order, budgets, cacheHours, prefetch }, error: null };
+  const warnAtPercent = record.warnAtPercent === undefined ? defaultJobSources.warnAtPercent : Number(record.warnAtPercent);
+  if (!Number.isInteger(warnAtPercent) || warnAtPercent < 1 || warnAtPercent > 100) return { jobSources: defaultJobSources, error: "The warning level must be a whole percentage from 1 to 100." };
+  return { jobSources: { order, budgets, cacheHours, prefetch, warnAtPercent }, error: null };
 }
 
 export type JobSourceUsage = { today: number; month: number; failuresToday: number };
@@ -83,6 +87,10 @@ export type JobSourceStatus = {
   enabled: boolean;
   budget: JobSourceBudget;
   usage: JobSourceUsage;
+  /** Credits the vendor charges per call (HasData: 10), null for sources that count calls only. */
+  creditsPerCall: number | null;
+  /** The vendor's live account balance when it offers one (HasData), null otherwise or when the check failed. */
+  account: JobSourceAccount;
   /** Why the source is not usable right now, or null. */
   note: string | null;
 };
@@ -150,3 +158,78 @@ export function keepCompanyListings<T extends { company: string }>(rows: T[], co
 }
 
 export const hiringLabelFor = (listings: JobListing[] | null): string => (listings === null ? "—" : `${listings.length} ${listings.length === 1 ? "Job" : "Jobs"}`);
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Usage meter (SPEC §7.13, November 7, 2026): credits, the vendor's live balance, alerts, and the card everyone sees
+
+/** Credits the vendor deducts per successful call; sources without a credit system count calls only. */
+export const jobSourceCreditsPerCall: Partial<Record<JobSourceId, number>> = { hasdata: 10 };
+
+/** HasData's `GET /user/me/usage` answer, reduced: the account's total and remaining credits and when the app last asked. */
+export type JobSourceAccount = { totalCredits: number; availableCredits: number; checkedAt: string } | null;
+
+export function parseHasDataUsage(raw: unknown, checkedAt = new Date()): JobSourceAccount {
+  const body = raw as { status?: unknown; data?: { totalCredits?: unknown; availableCredits?: unknown } } | null;
+  const total = Number(body?.data?.totalCredits);
+  const available = Number(body?.data?.availableCredits);
+  if (!body || (body.status !== undefined && body.status !== "ok") || !Number.isFinite(total) || !Number.isFinite(available)) return null;
+  return { totalCredits: Math.max(0, Math.round(total)), availableCredits: Math.max(0, Math.round(available)), checkedAt: checkedAt.toISOString() };
+}
+
+export type JobsUsageSource = {
+  id: JobSourceId;
+  label: string;
+  enabled: boolean;
+  budget: JobSourceBudget;
+  usage: JobSourceUsage;
+  creditsPerCall: number | null;
+  /** Credits this app spent this month (calls × creditsPerCall), null without a credit system. */
+  creditsThisMonth: number | null;
+  /** Share of the monthly budget used (0–100+). */
+  percent: number;
+  /** Calls left under the monthly budget, never below 0 (the daily budget may stop earlier). */
+  remainingCalls: number;
+  account: JobSourceAccount;
+  /** Calls the source can still answer: the budget's remainder, capped by the account balance when known. */
+  callsLeft: number;
+  note: string | null;
+};
+
+export type JobsUsageOverview = { configured: boolean; warnAtPercent: number; monthKey: string; resetsOn: string; sources: JobsUsageSource[] };
+
+/** The calls still possible: what the monthly budget leaves, and no more than the account's credits can pay for. */
+export function jobsCallsLeft(remainingCalls: number, account: JobSourceAccount, creditsPerCall: number | null): number {
+  const byBudget = Math.max(0, remainingCalls);
+  if (!account || !creditsPerCall) return byBudget;
+  return Math.min(byBudget, Math.floor(account.availableCredits / creditsPerCall));
+}
+
+/** One source's line of the usage card. Pure: the repository supplies usage, configuration, and the balance. */
+export function jobsUsageSource(id: JobSourceId, settings: JobSourceSettings, status: { configured: boolean; usage: JobSourceUsage; account: JobSourceAccount }): JobsUsageSource {
+  const budget = settings.budgets[id];
+  const creditsPerCall = jobSourceCreditsPerCall[id] ?? null;
+  const remainingCalls = Math.max(0, budget.monthly - status.usage.month);
+  return {
+    id, label: jobSourceLabels[id], enabled: budget.enabled, budget, usage: status.usage, creditsPerCall,
+    creditsThisMonth: creditsPerCall ? status.usage.month * creditsPerCall : null,
+    percent: usagePercent(status.usage.month, budget.monthly), remainingCalls, account: status.account,
+    callsLeft: jobsCallsLeft(remainingCalls, status.account, creditsPerCall),
+    note: sourceNote(id, settings, status),
+  };
+}
+
+export const jobsMonthKey = monthKeyOf;
+export const jobsResetYmd = nextResetYmd;
+/** The thresholds (warn level, 100) a source's monthly usage has just reached. */
+export const jobsReachedThresholds = (used: number, budget: number, warnAtPercent: number) => reachedThresholds(used, budget, warnAtPercent);
+
+/** The administrators' notification when a source reaches its warning level or its monthly budget. */
+export function jobsAlert(id: JobSourceId, percent: number, used: number, budget: number, resetsOn: string): { title: string; body: string } {
+  const label = jobSourceLabels[id];
+  const credits = jobSourceCreditsPerCall[id];
+  const calls = `${used} of ${budget} calls${credits ? ` (${used * credits} credits)` : ""} this month`;
+  if (percent >= 100) {
+    return { title: `${label}: monthly call budget spent`, body: `${calls}. The searches and hiring lookups stop asking ${label} until the counter restarts on ${resetsOn}; raise the budget under Settings → Job listing sources if the plan allows it.` };
+  }
+  return { title: `${label}: ${percent}% of the monthly call budget used`, body: `${calls}; ${Math.max(0, budget - used)} calls left before the app stops asking ${label} this month. The counter restarts on ${resetsOn}.` };
+}

@@ -5,6 +5,7 @@ import { Briefcase, ChevronDown, ChevronRight, ExternalLink, Pencil, Play, Plus,
 import { errorMessage } from "@/lib/api";
 import { formatDate, formatDateTime, relativeTime } from "@/lib/format";
 import { useAsyncData } from "@/lib/useAsyncData";
+import JobsUsageCard from "@/features/jobs/JobsUsageCard";
 import LeadFormDialog from "@/features/leads/LeadFormDialog";
 import type { LeadInput } from "@/features/leads/model";
 import { useApp } from "@/features/shell/AppContext";
@@ -77,6 +78,7 @@ export default function OpportunitiesPage() {
         </div>
         {can("manage_settings") && <button className="button button-outline" onClick={() => void runNow()} disabled={running}><Play size={14} /> {running ? "Running searches..." : "Run searches now"}</button>}
       </div>
+      <JobsUsageCard compact refreshKey={running} />
       <Tabs tabs={tabs} active={tab} onChange={(id) => { setTab(id); setPage(1); setExpanded({}); }} />
       {tab === "searches" ? <SearchesPanel /> : (
         <div className="panel">

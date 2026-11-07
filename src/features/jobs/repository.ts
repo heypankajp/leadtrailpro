@@ -2,8 +2,14 @@ import { getDatabasePool, fromSqlDateTime, toSqlDateTime, type Queryable } from 
 import { getSettings } from "@/features/settings/repository";
 import { normalizeCompanyName } from "@/features/trips/matching";
 import type { JobListing } from "@/features/trips/model";
-import { eligibleSources, isCacheFresh, jobSourceLabels, orderForSampleCompanies, sourceNote, type JobSourceId, type JobSourceStatus, type JobSourceUsage } from "./model";
+import { listUsersWithPrivilege } from "@/features/users/repository";
+import { notifyUsers } from "@/features/notifications/repository";
+import {
+  eligibleSources, isCacheFresh, jobSourceCreditsPerCall, jobSourceLabels, jobsAlert, jobsMonthKey, jobsReachedThresholds, jobsResetYmd, jobsUsageSource, orderForSampleCompanies, parseHasDataUsage, sourceNote,
+  type JobSourceAccount, type JobSourceId, type JobSourceStatus, type JobSourceUsage, type JobsUsageOverview,
+} from "./model";
 import { jobsCountry, listSourceAdapters, type CompanyJobsInput, type JobSourceAdapter } from "./sources";
+import { fetchHasDataUsage } from "./sources/hasdata";
 import { cityOf } from "./sources/types";
 
 /**
@@ -49,6 +55,61 @@ export async function recordUsage(db: Queryable, source: JobSourceId, failed: bo
     "INSERT INTO job_source_usage (source, day, calls, failures) VALUES (?, ?, 1, ?) ON CONFLICT (source, day) DO UPDATE SET calls = job_source_usage.calls + 1, failures = job_source_usage.failures + EXCLUDED.failures",
     [source, todayYmd(), failed ? 1 : 0],
   );
+  await alertAdministrators(db, source).catch((error: unknown) => console.error("Job-source budget alert failed.", error instanceof Error ? error.message : error));
+}
+
+/**
+ * Tells administrators once per month when a source reaches the warning level and once when it reaches 100% of its
+ * monthly budget (claimed through job_runs, so several app instances never repeat it).
+ */
+async function alertAdministrators(db: Queryable, source: JobSourceId): Promise<void> {
+  const settings = (await getSettings(db)).jobSources;
+  const budget = settings.budgets[source];
+  if (!budget.enabled || budget.monthly <= 0) return;
+  const used = (await sourceUsage(db))[source]?.month ?? 0;
+  const month = jobsMonthKey();
+  for (const percent of jobsReachedThresholds(used, budget.monthly, settings.warnAtPercent)) {
+    const now = toSqlDateTime(new Date());
+    const claim = await db.query(
+      "INSERT INTO job_runs (job, period_key, status, details, started_at, finished_at) VALUES (?, ?, 'success', ?, ?, ?) ON CONFLICT (job, period_key) DO NOTHING RETURNING id",
+      [`jobs:${source}:${percent}`, month, `${used} of ${budget.monthly} calls`, now, now],
+    );
+    if (!claim.rows.length) continue;
+    const administrators = (await listUsersWithPrivilege("manage_settings", db)).filter((user) => user.active);
+    const alert = jobsAlert(source, percent, used, budget.monthly, jobsResetYmd());
+    await notifyUsers(db, { userIds: administrators.map((user) => user.id), type: "jobs_usage", title: alert.title, body: alert.body });
+  }
+}
+
+const accountCacheMs = 60_000;
+let hasDataAccountCache: { at: number; value: JobSourceAccount } | null = null;
+
+/** HasData's live balance, asked at most once a minute per app instance; null when the key is missing or the call fails. */
+export async function hasDataAccount(force = false): Promise<JobSourceAccount> {
+  const apiKey = process.env.HASDATA_API_KEY?.trim();
+  if (!apiKey) return null;
+  const now = Date.now();
+  if (!force && hasDataAccountCache && now - hasDataAccountCache.at < accountCacheMs) return hasDataAccountCache.value;
+  try {
+    const value = parseHasDataUsage(await fetchHasDataUsage(apiKey));
+    hasDataAccountCache = { at: now, value };
+    return value;
+  } catch (error) {
+    console.error("HasData balance check failed.", error instanceof Error ? error.message : error);
+    hasDataAccountCache = { at: now, value: null };
+    return null;
+  }
+}
+
+const accountFor = (id: JobSourceId, configured: boolean): Promise<JobSourceAccount> => (id === "hasdata" && configured ? hasDataAccount() : Promise.resolve(null));
+
+/** The usage card (SPEC §7.13): the configured sources' calls, credits, and balance this month, for everyone who sees the pool or the planner. */
+export async function jobsUsageOverview(db: Queryable = getDatabasePool()): Promise<JobsUsageOverview> {
+  const settings = (await getSettings(db)).jobSources;
+  const usage = await sourceUsage(db);
+  const configured = listSourceAdapters().filter((adapter) => adapter.configured && adapter.id !== "stub");
+  const sources = await Promise.all(configured.map(async (adapter) => jobsUsageSource(adapter.id, settings, { configured: true, usage: usage[adapter.id] ?? emptyUsage(), account: await accountFor(adapter.id, true) })));
+  return { configured: sources.length > 0, warnAtPercent: settings.warnAtPercent, monthKey: jobsMonthKey(), resetsOn: jobsResetYmd(), sources: settings.order.flatMap((id) => sources.filter((source) => source.id === id)) };
 }
 
 type CacheRow = { source: JobSourceId; listings: JobListing[] | string; fetchedAt: string };
@@ -114,8 +175,8 @@ export async function sourceStatuses(db: Queryable = getDatabasePool()): Promise
   const settings = (await getSettings(db)).jobSources;
   const usage = await sourceUsage(db);
   const adapters = new Map(listSourceAdapters().map((adapter) => [adapter.id, adapter]));
-  return settings.order.map((id) => {
+  return Promise.all(settings.order.map(async (id) => {
     const status = { configured: adapters.get(id)?.configured ?? false, usage: usage[id] ?? emptyUsage() };
-    return { id, label: jobSourceLabels[id], configured: status.configured, enabled: settings.budgets[id].enabled, budget: settings.budgets[id], usage: status.usage, note: sourceNote(id, settings, status) };
-  });
+    return { id, label: jobSourceLabels[id], configured: status.configured, enabled: settings.budgets[id].enabled, budget: settings.budgets[id], usage: status.usage, note: sourceNote(id, settings, status), creditsPerCall: jobSourceCreditsPerCall[id] ?? null, account: await accountFor(id, status.configured) };
+  }));
 }
