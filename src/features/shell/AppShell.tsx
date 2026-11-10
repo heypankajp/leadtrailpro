@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
-  AlertCircle, Activity, Briefcase, BriefcaseBusiness, Building2, Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, Clock3, Compass, FileText, Flame, KeyRound,
+  AlertCircle, Activity, Briefcase, BriefcaseBusiness, Building2, Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, Clock3, Compass, FileSpreadsheet, FileText, Flame, KeyRound,
   BellRing, LayoutDashboard, ListTodo, LogOut, Map, Menu, PanelLeftClose, PanelLeftOpen, Search, Settings2, ShieldCheck, SlidersHorizontal, Target, TrendingUp, UsersRound,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -66,6 +66,8 @@ const navigation: { title: string; items: NavItem[] }[] = [
       { id: "values", label: "List of values", icon: Settings2, privilege: "manage_values" },
       { id: "devices", label: "Device authorization", icon: ShieldCheck, privilege: "manage_settings" },
       { id: "settings", label: "Settings", icon: SlidersHorizontal, privilege: "manage_settings" },
+      { id: "import", label: "Tracker import", icon: FileSpreadsheet, privilege: "manage_settings" },
+      { id: "api", label: "API access", icon: KeyRound, privilege: "manage_settings" },
     ],
   },
 ];
@@ -74,6 +76,7 @@ const pageTitles: Record<string, string> = {
   home: "Action center", leads: "My leads", "all-leads": "All leads", cold: "Cold leads", warm: "Warm leads", hot: "Hot leads", client: "Clients",
   queued: "Queued leads", archive: "Archive", lead: "Lead", opportunities: "Opportunities", "lead-generation": "Lead generation", tasks: "Tasks & reminders", trips: "Sales trip planner", planner: "Road visit planner",
   reports: "Analytics", targets: "Targets & templates", admin: "User management", values: "List of values", devices: "Device authorization", settings: "Settings",
+  import: "Tracker import", api: "API access",
 };
 
 export default function AppShell({ user, setUser, signOut, passwordSignIn }: { user: UserAccount; setUser: (user: UserAccount) => void; signOut: () => Promise<void>; passwordSignIn: boolean }) {

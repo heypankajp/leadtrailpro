@@ -175,4 +175,27 @@ describe("Administration and reports", () => {
     await page.click(By.css('button[aria-label="View Calls made report"]'), { global: true });
     await page.heading("Analytics");
   });
+
+  uiTest("creates an API token, sees it once, and revokes it", async () => {
+    await page.nav("API access");
+    await page.heading("API access");
+    await page.clickButton("Create token", { global: true });
+    const name = `Token ${runId}`;
+    await page.fill("Token name", name);
+    await page.clickButton("Create token");
+    const code = await page.wait(By.css('code[aria-label="API token"]'));
+    assert.match(await code.getText(), /^ltp_[A-Za-z0-9_-]{43}$/);
+    await page.clickButton("Done");
+    await page.wait(By.xpath(`//table//strong[normalize-space()=${xq(name)}]`));
+    await page.click(By.css(`button[aria-label="Revoke ${name}"]`), { global: true });
+    await page.clickButton("Revoke token");
+    await page.toast(`Token "${name}" revoked`);
+  });
+
+  uiTest("opens the tracker import page", async () => {
+    await page.nav("Tracker import");
+    await page.heading("Tracker import");
+    await page.wait(By.xpath("//h2[normalize-space()='Sales Managers in the sheet']"));
+    await page.wait(By.xpath("//button[normalize-space()='Preview']"));
+  });
 });

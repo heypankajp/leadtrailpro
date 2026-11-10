@@ -37,12 +37,19 @@ export async function readJsonBody(request: Request): Promise<Record<string, unk
   return body && typeof body === "object" && !Array.isArray(body) ? body as Record<string, unknown> : null;
 }
 
+/** Whether the request presents an API token (`Authorization: Bearer …`); whether the token is valid is decided by requireUser(). */
+export const hasBearerToken = (request: Request) => /^\s*bearer\s+\S+/i.test(request.headers.get("authorization") ?? "");
+
 /**
  * State-changing requests must carry an Origin header matching the site origin.
  * APP_URL (or TRUSTED_ORIGINS, comma separated) must be set when a reverse proxy
  * terminates TLS, because then request.url reports the internal origin.
+ * A request that authenticates with a bearer token is exempt: browsers never attach that header on their own, and a
+ * page on another origin cannot set it without a CORS preflight, which this app does not answer, so it cannot be forged
+ * cross-site; the token itself still has to be valid for the request to be served.
  */
 export function isSameOriginRequest(request: Request) {
+  if (hasBearerToken(request)) return true;
   const origin = request.headers.get("origin");
   if (!origin) return false;
   try {

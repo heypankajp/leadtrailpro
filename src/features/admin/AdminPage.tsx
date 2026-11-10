@@ -2,18 +2,21 @@
 
 import { ShieldCheck } from "lucide-react";
 import { useApp } from "@/features/shell/AppContext";
+import TrackerImportPanel from "@/features/tracker-import/TrackerImportPanel";
+import ApiTokensPanel from "./ApiTokensPanel";
 import ListValuesPanel from "./ListValuesPanel";
 import SettingsPanel from "./SettingsPanel";
 import TargetsPanel from "./TargetsPanel";
 import UsersPanel from "./UsersPanel";
 
-export const adminTabs = ["admin", "values", "targets", "settings", "devices"] as const;
+export const adminTabs = ["admin", "values", "targets", "settings", "devices", "import", "api"] as const;
 export type AdminTab = (typeof adminTabs)[number];
 
 export default function AdminPage({ tab }: { tab: AdminTab }) {
   const { can } = useApp();
   const allowed: Record<AdminTab, boolean> = {
     admin: can("manage_users"), values: can("manage_values"), targets: can("manage_targets"), settings: can("manage_settings"), devices: can("manage_settings"),
+    import: can("manage_settings"), api: can("manage_settings"),
   };
   if (!allowed[tab]) {
     return <div className="panel no-access"><ShieldCheck size={22} /><strong>You do not have access to this area.</strong><span>Ask an administrator if you need it.</span></div>;
@@ -22,6 +25,8 @@ export default function AdminPage({ tab }: { tab: AdminTab }) {
   if (tab === "values") return <ListValuesPanel />;
   if (tab === "targets") return <TargetsPanel />;
   if (tab === "settings") return <SettingsPanel />;
+  if (tab === "import") return <TrackerImportPanel />;
+  if (tab === "api") return <ApiTokensPanel />;
   return (
     <>
       <div className="page-heading"><div><div className="eyebrow">ADMINISTRATION</div><h1>Device authorization</h1><p>Restrict sign-in to approved company phones and laptops.</p></div></div>

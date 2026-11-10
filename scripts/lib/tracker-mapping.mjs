@@ -156,3 +156,56 @@ export function parseCity(value) {
 }
 
 export const slugify = (value) => String(value).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 60) || "value";
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Incremental import: one fingerprint per sheet row, and the pairing of vanished and new rows into edits.
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** The logical columns that make up a row's fingerprint, in a fixed order (the serial number is left out: it is a formula). */
+export const fingerprintColumns = [
+  "type", "manager", "date", "name", "action", "response", "status", "addressOrComments", "city", "followUp", "executive", "phone", "altPhone",
+  "contactRemark", "email", "industry", "positions", "contract", "notes", "stage", "quarter", "agreementSent",
+];
+
+/** One cell as text for the fingerprint: dates as YYYY-MM-DD, numbers as written, text trimmed; empty cells are "". */
+export function fingerprintCell(value) {
+  if (value === null || value === undefined) return "";
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? "" : new Date(value.getTime() + 12 * 3600 * 1000).toISOString().slice(0, 10);
+  if (typeof value === "number") return Number.isInteger(value) ? String(value) : String(value);
+  return clean(value);
+}
+
+/** The text a row's fingerprint is hashed from: the mapped columns joined with a separator that never occurs in cells. */
+export const fingerprintText = (raw) => fingerprintColumns.map((column) => fingerprintCell(raw[column])).join("\u001f");
+
+/**
+ * Pairs rows that disappeared from the sheet with rows that appeared, per company, so an edited row is updated in place
+ * instead of being duplicated: rows with the same date pair first, the rest pair in order. `vanished` and `added` are arrays of
+ * { key, date } (plus anything else); the result holds the pairs, the rows still to add, and the rows nothing replaced.
+ */
+export function pairRowChanges(vanished, added) {
+  const byKey = new Map();
+  for (const item of vanished) (byKey.get(item.key) ?? byKey.set(item.key, { vanished: [], added: [] }).get(item.key)).vanished.push(item);
+  for (const item of added) (byKey.get(item.key) ?? byKey.set(item.key, { vanished: [], added: [] }).get(item.key)).added.push(item);
+  const edits = [];
+  const inserts = [];
+  const removed = [];
+  for (const group of byKey.values()) {
+    const oldRows = [...group.vanished];
+    for (const row of group.added) {
+      const index = oldRows.findIndex((old) => old.date && old.date === row.date);
+      if (index === -1) continue;
+      edits.push([oldRows[index], row]);
+      oldRows.splice(index, 1);
+      row.paired = true;
+    }
+    const rest = group.added.filter((row) => !row.paired);
+    for (const row of rest) {
+      if (oldRows.length) edits.push([oldRows.shift(), row]);
+      else inserts.push(row);
+    }
+    removed.push(...oldRows);
+  }
+  for (const row of added) delete row.paired;
+  return { edits, inserts, removed };
+}

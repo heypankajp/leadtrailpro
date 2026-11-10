@@ -8,6 +8,7 @@ import type { ListKey, ListValue, ListValuesByKey } from "@/features/list-values
 import type { AppSettings, DigestSettings, Holiday, InactivityRule } from "@/features/settings/model";
 import type { TargetTemplate, TargetTemplateInput } from "@/features/targets/model";
 import type { SystemRole } from "@/features/users/model";
+import type { ApiToken } from "@/features/users/api-token-model";
 
 export const fetchListValues = (includeInactive: boolean) => api<{ listValues: ListValuesByKey }>(`/api/list-values${toQuery({ includeInactive })}`);
 export const createListValue = (listKey: ListKey, value: string) => api<{ value: ListValue }>("/api/list-values", { method: "POST", json: { listKey, value } });
@@ -25,3 +26,8 @@ export const updateSettings = (changes: { roleLabels?: Partial<Record<SystemRole
   api<{ settings: AppSettings }>("/api/settings", { method: "PATCH", json: changes });
 
 export const fetchAudit = (query: { entityType?: string; entityId?: number; actorId?: number; limit?: number } = {}) => api<{ entries: AuditEntry[] }>(`/api/audit${toQuery(query)}`);
+
+// Personal access tokens (SPEC §4): listed for administrators, created for oneself (returned in clear once), revoked at once.
+export const fetchApiTokens = () => api<{ tokens: ApiToken[] }>("/api/api-tokens");
+export const createApiToken = (input: { name: string; expiresInDays: number | null }) => api<{ token: string; apiToken: ApiToken }>("/api/api-tokens", { method: "POST", json: input });
+export const revokeApiToken = (id: number) => api<{ ok: true; apiToken: ApiToken }>(`/api/api-tokens/${id}`, { method: "DELETE" });

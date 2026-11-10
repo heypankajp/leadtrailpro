@@ -1,9 +1,11 @@
 import { createHash, randomBytes, randomInt, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { getDatabasePool, fromSqlDateTime, toSqlDateTime, withTransaction, type Queryable } from "@/lib/db";
 import { lastAutoLogoutCutoff } from "@/lib/dates";
 import { HttpError } from "@/lib/http";
+import { getApiTokenUser } from "./api-token-repository";
+import { bearerToken, isApiToken } from "./api-tokens";
 import { toUser, userColumns, type UserRow } from "./repository";
 import { googleStateCookiePath } from "./google-signin";
 import { googleOAuthClient } from "@/features/gmail/gmail";
@@ -102,7 +104,22 @@ export async function getRequestSessionToken(): Promise<string | null> {
   return token && /^[A-Za-z0-9_-]{40,50}$/.test(token) ? token : null;
 }
 
+/** True when the request carries an Authorization header: it is then authenticated by API token only, never by the cookie. */
+export async function isApiTokenRequest(): Promise<boolean> {
+  const headerList = await headers();
+  return headerList.has("authorization");
+}
+
+/**
+ * The signed-in account: from `Authorization: Bearer ltp_…` (a personal access token, SPEC §4) when that header is
+ * present, otherwise from the session cookie. A request with an unusable token is anonymous even if it also carries a cookie.
+ */
 export async function getRequestUser(): Promise<UserAccount | null> {
+  if (await isApiTokenRequest()) {
+    const headerList = await headers();
+    const token = bearerToken(headerList.get("authorization"));
+    return token && isApiToken(token) ? getApiTokenUser(token) : null;
+  }
   const token = await getRequestSessionToken();
   return token ? getSessionUser(token) : null;
 }

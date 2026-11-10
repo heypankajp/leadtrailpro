@@ -43,7 +43,7 @@ Everyday commands:
 | Browser end-to-end tests | `scripts/e2e.sh` (see [Checks and tests](#checks-and-tests)) |
 | Sample data (needs an administrator) | `docker compose run --rm setup node scripts/seed-sample-data.mjs` |
 | Seed accounts again after editing `seed/accounts.csv` | `docker compose run --rm setup node scripts/seed-users.mjs` (adds new emails only) |
-| Import the legacy tracker (needs an administrator; `--dry-run` first) | `docker compose run --rm setup node scripts/import-tracker.mjs "docs/Sales Leads 2026.xlsx" --dry-run` |
+| Import the sales tracker, the first time and again whenever the sheet changes | In the app: **Administration → Tracker import** (upload the export, Preview, Apply). From another machine: `npm run remote -- import "docs/Sales Leads 2026.xlsx"` (preview) then with `--apply`, using an API token (see [Remote administration](#remote-administration-with-api-tokens)). On the server itself: `docker compose run --rm setup node scripts/import-tracker.mjs "docs/Sales Leads 2026.xlsx" --dry-run`. Only the `LeadsDec25` sheet is read, and only new and edited rows are applied; a database filled by the import before November 10, 2026 needs the baseline workbook (the one that import used) once |
 | Schema upgrade after pulling code | `docker compose run --rm setup node scripts/create-database.mjs` |
 | Check the database connection the app will use | `docker compose run --rm app npm run db:check` |
 | Check the Google Maps key (three live calls) | `docker compose run --rm app npm run maps:test -- "1 Dundas St W, Toronto"` |
@@ -73,7 +73,7 @@ npm run db:check                                # confirms the app can reach the
 npm run dev
 ```
 
-Then complete the first-time setup in the browser as above. `npm run db:seed` adds sample data (demo Sales Managers, a Recruiter, leads, activities, tasks) once an administrator exists. `npm run db:import -- "docs/Sales Leads 2026.xlsx" --dry-run` reads the client's legacy tracker and reports what it would create; without `--dry-run` it imports one lead per company with a timeline entry per row (rules and options in SPEC.md §10.9; the report lands in `import-report.txt`). Re-running `npm run db:create` after pulling new code applies any migrations that have not run yet.
+Then complete the first-time setup in the browser as above. `npm run db:seed` adds sample data (demo Sales Managers, a Recruiter, leads, activities, tasks) once an administrator exists. `npm run db:import -- "docs/Sales Leads 2026.xlsx" --dry-run` (or the upload page under Administration → Tracker import) reads the `LeadsDec25` sheet of the client's tracker and reports what it would create or change; without `--dry-run` it imports one lead per company with a timeline entry per row, and it can be run again whenever the sheet changes: rows already imported are left alone, new rows are added, edited rows are updated in place (rules and options in SPEC.md §10.9; the report lands in `import-report.txt`). Re-running `npm run db:create` after pulling new code applies any migrations that have not run yet.
 
 ## Configuration (`.env.local`)
 
@@ -192,6 +192,30 @@ curl -X POST -H "X-Jobs-Key: <JOBS_KEY from .env>" -H "Content-Type: application
 Each run groups the listings by company into one card. From a card, a salesperson clicks **Assign as lead**, picks the owner (themselves by default), and saves the pre-filled lead form; the lead is created in that owner's name, linked to the card, and the card leaves the pool. **Not relevant** hides a card with a reason from the List of values; a role-level reason ("Role not relevant") lets the company come back when a different role appears, a company-level reason keeps it hidden. A company that is already a live lead or client never enters the pool: its new listings go to that lead's timeline (marked as system entries that do not count as sales activity) and the owner is notified. A company whose earlier lead was closed or archived comes back with that history, and **Reopen lead** restores the old lead for the chosen owner instead of creating a second one. Salespeople get a notification when a run adds new companies, and the Opportunities item shows how many wait in the pool.
 
 
+## Remote administration with API tokens
+
+Every API the app has can be called from another machine with a personal access token, so user management, list values, settings, targets, the audit log, leads, and the tracker import need no access to the server. An administrator creates a token under **Administration → API access** (a name and an expiry of 30, 90, or 365 days, or never) and copies it once; the app stores only a hash. The token acts as that administrator, with their privileges at the time of each request, so terminating the account or revoking the token on the same page stops it at once. A token cannot create other tokens. Needs migration 16 (November 10, 2026).
+
+Send it as a bearer header to any endpoint listed in [docs/SPEC.md §6](docs/SPEC.md):
+
+```bash
+curl -H "Authorization: Bearer ltp_…" https://leadtrail.pro/api/users
+```
+
+Or use the bundled client from a checkout of the project (Node 22 and `npm ci`; nothing from the server is needed). Copy `.env.remote.local.example` to `.env.remote.local` (git-ignored) with the address and the token, then:
+
+```bash
+npm run remote -- whoami
+npm run remote -- get /api/users
+npm run remote -- patch /api/users/7 '{"active":false}'
+npm run remote -- post /api/list-values '{"listKey":"city","value":"Guelph"}'
+npm run remote -- import-status
+npm run remote -- import "docs/Sales Leads 2026.xlsx"            # preview: nothing is written
+npm run remote -- import "docs/Sales Leads 2026.xlsx" --apply    # same options as the script: --baseline, --owner "Name=email", --default-owner, --sheet, --keep-action-names, --force
+```
+
+The preview and the report are the same as the command-line script's, and the report is saved as `import-report.txt`. A request that carries a token skips the browser origin check, because browsers never send that header on their own; privileges, validation, and the audit log are the same as in the browser.
+
 ## Production
 
 `compose.prod.yaml` overrides the development stack with a standalone Next.js image (about 460 MB), no bind mounts, uploads in the `attachments` volume, and PostgreSQL not published on the host.
@@ -208,7 +232,7 @@ The full server walk-through, including the reverse proxy and the first sign-in,
 
 - The app container takes its configuration from `.env.local`. Behind a reverse proxy, set `APP_URL` to the public origin and terminate TLS at the proxy.
 - Accounts: the setup step above creates every account in `seed/accounts.csv` that is missing. To add people later, add rows, commit, `git pull` on the server, and run `docker compose -f compose.yaml -f compose.prod.yaml run --rm setup node scripts/seed-users.mjs`; or add them under User management in the app. Nothing is needed in the Google Cloud console: the consent screen is published, so any Google address the app knows can sign in.
-- The image carries the database scripts, so later schema upgrades can run from it (run this after pulling any release that adds a migration, for example migrations 14 and 15 of November 7, 2026, which add the mailbox-watch table and columns and the job-title groups and posted-within window on opportunity searches, or migration 13 of November 6, 2026, which adds the Google Maps usage counters):
+- The image carries the database scripts, so later schema upgrades can run from it (run this after pulling any release that adds a migration, for example migration 16 of November 10, 2026, which adds the API tokens table, migrations 14 and 15 of November 7, 2026, which add the mailbox-watch table and columns and the job-title groups and posted-within window on opportunity searches, or migration 13 of November 6, 2026, which adds the Google Maps usage counters):
 
   ```bash
   docker compose -f compose.yaml -f compose.prod.yaml run --rm \
@@ -225,8 +249,8 @@ The full server walk-through, including the reverse proxy and the first sign-in,
 src/app/                 Next.js App Router: page.tsx (client shell) and api/** route handlers
 src/features/<area>/     model.ts (types, validation) · repository.ts (SQL, rules) · client.ts (fetch) · React components
 src/lib/                 database pool, dates and timezone, HTTP helpers, mailer, async-data hook
-scripts/                 create-database.mjs (migrations), create-app-user.mjs, seed-sample-data.mjs, import-tracker.mjs (+ lib/tracker-mapping.mjs),
-                         db-check.mjs (connection diagnosis), mail-test.mjs (SMTP check), docker-entrypoint.sh (dev container), e2e.sh (browser suite runner)
+scripts/                 create-database.mjs (migrations), create-app-user.mjs, seed-sample-data.mjs, import-tracker.mjs (+ lib/tracker-import.mjs, the rules shared with the upload page,
+                         and lib/tracker-mapping.mjs), ltp.mjs (remote administration client, `npm run remote`), db-check.mjs (connection diagnosis), mail-test.mjs (SMTP check), docker-entrypoint.sh (dev container), e2e.sh (browser suite runner)
 tests/e2e/               Selenium end-to-end suite (node:test) with helpers/ui.mjs and helpers/data.mjs
 docs/                    PRD.md (requirements with IDs and status), SPEC.md (design, API, data model, screens), TESTING.md (set up and test on a laptop or a server),
                          Sales_Tracker_App_BRD_SRS_Updated.pdf (the updated BRD/SRS; its new section 25 is tracked as OPP-01..22 in PRD.md)
@@ -251,7 +275,7 @@ compose.prod.yaml        production override
 - **Notifications and digests.** A bell in the top bar collects task assignments and changes, lead status changes, transfers, queued-lead events, file uploads, and client emails found by the mailbox watch, with unread counts and one-click navigation. Every Sales Manager and Admin gets a daily digest (overdue and upcoming follow-ups, tasks, leads needing attention, yesterday's counts) and a weekly digest (last week's numbers, targets, team totals for admins), in-app and by email; each person chooses what they receive, and administrators set the schedule or send one at once.
 - **Action center.** Calls, emails, and visits this week versus last week, overdue, today, and tomorrow follow-ups, target progress, leads that have gone quiet for longer than their limit (a default number of days plus Admin rules per status and BD action), open tasks, recent leads, and client replies waiting for an answer.
 - **Targets and reports.** Target templates per productivity stage, assignment per person, and reports for today, yesterday (business day), this week, last week, month to date, last month, and year to date with drill-down to the underlying records and Excel, PDF, or CSV export. Team reports filter by person, productivity stage, and target template. Tool-engagement counts (logins, updates, tasks, files) are included. Administrators also get the Team board at the top of Analytics: per salesperson, active leads, overdue follow-ups, stalled leads, client replies waiting, this week's activity, and last active, each number opening the leads behind it.
-- **Administration.** User management with terminate-and-reassign, list-of-values management with rename that flows through to existing leads, target templates, and settings (role names, reminder days, and the business calendar of public holidays).
+- **Administration.** User management with terminate-and-reassign, list-of-values management with rename that flows through to existing leads, target templates, settings (role names, reminder days, and the business calendar of public holidays), the sales-tracker import page (upload the sheet export, preview the exact outcome, apply), and personal access tokens for administering the app from another machine (see [Remote administration](#remote-administration-with-api-tokens)).
 - **Audit.** Every create, update, transfer, approval, archive, file, task, user, value, and settings change is recorded with actor, time, and before/after values. Lead history is shown on the lead for administrators.
 
 ## Not yet connected
@@ -264,7 +288,7 @@ Stored email threads with reply and forward, AI summaries, OCR of business cards
 npm run lint
 npm run typecheck
 npm run build
-npm run test:unit     # date parser, status helpers, trip matching, reminder rules, digest schedule (node:test, no database needed)
+npm run test:unit     # date parser, status helpers, trip matching, reminder rules, digest schedule, tracker import rules, API tokens (node:test, no database needed)
 ```
 
 Inside Docker, prefix each with `docker compose exec app`.

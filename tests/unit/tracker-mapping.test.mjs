@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
-  canonicalBdAction, latestNonEmpty, looksLikeAddress, normalizeCompanyName, parseBdAction, parseCity, parseClientResponse, parseDate, parseEmails,
+  canonicalBdAction, fingerprintCell, fingerprintColumns, fingerprintText, latestNonEmpty, looksLikeAddress, normalizeCompanyName, pairRowChanges, parseBdAction, parseCity, parseClientResponse, parseDate, parseEmails,
   parseLeadType, parsePhones, parseStatusCode, titleCase,
 } from "../../scripts/lib/tracker-mapping.mjs";
 
@@ -82,5 +82,31 @@ describe("tracker import mapping (SPEC §10.9)", () => {
     const rows = [{ city: "Toronto", phone: "" }, { city: "", phone: "416" }, { city: "", phone: "" }];
     assert.equal(latestNonEmpty(rows, (row) => row.city), "Toronto");
     assert.equal(latestNonEmpty(rows, (row) => row.phone), "416");
+  });
+});
+
+describe("incremental tracker import (SPEC §10.9)", () => {
+  test("row fingerprints depend on the mapped cells only", () => {
+    const row = { sr: 12, type: "Office", manager: "Daniel", date: new Date("2026-10-22T00:00:00Z"), name: "Acme Ltd", action: "1 .Cold Call", response: "Approach Later", status: "Cold" };
+    assert.equal(fingerprintText(row), fingerprintText({ ...row, sr: 99 })); // the serial number is a formula
+    assert.equal(fingerprintText(row), fingerprintText({ ...row, name: " Acme  Ltd " })); // whitespace is not a change
+    assert.notEqual(fingerprintText(row), fingerprintText({ ...row, response: "Not Interested" }));
+    assert.equal(fingerprintCell(new Date("2026-10-21T23:00:00Z")), "2026-10-22"); // a date read one hour off midnight
+    assert.equal(fingerprintCell(5196203900), "5196203900");
+    assert.equal(fingerprintCell(null), "");
+    assert.equal(fingerprintColumns.includes("sr"), false);
+  });
+
+  test("vanished and new rows pair into edits per company, by date first", () => {
+    const vanished = [{ key: "acme", date: "2026-10-19", id: 1 }, { key: "acme", date: "2026-10-16", id: 2 }, { key: "gone", date: "2026-10-19", id: 3 }];
+    const added = [{ key: "acme", date: "2026-10-19", row: 10 }, { key: "acme", date: "2026-11-02", row: 11 }, { key: "fresh", date: "2026-11-03", row: 12 }];
+    const result = pairRowChanges(vanished, added);
+    assert.deepEqual(result.edits.map(([old, fresh]) => [old.id, fresh.row]), [[1, 10], [2, 11]]); // same date first, then in order
+    assert.deepEqual(result.inserts.map((row) => row.row), [12]);
+    assert.deepEqual(result.removed.map((row) => row.id), [3]);
+    assert.equal("paired" in added[0], false);
+    const onlyNew = pairRowChanges([], added);
+    assert.equal(onlyNew.edits.length, 0);
+    assert.equal(onlyNew.inserts.length, 3);
   });
 });

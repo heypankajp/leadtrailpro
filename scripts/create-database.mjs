@@ -794,6 +794,27 @@ const migrations = [
       await client.query("UPDATE opportunity_searches SET titles = jsonb_build_array(keyword) WHERE titles = '[]'::jsonb AND keyword <> ''");
     },
   },
+  {
+    version: 16,
+    name: "API tokens: personal access tokens for scripts and remote administration (SPEC §3.24, §4)",
+    async run(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS api_tokens (
+          id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          user_id INTEGER NOT NULL,
+          name VARCHAR(80) NOT NULL,
+          token_hash CHAR(64) NOT NULL UNIQUE,
+          token_prefix VARCHAR(12) NOT NULL,
+          expires_at TIMESTAMP(0) NULL,
+          last_used_at TIMESTAMP(0) NULL,
+          revoked_at TIMESTAMP(0) NULL,
+          created_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW},
+          CONSTRAINT fk_api_tokens_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+      `);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_api_tokens_user ON api_tokens (user_id, revoked_at)");
+    },
+  },
 ];
 
 if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port > 65535 || !/^[a-z_][a-z0-9_]*$/.test(databaseName)) {

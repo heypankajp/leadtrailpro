@@ -16,6 +16,7 @@
     "typecheck": "tsc --noEmit",
     "test:unit": "node --test tests/unit/*.test.mjs",
     "jobs": "node scripts/jobs.mjs",
+    "remote": "node --env-file-if-exists=.env.remote.local scripts/ltp.mjs",
     "mail:test": "node --env-file-if-exists=.env.local scripts/mail-test.mjs",
     "jobs:test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --env-file-if-exists=.env.local scripts/jobs-test.mjs",
     "maps:test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --env-file-if-exists=.env.local scripts/maps-test.mjs",
