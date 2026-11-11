@@ -1341,3 +1341,7 @@ h1 { margin: 9px 0 5px; color: #242941; font-size: 25px; font-weight: 690; lette
 .manager-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; font-size: 9.5px; color: #4d5268; }
 .manager-list li { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 @media (max-width: 900px) { .import-layout { grid-template-columns: 1fr; } }
+
+/* KPI report switches under Settings → Email delivery (SPEC §7.18) */
+.kpi-reports { display: grid; gap: 6px; margin-top: 12px; padding-top: 10px; border-top: 1px solid #eef0f5; }
+.kpi-reports .field-label { font-weight: 650; color: #2d3246; }

@@ -13,6 +13,19 @@ export function normalizeCompanyName(name) {
   return words.join(" ");
 }
 
+/**
+ * The opportunity pool's company key: the same rule as `normalizeCompanyName` in src/features/trips/matching.ts (kept in
+ * step with it, checked by a unit test), which strips fewer suffixes than the import's own key above. A company with no
+ * Sales Manager is stored under this key as a pool card (SPEC §10.9), so the job searches find the same card.
+ */
+const poolSuffixes = new Set(["inc", "incorporated", "ltd", "limited", "llc", "llp", "corp", "corporation", "co", "company", "plc", "gmbh"]);
+export function poolCompanyKey(name) {
+  const words = String(name ?? "").toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim().split(/\s+/).filter(Boolean);
+  while (words.length > 1 && poolSuffixes.has(words[words.length - 1])) words.pop();
+  if (words.length > 1 && words[0] === "the") words.shift();
+  return words.join(" ");
+}
+
 export const clean = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
 const lower = (value) => clean(value).toLowerCase();
 

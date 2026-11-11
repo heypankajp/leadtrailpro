@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import ExcelJS from "exceljs";
 import { TrackerImportError, buildLead, cellValue, defaultOwnerMap, fileHashOf, formatReport, loadWorkbook, parseOwnerMappings, readSheet } from "../../scripts/lib/tracker-import.mjs";
+import { poolCompanyKey } from "../../scripts/lib/tracker-mapping.mjs";
 import { headlineCounts, orderedCounts, parseTrackerImportOptions } from "../../src/features/tracker-import/model.ts";
+import { trackerCard, trackerDraft } from "../../src/features/opportunities/model.ts";
+import { normalizeCompanyName } from "../../src/features/trips/matching.ts";
 
 async function workbookBytes(rows, sheetName = "LeadsDec25") {
   const workbook = new ExcelJS.Workbook();
@@ -80,13 +83,31 @@ describe("tracker import library (SPEC §10.9)", () => {
     const text = formatReport({
       dryRun: true, fileName: "Sales Leads 2026.xlsx", fileHash: "abc", sheetName: "LeadsDec25", finishedAt: "2026-11-10T12:00:00Z", seconds: 1.25, actorEmail: "admin@example.com", defaultOwnerEmail: "admin@example.com", previousImportAt: null,
       counts: { "rows read from LeadsDec25": 2, "leads created (new companies)": 1 }, decisions: { 'No status in any row: "Cold" assumed': 1 }, fieldChanges: {}, createdUsers: [], createdValues: ['city: "Oakville"'],
-      appEdited: [], removedRows: [], updatedLeads: [], rejects: ["LeadsDec25 row 9: no client name"], skipped: [], warnings: { "Status not recognised": ["LeadsDec25 row 4: \"Luke\" ignored"] },
+      appEdited: [], removedRows: [], updatedLeads: [], pooled: ["Harbour Metal Works: 2 rows, status cold, last contact 2026-10-08"], rejects: ["LeadsDec25 row 9: no client name"], skipped: [], warnings: { "Status not recognised": ["LeadsDec25 row 4: \"Luke\" ignored"] },
     });
     assert.match(text, /^LeadTrailPro tracker import \(DRY RUN, nothing written\) /);
+    assert.match(text, /default owner admin@example.com;/);
     assert.match(text, /== Summary\n     2  rows read from LeadsDec25\n     1  leads created/);
     assert.match(text, /== List values created\n  city: "Oakville"/);
     assert.match(text, /== Fields changed on existing leads \(sheet values applied\)\n  none/);
+    assert.match(text, /== Companies placed in the opportunity pool \(no Sales Manager\)\n  Harbour Metal Works: 2 rows/);
     assert.match(text, /== Status not recognised \(1\)\n  LeadsDec25 row 4/);
+  });
+
+  test("without a default owner the report says the pool takes the unassigned companies", () => {
+    const text = formatReport({
+      dryRun: false, fileName: "x.xlsx", fileHash: "abc", sheetName: "LeadsDec25", finishedAt: "2026-11-10T12:00:00Z", seconds: 1, actorEmail: "admin@example.com", defaultOwnerEmail: null, previousImportAt: null,
+      counts: {}, decisions: {}, fieldChanges: {}, createdUsers: [], createdValues: [], appEdited: [], removedRows: [], updatedLeads: [], pooled: [], rejects: [], skipped: [], warnings: {},
+    });
+    assert.match(text, /default owner none \(companies without a Sales Manager go to the opportunity pool\)/);
+    assert.match(text, /== Companies placed in the opportunity pool \(no Sales Manager\)\n  none/);
+  });
+
+  test("the pool's company key follows the app's normalisation, not the import's wider one", () => {
+    for (const name of ["The Acme Packaging Co., Inc.", "Harbour Metal Works Ltd", "ABC Group", "Maple & Oak SA", "  Northern   Foods  "]) {
+      assert.equal(poolCompanyKey(name), normalizeCompanyName(name), name);
+    }
+    assert.equal(poolCompanyKey("ABC Group"), "abc group"); // the import's own key strips "group"; the pool's does not
   });
 });
 
@@ -104,8 +125,34 @@ describe("tracker import through the app (SPEC §10.9)", () => {
   });
 
   test("the headline counts come first in a fixed order", () => {
-    const ordered = orderedCounts({ "timeline entries written": 5, "rows rejected": 1, "rows read from LeadsDec25": 9, "leads created (new companies)": 2 });
-    assert.deepEqual(ordered.map(([key]) => key), ["rows read from LeadsDec25", "leads created (new companies)", "rows rejected", "timeline entries written"]);
+    const ordered = orderedCounts({ "timeline entries written": 5, "rows rejected": 1, "rows read from LeadsDec25": 9, "leads created (new companies)": 2, "companies with no Sales Manager placed in the opportunity pool": 3 });
+    assert.deepEqual(ordered.map(([key]) => key), ["rows read from LeadsDec25", "leads created (new companies)", "companies with no Sales Manager placed in the opportunity pool", "rows rejected", "timeline entries written"]);
     assert.ok(headlineCounts.includes("leads updated"));
+  });
+
+  test("a pool card's draft is read back with its lead and entries; junk is rejected", () => {
+    const draft = {
+      key: "harbour metal works", sheet: "LeadsDec25", file: "abc", importedAt: "2026-11-10 12:00:00", rows: 2,
+      lead: { name: "Harbour Metal Works Ltd", type: "Office", status: "warm", action: "Followup Call", response: null, city: "Oakville", address: "", comments: "", executive: "Jamie Ortiz", phone: "905 555 0100", altPhone: "", contactRemark: "", emails: ["jamie@harbour.example"], industry: "Metal", positions: "Welder", firstContact: "2026-10-01", followUp: null, contract: null, lastActivity: "2026-10-08" },
+      entries: [
+        { type: "bd_action", summary: "First Call · Call Back", body: null, valueCode: "first_call", occurredAt: "2026-10-01 12:00:00", meta: { imported: true, sheet: "LeadsDec25", row: 2, fingerprint: "f1" } },
+        { type: "bd_action", summary: "Followup Call", body: "Spoke to Jamie", valueCode: "followup_call", occurredAt: "2026-10-08 12:00:00", meta: { imported: true, sheet: "LeadsDec25", row: 3, fingerprint: "f2" } },
+      ],
+    };
+    const parsed = trackerDraft(JSON.stringify(draft));
+    assert.deepEqual(parsed, draft);
+    assert.deepEqual(trackerDraft(draft), draft);
+    const card = trackerCard(parsed);
+    assert.equal(card.rows, 2);
+    assert.equal(card.lead.executive, "Jamie Ortiz");
+    assert.deepEqual(card.entries, [{ date: "2026-10-01", summary: "First Call · Call Back", type: "bd_action" }, { date: "2026-10-08", summary: "Followup Call", type: "bd_action" }]);
+    assert.equal(trackerDraft(null), null);
+    assert.equal(trackerDraft("not json"), null);
+    assert.equal(trackerDraft({ lead: { name: "" } }), null);
+    assert.equal(trackerCard(null), null);
+    const sparse = trackerDraft({ lead: { name: "Only a name" } });
+    assert.equal(sparse.lead.status, "cold");
+    assert.equal(sparse.lead.type, "Office");
+    assert.deepEqual(sparse.entries, []);
   });
 });

@@ -96,9 +96,10 @@ export default function TrackerImportPanel() {
                 </Field>
               )}
               <Field label="Sheet"><input value={sheet} maxLength={120} onChange={(event) => { setSheet(event.target.value); setPreviewedKey(""); }} required /></Field>
-              <Field label="Owner when a row names no Sales Manager">
+              <Field label="Companies whose rows name no Sales Manager" hint="In the pool, salespeople assign them to themselves; the lead is created with the sheet's history at that moment.">
                 <select value={defaultOwner} onChange={(event) => { setDefaultOwner(event.target.value); setPreviewedKey(""); }}>
-                  <option value="">{me.name} (you)</option>
+                  <option value="">Opportunity pool (recommended)</option>
+                  <option value={String(me.id)}>{me.name} (you)</option>
                   {reference.users.filter((person) => person.active && person.role !== "recruiter" && person.id !== me.id).map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
                 </select>
               </Field>
@@ -126,7 +127,7 @@ export default function TrackerImportPanel() {
           </form>
           <section className="panel settings-panel">
             <div className="panel-heading"><div><h2>Status</h2><p>What the database already holds from the tracker.</p></div></div>
-            <div className="form-note"><FileSpreadsheet size={14} /> <span>{status.importedLeads.toLocaleString()} leads with {status.importedEntries.toLocaleString()} timeline entries from <code>{status.sheetName}</code>. Last applied import: {status.lastImport ? `${formatDateTime(status.lastImport.at)} by ${status.lastImport.actorName ?? "unknown"}` : "none yet"}.</span></div>
+            <div className="form-note"><FileSpreadsheet size={14} /> <span>{status.importedLeads.toLocaleString()} leads with {status.importedEntries.toLocaleString()} timeline entries from <code>{status.sheetName}</code>{status.pooledCards > 0 && <>, and {status.pooledCards.toLocaleString()} {status.pooledCards === 1 ? "company" : "companies"} without a Sales Manager waiting in the opportunity pool</>}. Last applied import: {status.lastImport ? `${formatDateTime(status.lastImport.at)} by ${status.lastImport.actorName ?? "unknown"}` : "none yet"}.</span></div>
             <div className="panel-heading"><div><h2>Sales Managers in the sheet</h2><p>Names in the sheet and the accounts their leads go to.</p></div></div>
             <ul className="manager-list">
               {status.managers.map((manager) => (
@@ -157,7 +158,7 @@ export default function TrackerImportPanel() {
       {confirming && report && file && (
         <Dialog title="Apply the import?" eyebrow="TRACKER IMPORT" onClose={() => setConfirming(false)} size="narrow">
           <p className="dialog-description">
-            {file.name} will be applied as previewed: {report.counts["leads created (new companies)"] ?? 0} new leads, {report.counts["leads updated"] ?? 0} leads updated, {(report.counts["timeline entries added (new rows)"] ?? 0) + (report.counts["timeline entries written"] ?? 0)} timeline entries added, {report.counts["timeline entries updated (edited rows)"] ?? 0} updated.
+            {file.name} will be applied as previewed: {report.counts["leads created (new companies)"] ?? 0} new leads, {report.counts["leads updated"] ?? 0} leads updated, {report.counts["companies with no Sales Manager placed in the opportunity pool"] ?? 0} companies to the opportunity pool, {(report.counts["timeline entries added (new rows)"] ?? 0) + (report.counts["timeline entries written"] ?? 0)} timeline entries added, {report.counts["timeline entries updated (edited rows)"] ?? 0} updated.
             {report.appEdited.length > 0 && ` ${report.appEdited.length} of the leads were changed in the app since the previous import; the sheet's values will replace those fields.`}
           </p>
           <div className="modal-actions">
@@ -211,6 +212,7 @@ function ReportView({ report }: { report: TrackerImportReport }) {
       <ReportSection title="Accounts created" lines={report.createdUsers} />
       <ReportSection title="List values created" lines={report.createdValues} />
       <ReportSection title="Leads updated" lines={report.updatedLeads} />
+      <ReportSection title="Companies placed in the opportunity pool (no Sales Manager)" lines={report.pooled ?? []} />
       <ReportSection title="Rows removed from the sheet (timeline entries kept)" lines={report.removedRows} />
       <ReportSection title="Rejected rows" lines={report.rejects} />
       <ReportSection title="Companies skipped" lines={report.skipped} />

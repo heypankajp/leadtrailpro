@@ -7,7 +7,7 @@ import { assertListValue, getListValue } from "@/features/list-values/repository
 import { notifyUsers } from "@/features/notifications/repository";
 import { getUser, listUsersWithPrivilege } from "@/features/users/repository";
 import { hasPrivilege } from "@/features/users/model";
-import { claimOpportunityForLead } from "@/features/opportunities/claim";
+import { claimOpportunityForLead, opportunityHasDraft } from "@/features/opportunities/claim";
 import { matchLead, normalizeCompanyName, type MatchableLead, type MatchedOn } from "@/features/trips/matching";
 import type { UserAccount } from "@/features/users/model";
 import { activityTypes } from "./model";
@@ -382,7 +382,9 @@ export async function createLead(input: LeadInput, actor: UserAccount, ownerId: 
       if (!candidate || !candidate.active || candidate.role === "recruiter") throw new HttpError(400, "The owner must be an active Sales Manager or Admin.");
       owner = candidate;
     }
-    const queued = isHistoricalFirstContact(input.firstContactDate) && !hasPrivilege(actor, "review_queued");
+    // A card from the sales tracker carries the company's real first-contact date (§10.9), so the approval queue for historical dates does not apply.
+    const fromTracker = options.opportunityId ? await opportunityHasDraft(connection, options.opportunityId) : false;
+    const queued = isHistoricalFirstContact(input.firstContactDate) && !hasPrivilege(actor, "review_queued") && !fromTracker;
     const now = new Date();
     const nowSql = toSqlDateTime(now);
     const result = await connection.query(
@@ -406,14 +408,18 @@ export async function createLead(input: LeadInput, actor: UserAccount, ownerId: 
       valueCode: lead.statusCode, meta: { statusId: lead.statusId, queued },
     });
     if (options.opportunityId) {
-      const claimed = await claimOpportunityForLead(connection, options.opportunityId, { id, clientName: lead.clientName }, actor, now);
+      const claimed = await claimOpportunityForLead(connection, options.opportunityId, { id, clientName: lead.clientName, ownerId: owner.id }, actor, now);
+      const parts: string[] = [];
+      if (claimed.listings.length || !claimed.trackerEntries) parts.push(`${claimed.listings.length} job listing${claimed.listings.length === 1 ? "" : "s"}`);
+      if (claimed.trackerEntries) parts.push(`${claimed.trackerEntries} timeline entr${claimed.trackerEntries === 1 ? "y" : "ies"} from the sales tracker`);
       await addActivity(connection, {
-        leadId: id, userId: actor.id, type: "listing", occurredAt: now, touch: false, meta: { opportunityId: options.opportunityId },
-        summary: `Created from the opportunity pool: ${claimed.listings.length} job listing${claimed.listings.length === 1 ? "" : "s"}`,
+        leadId: id, userId: actor.id, type: "listing", occurredAt: now, touch: false, meta: { opportunityId: options.opportunityId, trackerEntries: claimed.trackerEntries },
+        summary: `Created from the opportunity pool: ${parts.join(", ")}`,
         body: claimed.listings.map((item) => `${item.title} (${item.source}) ${item.url}`).join("\n") || null,
       });
     }
-    if (lead.bdActionId) {
+    // The tracker's latest BD action is already on the timeline from the sheet; only a typed-in action gets an entry of today.
+    if (lead.bdActionId && !fromTracker) {
       const action = await getListValue(lead.bdActionId, connection);
       if (action) await addActivity(connection, { leadId: id, userId: actor.id, type: "bd_action", summary: action.value, valueCode: action.code, occurredAt: now });
     }

@@ -1,4 +1,5 @@
 import { api, toQuery } from "@/lib/api";
+import type { KpiReportKind } from "@/features/reports/kpi-model";
 import type { NotificationPrefs, UserAccount } from "@/features/users/model";
 import type { DigestJob, NotificationPage } from "./model";
 
@@ -6,3 +7,5 @@ export const fetchNotifications = (options: { limit?: number; unread?: boolean }
 export const markNotificationsRead = (ids: number[] | "all") => api<{ unread: number }>("/api/notifications", { method: "PATCH", json: ids === "all" ? { all: true } : { ids } });
 export const updateMyPreferences = (prefs: NotificationPrefs) => api<{ user: UserAccount }>("/api/auth/preferences", { method: "PATCH", json: prefs });
 export const runDigestNow = (job: DigestJob) => api<{ ran: { job: DigestJob; periodKey: string; recipients: number; failures: number }[] }>("/api/jobs/run", { method: "POST", json: { job, force: true, onlyMe: true } });
+/** Sends one KPI report (SPEC §7.18) to the administrator who asks for it, at once. */
+export const runKpiReportNow = (kind: KpiReportKind) => api<{ ran: { job: string; kind: KpiReportKind; periodKey: string; recipients: number; failures: number }[] }>("/api/jobs/run", { method: "POST", json: { job: `kpi_${kind}`, force: true } });

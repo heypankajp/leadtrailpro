@@ -815,6 +815,13 @@ const migrations = [
       await client.query("CREATE INDEX IF NOT EXISTS idx_api_tokens_user ON api_tokens (user_id, revoked_at)");
     },
   },
+  {
+    version: 17,
+    name: "Opportunity pool cards from the sales tracker: the drafted lead and timeline of a company with no Sales Manager (SPEC §3.22, §10.9)",
+    async run(client) {
+      await client.query("ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS draft JSONB NULL");
+    },
+  },
 ];
 
 if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port > 65535 || !/^[a-z_][a-z0-9_]*$/.test(databaseName)) {

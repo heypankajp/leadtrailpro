@@ -15,6 +15,8 @@ type Props = {
   prefill?: Partial<LeadInput>;
   /** The opportunity card this lead is created from; it becomes "assigned" together with the lead. */
   opportunityId?: number;
+  /** The card carries the sales tracker's history (SPEC §10.9): its first-contact date is real, so no approval queue applies. */
+  importedHistory?: boolean;
   onClose: () => void;
   onSaved: (lead: LeadSummary) => void;
 };
@@ -28,7 +30,7 @@ type FormState = {
 };
 
 /** Add or edit a lead with every field from BRD section 6 except files and notes (those live on the lead itself). */
-export default function LeadFormDialog({ lead, prefill, opportunityId, onClose, onSaved }: Props) {
+export default function LeadFormDialog({ lead, prefill, opportunityId, importedHistory, onClose, onSaved }: Props) {
   const { reference, can, user, openLead } = useApp();
   const values = reference.listValues;
   const defaultStatus = values.status.find((item) => item.code === "cold") ?? values.status[0];
@@ -42,8 +44,9 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, onClose, 
     clientName: prefill?.clientName ?? "", companyUrl: prefill?.companyUrl ?? "", address: prefill?.address ?? "", comments: prefill?.comments ?? "", clientExecutive: prefill?.clientExecutive ?? "",
     contactPhone: prefill?.contactPhone ?? "", contactAltPhone: prefill?.contactAltPhone ?? "", contactRemark: prefill?.contactRemark ?? "", clientEmails: (prefill?.clientEmails ?? []).join(", "),
     industry: prefill?.industry ?? "", positions: prefill?.positions ?? "",
-    leadTypeId: values.lead_type[0] ? String(values.lead_type[0].id) : "", statusId: defaultStatus ? String(defaultStatus.id) : "", statusReasonId: "", bdActionId: "", clientResponseId: "", leadCategoryId: "",
-    companySizeId: "", cityId: "", firstContactDate: reference.today, followUpDate: "", contractSignedDate: "", ownerId: String(user.id),
+    leadTypeId: prefill?.leadTypeId ? String(prefill.leadTypeId) : values.lead_type[0] ? String(values.lead_type[0].id) : "", statusId: prefill?.statusId ? String(prefill.statusId) : defaultStatus ? String(defaultStatus.id) : "",
+    statusReasonId: "", bdActionId: prefill?.bdActionId ? String(prefill.bdActionId) : "", clientResponseId: prefill?.clientResponseId ? String(prefill.clientResponseId) : "", leadCategoryId: "",
+    companySizeId: "", cityId: prefill?.cityId ? String(prefill.cityId) : "", firstContactDate: prefill?.firstContactDate || reference.today, followUpDate: prefill?.followUpDate ?? "", contractSignedDate: prefill?.contractSignedDate ?? "", ownerId: String(user.id),
   });
   const [duplicate, setDuplicate] = useState<DuplicateNotice | null>(null);
   const [error, setError] = useState("");
@@ -52,7 +55,7 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, onClose, 
   const set = (key: keyof FormState) => (event: { target: { value: string } }) => setForm((current) => ({ ...current, [key]: event.target.value }));
   const idOrNull = (value: string) => (value ? Number(value) : null);
   const yesterday = (() => { const [y, m, d] = reference.today.split("-").map(Number); const date = new Date(Date.UTC(y, m - 1, d - 1)); return date.toISOString().slice(0, 10); })();
-  const historical = Boolean(form.firstContactDate && form.firstContactDate < yesterday);
+  const historical = Boolean(form.firstContactDate && form.firstContactDate < yesterday) && !importedHistory;
   const owners = reference.users.filter((item) => item.role !== "recruiter");
   // LEAD-06: Lost Lead and Disqualified need a reason from their own list; other statuses clear it.
   const reasonKey = reasonListFor(values.status.find((item) => String(item.id) === form.statusId)?.code);

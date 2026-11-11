@@ -8,7 +8,7 @@ import { addActivity, getLead, setLeadState, transferLead, updateLead } from "@/
 import type { LeadSummary } from "@/features/leads/model";
 import type { UserAccount } from "@/features/users/model";
 import { claimOpportunityForLead } from "./claim";
-import { closedStatusCodes, defaultPostedWithinDays, indeedKeyword, parseTitles, reasonScopeFor, type Opportunity, type OpportunityListing, type OpportunityPage, type OpportunityRun, type OpportunitySearch, type OpportunitySearchInput, type OpportunityStatus, type ReasonScope } from "./model";
+import { closedStatusCodes, defaultPostedWithinDays, indeedKeyword, parseTitles, reasonScopeFor, trackerCard, trackerDraft, type Opportunity, type OpportunityListing, type OpportunityPage, type OpportunityRun, type OpportunitySearch, type OpportunitySearchInput, type OpportunityStatus, type ReasonScope } from "./model";
 
 /** Reads and the people's actions on the opportunity pool (OPP-*); the search runs live in `runner.ts`. */
 
@@ -88,10 +88,11 @@ type OpportunityRow = {
   leadId: number | null; leadName: string | null; leadOwnerId: number | null; leadOwnerName: string | null; leadStatus: string | null; leadStatusReason: string | null; leadRecordState: string | null;
   historyId: number | null; historyName: string | null; historyOwnerName: string | null; historyStatus: string | null; historyStatusReason: string | null; historyRecordState: string | null;
   sources: string[] | string;
+  draft: unknown;
 };
 
 const opportunityColumns = `
-  o.id, o.company_name AS "companyName", o.website, o.location, o.status, o.revived, o.listings_count AS "listingsCount", o.latest_title AS "latestTitle",
+  o.id, o.company_name AS "companyName", o.website, o.location, o.status, o.revived, o.listings_count AS "listingsCount", o.latest_title AS "latestTitle", o.draft,
   o.first_seen_at AS "firstSeenAt", o.last_seen_at AS "lastSeenAt", r.value AS reason, o.reason_scope AS "reasonScope", o.reason_note AS "reasonNote",
   NULLIF(CONCAT(d.first_name, ' ', d.last_name), ' ') AS "decidedByName", o.decided_at AS "decidedAt",
   l.id AS "leadId", l.client_name AS "leadName", l.owner_id AS "leadOwnerId", NULLIF(CONCAT(lo.first_name, ' ', lo.last_name), ' ') AS "leadOwnerName",
@@ -133,6 +134,7 @@ const toOpportunity = (row: OpportunityRow, listings: OpportunityListing[]): Opp
     reason: row.reason, reasonScope: row.reasonScope, reasonNote: row.reasonNote,
     decidedByName: row.decidedByName, decidedAt: fromSqlDateTime(row.decidedAt),
     listings,
+    tracker: trackerCard(trackerDraft(row.draft)),
   };
 };
 
@@ -161,7 +163,11 @@ async function listingsFor(ids: number[], db: Queryable): Promise<Map<number, Op
 export async function listOpportunities(filter: { status: OpportunityStatus; page: number; pageSize: number; search?: string }, db: Queryable = getDatabasePool()): Promise<OpportunityPage> {
   const clauses = ["o.status = ?"];
   const params: unknown[] = [filter.status];
-  if (filter.search) { clauses.push("(LOWER(o.company_name) LIKE ? OR LOWER(o.latest_title) LIKE ? OR LOWER(o.location) LIKE ?)"); const like = `%${filter.search.toLowerCase()}%`; params.push(like, like, like); }
+  if (filter.search) {
+    clauses.push("(LOWER(o.company_name) LIKE ? OR LOWER(o.latest_title) LIKE ? OR LOWER(o.location) LIKE ? OR LOWER(COALESCE(o.draft->'lead'->>'executive', '')) LIKE ?)");
+    const like = `%${filter.search.toLowerCase()}%`;
+    params.push(like, like, like, like);
+  }
   const where = `WHERE ${clauses.join(" AND ")}`;
   const order = filter.status === "new" ? "o.last_seen_at DESC, o.listings_count DESC, o.id DESC" : "o.decided_at DESC NULLS LAST, o.last_seen_at DESC, o.id DESC";
   const { rows: countRows } = await db.query("SELECT status, COUNT(*)::int AS count FROM opportunities GROUP BY status");
@@ -248,10 +254,10 @@ export async function reopenLeadFromOpportunity(id: number, ownerId: number, act
   if (lead.ownerId !== ownerId) await transferLead(lead.id, ownerId, reason, actor);
   const now = new Date();
   await withTransaction(async (connection) => {
-    const claimed = await claimOpportunityForLead(connection, id, { id: lead.id, clientName: lead.clientName }, actor, now);
+    const claimed = await claimOpportunityForLead(connection, id, { id: lead.id, clientName: lead.clientName, ownerId }, actor, now);
     await addActivity(connection, {
       leadId: lead.id, userId: actor.id, type: "listing", occurredAt: now, touch: false, meta: { opportunityId: id },
-      summary: `${reason}: ${claimed.listings.length} job listing${claimed.listings.length === 1 ? "" : "s"}`,
+      summary: `${reason}: ${claimed.listings.length} job listing${claimed.listings.length === 1 ? "" : "s"}${claimed.trackerEntries ? `, ${claimed.trackerEntries} timeline entr${claimed.trackerEntries === 1 ? "y" : "ies"} from the sales tracker` : ""}`,
       body: claimed.listings.map((item) => `${item.title} (${item.source}) ${item.url}`).join("\n") || null,
     });
   });

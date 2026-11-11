@@ -18,6 +18,8 @@ import { TrackerImportError, defaultSheetName, parseOwnerMappings, runTrackerImp
  * already imported are left alone, new rows add timeline entries (and leads for new companies), an edited row updates its timeline
  * entry in place, and a row that disappeared is listed in the report (its entry is kept). --dry-run runs everything and rolls it back,
  * so the report is exact. --baseline <workbook> is needed once on a database filled by the import before fingerprints existed.
+ * A company whose rows name no Sales Manager becomes an opportunity pool card carrying its drafted lead and timeline, which
+ * any salesperson assigns to themselves in the app; --default-owner <email> gives those companies to one person instead.
  * The report is written next to the project as import-report.txt (git-ignored).
  */
 

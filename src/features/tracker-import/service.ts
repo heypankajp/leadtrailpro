@@ -20,6 +20,7 @@ export async function trackerImportStatus(sheetName: string): Promise<TrackerImp
      FROM lead_activities WHERE activity_type <> 'created' AND meta->>'imported' = 'true' AND meta->>'sheet' = ?`,
     [sheetName],
   );
+  const { rows: [pool] } = await db.query("SELECT COUNT(*) AS total FROM opportunities WHERE status = 'new' AND draft IS NOT NULL");
   const emails = Object.values(defaultOwnerMap);
   const { rows: accounts } = await db.query(
     `SELECT LOWER(email) AS email, id, TRIM(first_name || ' ' || last_name) AS name, is_active AS active FROM users WHERE LOWER(email) = ANY(?::text[])`,
@@ -37,6 +38,7 @@ export async function trackerImportStatus(sheetName: string): Promise<TrackerImp
     unstampedEntries: Number(entries?.unstamped ?? 0),
     importedEntries: Number(entries?.total ?? 0),
     importedLeads: Number(entries?.leads ?? 0),
+    pooledCards: Number((pool as { total?: number } | undefined)?.total ?? 0),
     managers,
   };
 }

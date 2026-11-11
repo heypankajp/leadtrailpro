@@ -18,7 +18,7 @@ export type TrackerImportOptions = {
   clientsSheetName: string | null;
   keepActionNames: boolean;
   force: boolean;
-  /** The owner of leads whose rows name no Sales Manager: an account id or email; null = the administrator running the import. */
+  /** The owner of leads whose rows name no Sales Manager: an account id or email; null = those companies go to the opportunity pool as cards. */
   defaultOwner: string | null;
   /** "Name=email" lines for the Sales Managers named in the sheet (added to the built-in map). */
   ownerLines: string[];
@@ -32,7 +32,8 @@ export type TrackerImportReport = {
   finishedAt: string;
   seconds: number;
   actorEmail: string;
-  defaultOwnerEmail: string;
+  /** Null when companies without a Sales Manager went to the opportunity pool. */
+  defaultOwnerEmail: string | null;
   previousImportAt: string | null;
   counts: Record<string, number>;
   decisions: Record<string, number>;
@@ -42,6 +43,8 @@ export type TrackerImportReport = {
   appEdited: string[];
   removedRows: string[];
   updatedLeads: string[];
+  /** Companies with no Sales Manager placed in the opportunity pool (one line each). */
+  pooled: string[];
   rejects: string[];
   skipped: string[];
   warnings: Record<string, string[]>;
@@ -63,6 +66,8 @@ export type TrackerImportStatus = {
   unstampedEntries: number;
   importedEntries: number;
   importedLeads: number;
+  /** Companies from the sheet waiting in the opportunity pool (cards with a draft, status new). */
+  pooledCards: number;
   managers: TrackerManager[];
 };
 
@@ -90,7 +95,7 @@ export function parseTrackerImportOptions(form: FormData): TrackerImportOptions 
 /** The counts an administrator looks at first, in a fixed order; the rest of `counts` follows as it comes. */
 export const headlineCounts = [
   "rows read from", "rows unchanged since the previous import", "rows not seen before (new or edited)", "leads created (new companies)", "leads updated",
-  "timeline entries added (new rows)", "timeline entries updated (edited rows)", "rows removed from the sheet (timeline entries kept)", "rows rejected",
+  "companies with no Sales Manager placed in the opportunity pool", "timeline entries added (new rows)", "timeline entries updated (edited rows)", "rows removed from the sheet (timeline entries kept)", "rows rejected",
 ];
 
 export function orderedCounts(counts: Record<string, number>): [string, number][] {

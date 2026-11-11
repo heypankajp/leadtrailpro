@@ -18,7 +18,8 @@ import { defaultSheetName } from "./lib/tracker-import.mjs";
  *   import-status                             previous tracker imports, whether a baseline is needed, the Sales Manager accounts
  *   import <workbook.xlsx> [--apply] [--baseline <file>] [--sheet LeadsDec25] [--keep-action-names] [--force]
  *          [--default-owner email] [--owner "Name=email"]... [--archive-sheet name] [--clients-sheet name] [--report import-report.txt]
- *                                             preview (default) or apply the sales tracker; the report is printed and saved
+ *                                             preview (default) or apply the sales tracker; the report is printed and saved;
+ *                                             companies with no Sales Manager go to the opportunity pool unless --default-owner is given
  *
  * Examples:
  *   npm run remote -- get /api/users

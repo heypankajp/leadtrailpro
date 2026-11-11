@@ -94,6 +94,18 @@ describe("Administration and reports", () => {
     await page.click(By.css("button.notif-button"), { global: true });
   });
 
+  uiTest("sends the daily KPI report on demand to the outbox", async () => {
+    await page.clickButton("Send me the daily KPI report", { global: true });
+    await page.toast("Daily KPI report sent");
+    const row = await page.wait(By.xpath('//table[contains(@class,"outbox-table")]//tr[.//strong[starts-with(normalize-space(.), "LeadTrailPro KPI report (daily)")]]'));
+    assert.ok((await row.getText()).includes(admin.email), "the KPI report is addressed to the administrator");
+    await page.click(By.xpath('//table[contains(@class,"outbox-table")]//tr[.//strong[starts-with(normalize-space(.), "LeadTrailPro KPI report (daily)")]]//button[starts-with(@aria-label, "Show message")]'), { global: true });
+    const body = await (await page.wait(By.css(".outbox-body"))).getText();
+    assert.match(body, /Daily KPI report for \d{4}-\d{2}-\d{2}/);
+    assert.match(body, /All Sales Managers/);
+    assert.match(body, /Pipeline now/);
+  });
+
   uiTest("job listing sources show their status and keep a budget change", async () => {
     const row = By.xpath('//div[contains(@class,"job-source-row")][.//strong[normalize-space()="Sample listings"]]');
     await page.waitText(row, "Ready");

@@ -2,6 +2,7 @@ import type { JobSourceSettings } from "@/features/jobs/model";
 import type { MapsSettings } from "@/features/maps/model";
 import type { OpportunitySettings } from "@/features/opportunities/model";
 import type { SystemRole } from "@/features/users/model";
+import { defaultKpiReports, normalizeKpiReports, type KpiReportSettings } from "../reports/kpi-model.ts";
 
 /** A non-working day in the business calendar (public holiday, company closure). */
 export type Holiday = { date: string; name: string };
@@ -29,16 +30,23 @@ export function normalizeDigests(value: unknown): { digests: DigestSettings; err
   return { digests: { enabled: record.enabled === undefined ? defaultDigests.enabled : record.enabled === true, dailyTime, weeklyDay, weeklyTime }, error: null };
 }
 
-/** Email delivery through the Google app: the mailbox the app sends from, whether report emails go out at all, and whether connected mailboxes are watched for client replies (MAIL-01). */
-export type EmailSettings = { senderUserId: number | null; reportEmails: boolean; watchMailboxes: boolean };
-export const defaultEmailSettings: EmailSettings = { senderUserId: null, reportEmails: false, watchMailboxes: true };
+/**
+ * Email delivery through the Google app: the mailbox the app sends from, whether the weekly stalled-leads report goes
+ * out, which KPI reports administrators get (daily, weekly, monthly; SPEC §7.18), and whether connected mailboxes
+ * are watched for client replies (MAIL-01).
+ */
+export type EmailSettings = { senderUserId: number | null; reportEmails: boolean; kpiReports: KpiReportSettings; watchMailboxes: boolean };
+export const defaultEmailSettings: EmailSettings = { senderUserId: null, reportEmails: false, kpiReports: { ...defaultKpiReports }, watchMailboxes: true };
 
 export function normalizeEmailSettings(value: unknown): { email: EmailSettings; error: string | null } {
   const record = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
   const raw = record.senderUserId;
   const senderUserId = raw === null || raw === undefined || raw === "" ? null : Number(raw);
   if (senderUserId !== null && (!Number.isSafeInteger(senderUserId) || senderUserId < 1)) return { email: defaultEmailSettings, error: "Choose a valid sending mailbox." };
-  return { email: { senderUserId, reportEmails: record.reportEmails === true, watchMailboxes: record.watchMailboxes === undefined ? true : record.watchMailboxes === true }, error: null };
+  return {
+    email: { senderUserId, reportEmails: record.reportEmails === true, kpiReports: normalizeKpiReports(record.kpiReports), watchMailboxes: record.watchMailboxes === undefined ? true : record.watchMailboxes === true },
+    error: null,
+  };
 }
 
 export type AppSettings = {

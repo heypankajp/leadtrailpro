@@ -8,6 +8,7 @@ import { useAsyncData } from "@/lib/useAsyncData";
 import JobsUsageCard from "@/features/jobs/JobsUsageCard";
 import LeadFormDialog from "@/features/leads/LeadFormDialog";
 import type { LeadInput } from "@/features/leads/model";
+import type { ListValuesByKey } from "@/features/list-values/model";
 import { useApp } from "@/features/shell/AppContext";
 import { Dialog, EmptyState, ErrorText, Field, Loading, Pagination, Tabs, type TabOption } from "@/features/shell/components";
 import { createSearch, deleteSearch, fetchOpportunities, fetchRuns, fetchSearches, markOpportunityNotRelevant, reopenOpportunity, restoreOpportunity, runSearchesNow, updateSearch } from "./client";
@@ -18,15 +19,29 @@ const pageSize = 50;
 
 const statusLabels: Record<OpportunityStatus, string> = { new: "Pool", not_relevant: "Not relevant", converted: "Assigned as leads", attached: "Existing leads" };
 
-/** What the lead form starts with when a card is assigned: the company, where it is, and the roles it advertises. */
-function prefillFor(item: Opportunity): Partial<LeadInput> {
+/**
+ * What the lead form starts with when a card is assigned: the company, where it is, and the roles it advertises; for a
+ * card from the sales tracker (§10.9), everything the sheet knew, with the named list values resolved to ids.
+ */
+function prefillFor(item: Opportunity, values: ListValuesByKey): Partial<LeadInput> {
   const lines = item.listings.map((listing) => `${listing.title} (${listing.sourceLabel}${listing.postedAt ? `, posted ${formatDate(listing.postedAt)}` : ""}) ${listing.url}`);
+  const poolNote = lines.length ? `From the opportunity pool (first seen ${formatDate(item.firstSeenAt.slice(0, 10))}):\n${lines.join("\n")}` : "";
+  const draft = item.tracker?.lead;
+  if (!draft) {
+    return { clientName: item.companyName, companyUrl: item.website, address: item.location, positions: item.listings.map((listing) => listing.title).join("\n").slice(0, 5000), comments: poolNote.slice(0, 5000) };
+  }
+  const byName = (key: keyof ListValuesByKey, name: string | null) => (name ? values[key]?.find((value) => value.value.toLowerCase() === name.toLowerCase())?.id ?? null : null);
   return {
-    clientName: item.companyName, companyUrl: item.website, address: item.location,
-    positions: item.listings.map((listing) => listing.title).join("\n").slice(0, 5000),
-    comments: `From the opportunity pool (first seen ${formatDate(item.firstSeenAt.slice(0, 10))}):\n${lines.join("\n")}`.slice(0, 5000),
+    clientName: draft.name, companyUrl: item.website, address: draft.address || item.location, comments: [draft.comments, poolNote].filter(Boolean).join("\n").slice(0, 5000),
+    clientExecutive: draft.executive, contactPhone: draft.phone, contactAltPhone: draft.altPhone, contactRemark: draft.contactRemark, clientEmails: draft.emails, industry: draft.industry,
+    positions: [draft.positions, ...item.listings.map((listing) => listing.title)].filter(Boolean).join("\n").slice(0, 5000),
+    leadTypeId: byName("lead_type", draft.type) ?? undefined, statusId: values.status.find((value) => value.code === draft.status)?.id, cityId: byName("city", draft.city),
+    bdActionId: byName("bd_action", draft.action), clientResponseId: byName("client_response", draft.response),
+    firstContactDate: draft.firstContact || undefined, followUpDate: draft.followUp, contractSignedDate: draft.contract,
   };
 }
+
+const capitalize = (value: string) => (value ? value.charAt(0).toUpperCase() + value.slice(1) : value);
 
 /** The opportunity pool (OPP-02, OPP-11..13 as decided): one card per hiring company, assign or dismiss. */
 export default function OpportunitiesPage() {
@@ -91,7 +106,7 @@ export default function OpportunitiesPage() {
             <EmptyState icon={<Briefcase size={22} />} title={status === "new" ? "Nothing in the pool" : `No ${statusLabels[status].toLowerCase()} yet`} text={status === "new" ? (can("manage_settings") ? "Add a search under Searches & runs and run it, or wait for the next scheduled run." : "The next scheduled search run will add companies here.") : undefined} />
           ) : data && (
             <table className="opp-table">
-              <thead><tr><th>Company</th><th>Roles</th><th>Location</th><th>Seen</th><th>{status === "new" ? "Notes" : "Outcome"}</th><th aria-label="Actions" /></tr></thead>
+              <thead><tr><th>Company</th><th>Roles / history</th><th>Location</th><th>Seen</th><th>{status === "new" ? "Notes" : "Outcome"}</th><th aria-label="Actions" /></tr></thead>
               <tbody>
                 {data.opportunities.map((item) => {
                   const open = expanded[item.id] ?? false;
@@ -99,17 +114,24 @@ export default function OpportunitiesPage() {
                     <tr key={item.id}>
                       <td>
                         <strong>{item.companyName}</strong>
-                        <small className="muted-cell">{item.sources.join(", ")}{item.website && <> · <a href={item.website} target="_blank" rel="noreferrer">website</a></>}</small>
+                        <small className="muted-cell">{[...item.sources, ...(item.tracker ? ["Sales tracker"] : [])].join(", ")}{item.website && <> · <a href={item.website} target="_blank" rel="noreferrer">website</a></>}</small>
                       </td>
                       <td>
                         <button type="button" className="opp-expand" onClick={() => setExpanded((current) => ({ ...current, [item.id]: !open }))} aria-expanded={open}>
-                          {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />} {item.listingsCount} {item.listingsCount === 1 ? "role" : "roles"}
+                          {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />} {[
+                            item.listingsCount > 0 || !item.tracker ? `${item.listingsCount} ${item.listingsCount === 1 ? "role" : "roles"}` : "",
+                            item.tracker ? `${item.tracker.rows} tracker ${item.tracker.rows === 1 ? "entry" : "entries"}` : "",
+                          ].filter(Boolean).join(" · ")}
                         </button>
                         {!open && item.latestTitle && <small className="muted-cell">{item.latestTitle}</small>}
+                        {!open && !item.latestTitle && item.tracker && <small className="muted-cell">{capitalize(item.tracker.lead.status)} · last contact {formatDate(item.tracker.lead.lastActivity)}</small>}
                         {open && (
                           <ul className="opp-roles">
                             {item.listings.map((listing) => (
                               <li key={listing.id}><a href={listing.url} target="_blank" rel="noreferrer">{listing.title} <ExternalLink size={10} /></a> <small>{listing.sourceLabel}{listing.postedAt ? ` · posted ${formatDate(listing.postedAt)}` : ""}{listing.employmentType ? ` · ${listing.employmentType}` : ""}</small></li>
+                            ))}
+                            {item.tracker?.entries.map((entry, index) => (
+                              <li key={`tracker-${index}`}>{entry.summary} <small>sales tracker · {formatDate(entry.date)}</small></li>
                             ))}
                           </ul>
                         )}
@@ -119,11 +141,14 @@ export default function OpportunitiesPage() {
                       <td>
                         {item.history && <small className="opp-flag">Was a lead: {item.history.statusLabel}{item.history.recordState === "archived" ? " (archived)" : ""}, owner {item.history.ownerName}</small>}
                         {item.revived && item.status === "new" && <small className="opp-flag">Back in the pool with a new role</small>}
+                        {item.tracker && item.status === "new" && (
+                          <small className="opp-flag">From the sales tracker, no Sales Manager: {reference.listValues.status.find((value) => value.code === item.tracker!.lead.status)?.value ?? capitalize(item.tracker.lead.status)}{item.tracker.lead.executive ? ` · ${item.tracker.lead.executive}` : ""}{item.tracker.lead.phone ? ` · ${item.tracker.lead.phone}` : ""}</small>
+                        )}
                         {item.status === "not_relevant" && <span>{item.reason}{item.reasonNote ? ` – ${item.reasonNote}` : ""}<small className="muted-cell">{item.decidedByName}{item.decidedAt ? ` · ${formatDateTime(item.decidedAt)}` : ""}</small></span>}
                         {(item.status === "converted" || item.status === "attached") && item.lead && (
                           <span>{item.status === "converted" ? "Lead" : "Existing lead"}: <button type="button" className="link-button" onClick={() => openLead(item.lead!.id)}>{item.lead.clientName}</button><small className="muted-cell">{item.lead.statusLabel} · {item.lead.ownerName}</small></span>
                         )}
-                        {item.status === "new" && !item.history && !item.revived && <small className="muted-cell">New company</small>}
+                        {item.status === "new" && !item.history && !item.revived && !item.tracker && <small className="muted-cell">New company</small>}
                       </td>
                       <td>
                         <div className="opp-actions">
@@ -145,8 +170,9 @@ export default function OpportunitiesPage() {
       )}
       {assigning && (
         <LeadFormDialog
-          prefill={prefillFor(assigning)}
+          prefill={prefillFor(assigning, reference.listValues)}
           opportunityId={assigning.id}
+          importedHistory={Boolean(assigning.tracker)}
           onClose={() => setAssigning(null)}
           onSaved={(lead) => { setAssigning(null); notify(`${lead.clientName} is now a lead owned by ${lead.ownerName}`); bumpData(); reload(); }}
         />

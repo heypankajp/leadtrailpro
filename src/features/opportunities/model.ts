@@ -240,6 +240,8 @@ export type Opportunity = {
   reason: string | null; reasonScope: ReasonScope | null; reasonNote: string;
   decidedByName: string | null; decidedAt: string | null;
   listings: OpportunityListing[];
+  /** The lead the tracker import drafted for a company with no Sales Manager (§10.9); null for a card the job searches made. */
+  tracker: TrackerCard | null;
 };
 
 export type OpportunityRun = {
@@ -248,3 +250,48 @@ export type OpportunityRun = {
 };
 
 export type OpportunityPage = { opportunities: Opportunity[]; total: number; counts: Record<OpportunityStatus, number> };
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Cards from the sales tracker (§10.9, migration 17): a company whose sheet rows name no Sales Manager
+
+/** One timeline entry the import drafted from a sheet row; it is written to the lead when the card is assigned. */
+export type TrackerDraftEntry = { type: string; summary: string; body: string | null; valueCode: string | null; occurredAt: string; meta: Record<string, unknown> };
+/** The lead the import drafted; list values are named, the assign form resolves them to ids. */
+export type TrackerDraftLead = {
+  name: string; type: string; status: string; action: string | null; response: string | null; city: string; address: string; comments: string; executive: string;
+  phone: string; altPhone: string; contactRemark: string; emails: string[]; industry: string; positions: string; firstContact: string; followUp: string | null; contract: string | null; lastActivity: string;
+};
+export type TrackerDraft = { key: string; sheet: string; file: string; importedAt: string; rows: number; lead: TrackerDraftLead; entries: TrackerDraftEntry[] };
+
+const draftText = (value: unknown, fallback = ""): string => (typeof value === "string" ? value : fallback);
+const draftTextOrNull = (value: unknown): string | null => (typeof value === "string" && value ? value : null);
+
+/** The draft a card carries (`opportunities.draft`), or null when the value is not one. */
+export function trackerDraft(value: unknown): TrackerDraft | null {
+  let raw = value;
+  if (typeof raw === "string") { try { raw = JSON.parse(raw) as unknown; } catch { return null; } }
+  if (!raw || typeof raw !== "object") return null;
+  const record = raw as Record<string, unknown>;
+  const lead = record.lead && typeof record.lead === "object" ? (record.lead as Record<string, unknown>) : null;
+  if (!lead || !draftText(lead.name)) return null;
+  const entries = Array.isArray(record.entries) ? record.entries.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object") : [];
+  return {
+    key: draftText(record.key), sheet: draftText(record.sheet), file: draftText(record.file), importedAt: draftText(record.importedAt), rows: Number(record.rows) || entries.length,
+    lead: {
+      name: draftText(lead.name), type: draftText(lead.type, "Office"), status: draftText(lead.status, "cold"), action: draftTextOrNull(lead.action), response: draftTextOrNull(lead.response),
+      city: draftText(lead.city), address: draftText(lead.address), comments: draftText(lead.comments), executive: draftText(lead.executive), phone: draftText(lead.phone), altPhone: draftText(lead.altPhone),
+      contactRemark: draftText(lead.contactRemark), emails: Array.isArray(lead.emails) ? lead.emails.filter((email): email is string => typeof email === "string") : [],
+      industry: draftText(lead.industry), positions: draftText(lead.positions), firstContact: draftText(lead.firstContact), followUp: draftTextOrNull(lead.followUp), contract: draftTextOrNull(lead.contract),
+      lastActivity: draftText(lead.lastActivity, draftText(lead.firstContact)),
+    },
+    entries: entries.map((entry) => ({
+      type: draftText(entry.type, "note"), summary: draftText(entry.summary), body: draftTextOrNull(entry.body), valueCode: draftTextOrNull(entry.valueCode), occurredAt: draftText(entry.occurredAt),
+      meta: entry.meta && typeof entry.meta === "object" ? (entry.meta as Record<string, unknown>) : {},
+    })),
+  };
+}
+
+/** What the pool screen shows for a tracker card: the drafted lead and its entries as date and summary. */
+export type TrackerCard = { sheet: string; rows: number; lead: TrackerDraftLead; entries: { date: string; summary: string; type: string }[] };
+export const trackerCard = (draft: TrackerDraft | null): TrackerCard | null =>
+  draft && { sheet: draft.sheet, rows: draft.rows, lead: draft.lead, entries: draft.entries.map((entry) => ({ date: entry.occurredAt.slice(0, 10), summary: entry.summary, type: entry.type })) };

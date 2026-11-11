@@ -12,12 +12,14 @@ import { jobSourceLabels, maxCacheHours, maxPrefetch, type JobSourceId, type Job
 import { mapsSkuHints, mapsSkuIds, mapsSkuLabels, mapsSkuUnits, maxMapsBudget, type MapsOverview } from "@/features/maps/model";
 import { maxMaxListings, maxPostedWithinDays, maxSearchTitles, minMaxListings, minPostedWithinDays, opportunitySourceIds } from "@/features/opportunities/model";
 import { fetchSettings, updateSettings, type MailStatus } from "./client";
-import { runDigestNow } from "@/features/notifications/client";
+import { runDigestNow, runKpiReportNow } from "@/features/notifications/client";
 import { weekdayNames, type DigestJob } from "@/features/notifications/model";
+import { kpiReportKinds, kpiReportLabels, type KpiReportKind } from "@/features/reports/kpi-model";
 
 export default function SettingsPanel() {
   const { notify, refreshReference, reference, bumpData } = useApp();
   const [sending, setSending] = useState<DigestJob | null>(null);
+  const [sendingKpi, setSendingKpi] = useState<KpiReportKind | null>(null);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [meta, setMeta] = useState<{ mailerConfigured: boolean; timeZone: string; mail: MailStatus; jobSources: JobSourceStatus[]; maps: MapsOverview | null }>({ mailerConfigured: false, timeZone: "", mail: { provider: "off", outbox: [], senders: [] }, jobSources: [], maps: null });
   const [openMail, setOpenMail] = useState<number | null>(null);
@@ -78,6 +80,20 @@ export default function SettingsPanel() {
       notify(errorMessage(caught), "error");
     } finally {
       setSending(null);
+    }
+  };
+
+  const sendKpiReport = async (kind: KpiReportKind) => {
+    setSendingKpi(kind);
+    try {
+      const run = (await runKpiReportNow(kind)).ran[0];
+      if (run?.recipients) notify(`${kpiReportLabels[kind]} KPI report sent${run.failures ? ` with ${run.failures} failure(s)` : ""}`);
+      else notify(run?.failures ? "The KPI report could not be sent." : "Nothing was sent: choose a sending mailbox first.", "error");
+      load();
+    } catch (caught) {
+      notify(errorMessage(caught), "error");
+    } finally {
+      setSendingKpi(null);
     }
   };
 
@@ -149,6 +165,18 @@ export default function SettingsPanel() {
                   </Field>
                 </div>
                 <label className="checklist-item"><input type="checkbox" checked={settings.email.reportEmails} onChange={(event) => setSettings({ ...settings, email: { ...settings.email, reportEmails: event.target.checked } })} /> Send report emails (the weekly stalled-leads report to administrators)</label>
+                <div className="kpi-reports">
+                  <span className="field-label">KPI reports to administrators</span>
+                  <small className="field-hint">Every Sales Manager&apos;s numbers for the last completed period (leads, calls, emails, visits, notes, conversions, tasks done, target) next to their current state (active, overdue, stalled, replies waiting), with the totals and the pipeline. Daily on business days at the daily digest time for the previous working day, weekly on the digest day for last week, monthly on the first of the month for last month.</small>
+                  {kpiReportKinds.map((kind) => (
+                    <label key={kind} className="checklist-item"><input type="checkbox" checked={settings.email.kpiReports[kind]} onChange={(event) => setSettings({ ...settings, email: { ...settings.email, kpiReports: { ...settings.email.kpiReports, [kind]: event.target.checked } } })} /> {kpiReportLabels[kind]} KPI report</label>
+                  ))}
+                  <div className="digest-actions">
+                    {kpiReportKinds.map((kind) => (
+                      <button key={kind} type="button" className="button button-outline button-small" disabled={sendingKpi !== null} onClick={() => void sendKpiReport(kind)}><Send size={13} /> {sendingKpi === kind ? "Sending..." : `Send me the ${kind} KPI report`}</button>
+                    ))}
+                  </div>
+                </div>
                 <label className="checklist-item"><input type="checkbox" checked={settings.email.watchMailboxes} onChange={(event) => setSettings({ ...settings, email: { ...settings.email, watchMailboxes: event.target.checked } })} /> Watch connected mailboxes for client emails (every 5 minutes; stamps each lead with the last email from the client and tells the owner about new replies)</label>
               </fieldset>
               <fieldset className="user-privileges job-sources-editor">
