@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { adzunaHasMore, parseAdzunaRows } from "../../src/features/jobs/sources/adzuna.ts";
 import { parseGenericRows } from "../../src/features/jobs/sources/generic.ts";
-import { hasDataNextPage, parseHasDataRows } from "../../src/features/jobs/sources/hasdata.ts";
+import { hasDataDatePosted, hasDataNextPage, parseHasDataRows } from "../../src/features/jobs/sources/hasdata.ts";
 import { parseJSearchRows } from "../../src/features/jobs/sources/jsearch.ts";
 
 describe("Keyword search mappers of the job sources", () => {
@@ -37,6 +37,10 @@ describe("Keyword search mappers of the job sources", () => {
     assert.deepEqual(rows.map((row) => [row.company, row.listing.title, row.listing.postedAt, row.sourceKey]), [["Vertex Manufacturing", "Welder", "2026-11-03", "hasdata:jk1"]]);
     assert.equal(hasDataNextPage(data), "https://api.hasdata.com/scrape/indeed/listing?keyword=welder&start=10");
     assert.equal(hasDataNextPage({ jobs: [] }), null);
+  });
+
+  test("HasData Indeed: the posted-within window is rounded down to 1, 3, 7, or 14 days", () => {
+    assert.deepEqual([30, 90, 14, 13, 10, 7, 5, 3, 2, 1, 0, -4, undefined, null].map((days) => hasDataDatePosted(days)), ["14", "14", "14", "7", "7", "7", "3", "3", "1", "1", "1", "1", "14", "14"]);
   });
 
   test("generic contract: company and id when given, URL as the key otherwise", () => {

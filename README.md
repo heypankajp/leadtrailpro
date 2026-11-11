@@ -98,7 +98,7 @@ The setup step writes the database settings and a commented template for the res
 | `MAPS_API_KEY` (or `GOOGLE_MAPS_API_KEY`) | Google Maps Platform key for live trip searches. Enable the **Geocoding API**, **Places API (New)**, and **Routes API** on the Cloud project (the legacy Places and Distance Matrix services are not used; Distance Matrix cannot be enabled on projects created after October 2026). `npm run maps:test -- "<address>"` checks a key with three calls. The app counts every call per month under **Settings → Google Maps usage** and stops at budgets that default to 90% of Google's free allowance per SKU (Geocoding 10,000, Places text search 1,000, Route matrix 10,000 a month, reset monthly); administrators are notified at 80% and at 100%. For a hard guarantee also cap each API's requests per day under APIs & Services → Quotas in the Cloud console and set a Cloud Billing budget alert |
 | `ADZUNA_APP_ID`, `ADZUNA_APP_KEY` | Adzuna job search (free developer key) for the Hiring column |
 | `JSEARCH_API_KEY` | JSearch on RapidAPI (Google for Jobs) for the Hiring column |
-| `HASDATA_API_KEY`, `HASDATA_INDEED_DOMAIN` | HasData Indeed Jobs Scraper API for the Hiring column and the opportunity searches; the domain selects a regional Indeed site (`ca` → `ca.indeed.com`). Ten credits a call, about fifteen listings a call |
+| `HASDATA_API_KEY`, `HASDATA_INDEED_DOMAIN` | HasData Indeed Jobs Scraper API for the Hiring column and the opportunity searches; the domain selects a regional Indeed site (`ca` → `ca.indeed.com`). Ten credits a call, about fifteen listings a call; Indeed looks back at most 14 days, so a longer posted-within window is rounded down to 14 for this source |
 | `JOBS_API_URL`, `JOBS_API_KEY` | A custom job-listing source behind the JSON contract in SPEC §7.13 |
 | `JOBS_COUNTRY` | Country code for the sources that take one (default `ca`) |
 
@@ -284,7 +284,7 @@ compose.prod.yaml        production override
 
 ## Not yet connected
 
-Stored email threads with reply and forward, AI summaries, OCR of business cards, presence and typing indicators on collaboration threads, mobile push notifications, device authorization, and review data (the sales trip planner searches Google Maps once `MAPS_API_KEY` is set and shows sample companies otherwise; hiring data comes from the configured job sources). Lead generation and the road visit planner show sample content. Designs for these are in SPEC.md section 10.
+Stored email threads with reply and forward, AI summaries, OCR of business cards, presence and typing indicators on collaboration threads, mobile push notifications, device authorization, and review data (the sales trip planner searches Google Maps once `MAPS_API_KEY` is set and shows sample companies otherwise; hiring data comes from the configured job sources). Lead generation and the road visit planner show sample content. Designs for these are in SPEC.md section 10. A Pipedrive-style pipeline board (an ordered stage list, a kanban page with drag-and-drop, BD actions mapped to stages, per-stage reminders and next-step prompts) was designed on November 11, 2026 in SPEC.md §10.11 and PRD §3.24 and waits for the go-ahead; nothing of it is built.
 
 ## Checks and tests
 

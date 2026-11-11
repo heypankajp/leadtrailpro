@@ -58,3 +58,6 @@ client_secret*.json
 *credentials*.json
 *service-account*.json
 
+
+# local reference material shared for planning and analysis only (never part of the app)
+/input

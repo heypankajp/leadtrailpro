@@ -7,7 +7,9 @@ import { fetchJson, httpUrl, text, ymd, type CompanyJobsInput, type FoundRow, ty
  * HasData Indeed Jobs Scraper API (docs.hasdata.com/apis/indeed/listing): `x-api-key` header, 10 credits per call,
  * charged only on success. `GET https://api.hasdata.com/scrape/indeed/listing?keyword=&location=&domain=&datePosted=`
  * returns `{ jobs: [...], pagination: { nextPage } }`; the next page is fetched with `nextPage=<that value>`.
- * The optional `domain` selects a regional Indeed site (`ca` → `ca.indeed.com`).
+ * The optional `domain` selects a regional Indeed site (`ca` → `ca.indeed.com`). `datePosted` accepts only 1, 3, 7, or 14
+ * (a 422 "datePosted must be one of 1, 3, 7, 14" otherwise, seen on the server on November 11, 2026), so a search's
+ * posted-within window is rounded down to the nearest of those by `hasDataDatePosted`.
  */
 export type HasDataConfig = { apiKey: string; domain: string | null };
 
@@ -46,6 +48,17 @@ export function parseHasDataRows(data: Record<string, unknown>): FoundRow[] {
   }).filter((row) => row.listing.title && row.listing.url);
 }
 
+/** The values HasData's `datePosted` accepts, in days. */
+export const hasDataDatePostedValues = [1, 3, 7, 14] as const;
+
+/** The largest accepted `datePosted` that does not exceed the requested window (30 → 14, 10 → 7, 2 → 1; anything under 1 → 1). */
+export function hasDataDatePosted(days: number | null | undefined): string {
+  const wanted = Number.isFinite(days) ? Number(days) : 14;
+  let chosen: number = hasDataDatePostedValues[0];
+  for (const value of hasDataDatePostedValues) if (value <= wanted) chosen = value;
+  return String(chosen);
+}
+
 /** The cursor of the page after this one, when HasData reports one. */
 export function hasDataNextPage(data: Record<string, unknown>): string | null {
   const pagination = data.pagination && typeof data.pagination === "object" ? (data.pagination as Record<string, unknown>) : {};
@@ -76,7 +89,7 @@ export function createHasDataSource(config: HasDataConfig | null): JobSourceAdap
       return mapHasData(data, input.companyName, input.normalize);
     },
     async searchListings(input: SearchListingsInput): Promise<SearchPage> {
-      const url = listingUrl(input.keyword, input.location || "Canada", String(input.postedWithinDays || 30));
+      const url = listingUrl(input.keyword, input.location || "Canada", hasDataDatePosted(input.postedWithinDays || 30));
       if (input.pageToken) url.searchParams.set("nextPage", input.pageToken);
       const data = await request(url);
       const rows = parseHasDataRows(data);
