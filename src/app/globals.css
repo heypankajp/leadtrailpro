@@ -1307,6 +1307,14 @@ h1 { margin: 9px 0 5px; color: #242941; font-size: 25px; font-weight: 690; lette
 /* MAIL-01 mailbox watch: the client's last email on the lead list, the lead page, and the Action Center. */
 .reply-badge { display: inline-flex; align-items: center; gap: 4px; margin-top: 3px; color: #5e6478; font-size: 9px; }
 .reply-badge.reply-waiting { color: #b14630; font-weight: 620; }
+/* To Do lists (TODO-04): the list a lead is on under its name, and the tabs of the To Do page. */
+.todo-badge { display: inline-flex; align-items: center; gap: 4px; margin-top: 3px; margin-right: 8px; padding: 1px 6px; border-radius: 9px; color: #4a55b8; background: #eef0ff; font-size: 9px; font-weight: 600; }
+.todo-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 16px 2px; }
+.todo-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.todo-tabs button { display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border: 1px solid #e8eaf0; border-radius: 16px; background: #fff; color: #62697c; font-size: 10.5px; font-weight: 600; cursor: pointer; }
+.todo-tabs button.is-active { color: #4a55b8; border-color: #c9cef5; background: #f0f1ff; }
+.todo-count { min-width: 18px; padding: 0 5px; border-radius: 9px; background: #eef0f6; color: #4b5068; font-size: 9.5px; text-align: center; }
+.todo-tabs button.is-active .todo-count { background: #dfe2fb; color: #3d47a5; }
 .reply-icon { color: #2f5fb3; background: #e8effc; }
 .detail-muted { color: #62697b; font-size: 11px; }
 

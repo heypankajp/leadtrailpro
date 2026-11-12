@@ -52,6 +52,10 @@ export type LeadSummary = LeadInput & {
   stageId: number | null;
   stage: string | null;
   stageCode: string | null;
+  /** TODO-01: the To Do list the lead was put on by hand (one at a time), and since when; null when it is on none. */
+  todoListId: number | null;
+  todoList: string | null;
+  todoSince: string | null;
   clientResponse: string | null;
   leadCategory: string | null;
   companySize: string | null;
@@ -70,7 +74,7 @@ export type LeadPage = { leads: LeadSummary[]; total: number; page: number; page
 
 export const activityTypes = [
   "created", "call", "email", "visit", "note", "status_change", "bd_action", "client_response", "follow_up",
-  "transfer", "state_change", "task", "file", "edit", "listing", "stage_change",
+  "transfer", "state_change", "task", "file", "edit", "listing", "stage_change", "todo",
 ] as const;
 export type ActivityType = (typeof activityTypes)[number];
 
@@ -88,6 +92,7 @@ export const activityLabels: Record<ActivityType, string> = {
   status_change: "Status changed",
   bd_action: "BD action",
   stage_change: "Stage changed",
+  todo: "To Do list",
   client_response: "Client response",
   follow_up: "Follow-up date",
   transfer: "Ownership transfer",
@@ -111,7 +116,7 @@ export type LeadActivity = {
   createdAt: string;
 };
 
-export const leadSortKeys = ["last_activity", "first_contact", "follow_up", "client_name", "owner", "created", "client_reply"] as const;
+export const leadSortKeys = ["last_activity", "first_contact", "follow_up", "client_name", "owner", "created", "client_reply", "todo_since"] as const;
 export type LeadSortKey = (typeof leadSortKeys)[number];
 
 export type LeadFilters = {
@@ -129,6 +134,9 @@ export type LeadFilters = {
   clientResponseId: number | null;
   bdActionId: number | null;
   stageId: number | null;
+  /** TODO-04: leads on this To Do list; `todo` alone means on any list. */
+  todoListId: number | null;
+  todo: boolean;
   firstContactFrom: string | null;
   firstContactTo: string | null;
   followUpFrom: string | null;
@@ -292,6 +300,8 @@ export function parseLeadFilters(params: URLSearchParams): LeadFilters {
     clientResponseId: id("clientResponseId"),
     bdActionId: id("bdActionId"),
     stageId: id("stageId"),
+    todoListId: id("todoListId"),
+    todo: params.get("todo") === "1" || params.get("todo") === "true",
     firstContactFrom: date("firstContactFrom"),
     firstContactTo: date("firstContactTo"),
     followUpFrom: date("followUpFrom"),

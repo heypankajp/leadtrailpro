@@ -554,13 +554,15 @@ export async function runTrackerImport(options) {
     if (lead.action && actionName !== lead.action.name) decision(`BD action "${lead.action.name}" imported as "${actionName}"`);
     const cityId = await ensureValue("city", lead.city);
     const actionId = await ensureValue("bd_action", actionName);
+    // The lead counts as created by the Sales Manager it goes to: reports credit `created_by` with "leads created".
+    // The audit entry below keeps who ran the import.
     const { rows: [created] } = await query(
       `INSERT INTO leads (owner_id, created_by, lead_type_id, status_id, status_reason_id, bd_action_id, client_response_id, lead_category_id, company_size_id, city_id, stage_id,
          client_name, company_url, address, comments, client_executive, contact_phone, contact_alt_phone, contact_remark, client_emails, industry, positions,
          first_contact_date, follow_up_date, contract_signed_date, record_state, state_reason, state_changed_by, state_changed_at, last_activity_at, created_at)
        VALUES (?, ?, ?, ?, NULL, ?, ?, NULL, NULL, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
       [
-        ownerId, actor.id, await ensureValue("lead_type", leadType), statusIdByCode[statusCode], actionId, await ensureValue("client_response", lead.response), cityId, stageIdForAction(actionId),
+        ownerId, ownerId, await ensureValue("lead_type", leadType), statusIdByCode[statusCode], actionId, await ensureValue("client_response", lead.response), cityId, stageIdForAction(actionId),
         truncate(lead.name, 200), lead.address, lead.comments || null, lead.executive, lead.phone, lead.altPhone, lead.contactRemark, JSON.stringify(lead.emails), lead.industry, lead.positions || null,
         firstContact, lead.followUp, lead.contract,
         insertOptions.archived ? "archived" : "active", insertOptions.archived ? insertOptions.reason : null, insertOptions.archived ? actor.id : null, insertOptions.archived ? nowSql : null,

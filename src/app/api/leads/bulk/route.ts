@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { asString, handleRouteError, jsonError, readJsonBody, requireSameOrigin } from "@/lib/http";
-import { bulkReassign, bulkSetStage, bulkSetState } from "@/features/leads/repository";
+import { bulkReassign, bulkSetStage, bulkSetState, bulkSetTodo } from "@/features/leads/repository";
 import { requirePrivilege, requireUser } from "@/features/users/session";
 
-/** Bulk archive, restore, reassign, or move to a stage (PIPE-11): { ids, action, ownerId?, reason?, stageId? }. */
+/** Bulk archive, restore, reassign, move to a stage (PIPE-11), or move to a To Do list (TODO-03): { ids, action, ownerId?, reason?, stageId?, todoListId? }. */
 export async function POST(request: Request) {
   try {
     requireSameOrigin(request);
@@ -31,7 +31,15 @@ export async function POST(request: Request) {
       const count = await bulkSetStage(ids, stageId, user);
       return NextResponse.json({ ok: true, count });
     }
-    return jsonError(400, "Action must be archive, restore, reassign, or stage.");
+    if (body?.action === "todo") {
+      requirePrivilege(user, "edit_leads", "You do not have permission to change To Do lists.");
+      // null takes the leads off their list.
+      const listId = body.todoListId === null || body.todoListId === undefined ? null : Number(body.todoListId);
+      if (listId !== null && (!Number.isSafeInteger(listId) || listId < 1)) return jsonError(400, "Choose the To Do list.");
+      const count = await bulkSetTodo(ids, listId, user);
+      return NextResponse.json({ ok: true, count });
+    }
+    return jsonError(400, "Action must be archive, restore, reassign, stage, or todo.");
   } catch (error) {
     return handleRouteError(error, "Bulk lead update");
   }

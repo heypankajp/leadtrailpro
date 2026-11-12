@@ -3,6 +3,7 @@
 #
 #   dev    – hot-reloading `next dev` with the project bind-mounted (used by compose.yaml)
 #   runner – minimal production image built from Next.js standalone output (compose.prod.yaml)
+#   deployer – follows the repository's branch and rebuilds the stack (compose.prod.yaml, scripts/deployer.mjs)
 
 ARG NODE_IMAGE=node:22-bookworm-slim
 
@@ -46,6 +47,20 @@ COPY --from=builder --chown=node:node /app/.next/standalone ./
 COPY --from=builder --chown=node:node /app/.next/static ./.next/static
 COPY --from=builder --chown=node:node /app/public ./public
 COPY --from=builder --chown=node:node /app/scripts ./scripts
+# The commit the image was built from, when the build names one (the deployer does); GET /api/deploy reports it.
+ARG GIT_COMMIT=""
+ENV APP_COMMIT=${GIT_COMMIT}
 USER node
 EXPOSE 3000
 CMD ["node", "server.js"]
+
+# ---------------------------------------------------------------------------
+# Deployer: the Docker command line (it drives the host's daemon through the mounted socket), git, and Node for
+# scripts/deployer.mjs. The script in the deployer's own clone wins once that clone exists and parses, so the
+# deployer runs the code it deploys; the copy in the image only serves the first start.
+FROM docker:28-cli AS deployer
+RUN apk add --no-cache git nodejs
+COPY scripts/deployer.mjs /opt/deployer/scripts/deployer.mjs
+COPY scripts/lib/deploy-plan.mjs /opt/deployer/scripts/lib/deploy-plan.mjs
+ENTRYPOINT []
+CMD ["sh", "-c", "f=/work/repo/scripts/deployer.mjs; { [ -f \"$f\" ] && node --check \"$f\" 2>/dev/null; } || f=/opt/deployer/scripts/deployer.mjs; exec node \"$f\""]

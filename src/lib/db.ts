@@ -1,4 +1,4 @@
-import { Pool, types, type PoolClient } from "pg";
+import { Pool, types, type PoolClient, type QueryConfig } from "pg";
 
 /**
  * PostgreSQL access. Queries are written with `?` placeholders (rewritten to `$1 … $n` here) and return
@@ -72,6 +72,29 @@ export async function withTransaction<T>(work: (connection: Queryable) => Promis
     const result = await work(wrap(client));
     await client.query("COMMIT");
     return result;
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * One statement exactly as written (no `?` rewriting), in a transaction of its own with a statement timeout, kept
+ * only when `commit` is true. The extended protocol takes a single command, so the text cannot close the transaction
+ * and carry on outside it. For the data-correction API (`POST /api/admin/sql`) only; application code uses the
+ * helpers above.
+ */
+export async function runStatement(sql: string, options: { commit: boolean; timeoutMs: number }): Promise<{ command: string; rowCount: number; rows: QueryRow[]; fields: string[] }> {
+  if (!pool) pool = createPool();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(`SET LOCAL statement_timeout = ${Math.max(1, Math.round(options.timeoutMs))}`);
+    const result = await client.query({ text: sql, queryMode: "extended" } as QueryConfig & { queryMode: "extended" });
+    await client.query(options.commit ? "COMMIT" : "ROLLBACK");
+    return { command: result.command ?? "", rowCount: result.rowCount ?? 0, rows: result.rows ?? [], fields: (result.fields ?? []).map((field) => field.name) };
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
     throw error;

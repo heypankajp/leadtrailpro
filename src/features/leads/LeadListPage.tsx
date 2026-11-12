@@ -3,22 +3,24 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { errorMessage } from "@/lib/api";
 import { useAsyncData } from "@/lib/useAsyncData";
-import { ChevronDown, Filter, Kanban, Plus, Search, SlidersHorizontal, UserRound, X } from "lucide-react";
+import { ChevronDown, Filter, Kanban, ListChecks, Plus, Search, SlidersHorizontal, UserRound, X } from "lucide-react";
 import { reasonListFor } from "@/features/list-values/model";
 import { useApp } from "@/features/shell/AppContext";
 import { Dialog, ErrorText, Field, Loading, Pagination, PromptDialog } from "@/features/shell/components";
 import { entryStageCode } from "@/features/list-values/model";
 import UserDirectoryDialog from "@/features/users/UserDirectoryDialog";
 import type { UserSummary } from "@/features/users/model";
-import { bulkLeads, fetchLeads, reviewLead, setLeadState, type LeadQuery } from "./client";
+import { bulkLeads, fetchLeads, fetchTodoCounts, reviewLead, setLeadState, type LeadQuery } from "./client";
+import { todoTabs, type TodoCounts, type TodoScope } from "./todo-model";
 import LeadTable from "./LeadTable";
 import { leadSortKeys, type LeadPage, type LeadSortKey, type LeadSummary } from "./model";
 
-export const leadListViews = ["leads", "all-leads", "cold", "warm", "hot", "client", "queued", "archive"] as const;
+export const leadListViews = ["leads", "todo", "all-leads", "cold", "warm", "hot", "client", "queued", "archive"] as const;
 export type LeadListView = (typeof leadListViews)[number];
 
 const titles: Record<LeadListView, { title: string; eyebrow: string; blurb: string }> = {
   leads: { title: "My leads", eyebrow: "YOUR PIPELINE", blurb: "Leads you own, most recently active first." },
+  todo: { title: "To Do", eyebrow: "LEADS PUT ASIDE", blurb: "Leads moved to a To Do list to come back to, longest waiting first. Move a lead here from its page or from any lead list, and take it off when it is done." },
   "all-leads": { title: "All leads", eyebrow: "TEAM PIPELINE", blurb: "Every active lead across the team." },
   cold: { title: "Cold leads", eyebrow: "BY STATUS", blurb: "Prospects that still need a first conversation." },
   warm: { title: "Warm leads", eyebrow: "BY STATUS", blurb: "Conversations that are moving." },
@@ -29,16 +31,16 @@ const titles: Record<LeadListView, { title: string; eyebrow: string; blurb: stri
 };
 
 const sortLabels: Record<LeadSortKey, string> = {
-  last_activity: "Most recent activity", first_contact: "First contact date", follow_up: "Follow-up date", client_name: "Client name", owner: "Owner", created: "Date created", client_reply: "Client's last email",
+  last_activity: "Most recent activity", first_contact: "First contact date", follow_up: "Follow-up date", client_name: "Client name", owner: "Owner", created: "Date created", client_reply: "Client's last email", todo_since: "Time on the To Do list",
 };
 
 type Filters = {
-  q: string; statusId: string; statusReasonId: string; leadTypeId: string; leadCategoryId: string; companySizeId: string; cityId: string; ownerId: string; clientResponseId: string; bdActionId: string; stageId: string;
+  q: string; statusId: string; statusReasonId: string; leadTypeId: string; leadCategoryId: string; companySizeId: string; cityId: string; ownerId: string; clientResponseId: string; bdActionId: string; stageId: string; todoListId: string;
   firstContactFrom: string; firstContactTo: string; followUpFrom: string; followUpTo: string; contractSignedFrom: string; contractSignedTo: string; sort: LeadSortKey; direction: "asc" | "desc";
 };
 
 const emptyFilters: Filters = {
-  q: "", statusId: "", statusReasonId: "", leadTypeId: "", leadCategoryId: "", companySizeId: "", cityId: "", ownerId: "", clientResponseId: "", bdActionId: "", stageId: "",
+  q: "", statusId: "", statusReasonId: "", leadTypeId: "", leadCategoryId: "", companySizeId: "", cityId: "", ownerId: "", clientResponseId: "", bdActionId: "", stageId: "", todoListId: "",
   firstContactFrom: "", firstContactTo: "", followUpFrom: "", followUpTo: "", contractSignedFrom: "", contractSignedTo: "", sort: "last_activity", direction: "desc",
 };
 
@@ -48,8 +50,13 @@ export default function LeadListPage({ view }: { view: LeadListView }) {
   const [filters, setFilters] = useState<Filters>(() => {
     const sort = route.query.get("sort");
     const direction = route.query.get("direction");
-    return { ...emptyFilters, q: route.query.get("q") ?? "", sort: leadSortKeys.includes(sort as LeadSortKey) ? (sort as LeadSortKey) : "last_activity", direction: direction === "asc" ? "asc" : "desc" };
+    // The To Do page opens with the leads that have waited longest on top.
+    const fallbackSort: LeadSortKey = view === "todo" ? "todo_since" : "last_activity";
+    return { ...emptyFilters, q: route.query.get("q") ?? "", sort: leadSortKeys.includes(sort as LeadSortKey) ? (sort as LeadSortKey) : fallbackSort, direction: direction === "asc" || (!direction && view === "todo") ? "asc" : "desc" };
   });
+  // TODO-04: the To Do page shows the person's own leads or everyone's, one list or all of them.
+  const [todoScope, setTodoScope] = useState<TodoScope>("mine");
+  const [todoTab, setTodoTab] = useState<number | null>(null);
   const [debouncedQ, setDebouncedQ] = useState(filters.q);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<number[]>([]);
@@ -61,8 +68,11 @@ export default function LeadListPage({ view }: { view: LeadListView }) {
     | { kind: "reassign-pick"; ids: number[] }
     | { kind: "reassign-reason"; ids: number[]; user: UserSummary }
     | { kind: "stage"; ids: number[] }
+    | { kind: "todo"; ids: number[] }
     | null
   >(null);
+  // TODO-03: bulk move to a To Do list; "" takes the leads off their list.
+  const [bulkTodoId, setBulkTodoId] = useState("");
   // PIPE-11: bulk move to a stage; the entry stage is pre-selected.
   const [bulkStageId, setBulkStageId] = useState("");
 
@@ -74,19 +84,26 @@ export default function LeadListPage({ view }: { view: LeadListView }) {
   const query = useMemo<LeadQuery>(() => {
     const base: LeadQuery = { state: view === "queued" ? "queued" : view === "archive" ? "archived" : "active", page, pageSize: 50, sort: filters.sort, direction: filters.direction, q: debouncedQ };
     if (view === "leads") base.mine = true;
+    if (view === "todo") {
+      if (todoScope === "mine") base.mine = true;
+      if (todoTab) base.todoListId = todoTab; else base.todo = true;
+    }
     if (["cold", "warm", "hot", "client"].includes(view)) base.statusCode = view;
     const numeric = (value: string) => (value ? Number(value) : undefined);
     return {
       ...base,
       statusId: numeric(filters.statusId), statusReasonId: numeric(filters.statusReasonId), leadTypeId: numeric(filters.leadTypeId), leadCategoryId: numeric(filters.leadCategoryId), companySizeId: numeric(filters.companySizeId),
-      cityId: numeric(filters.cityId), ownerId: numeric(filters.ownerId), clientResponseId: numeric(filters.clientResponseId), bdActionId: numeric(filters.bdActionId), stageId: numeric(filters.stageId),
+      cityId: numeric(filters.cityId), ownerId: numeric(filters.ownerId), clientResponseId: numeric(filters.clientResponseId), bdActionId: numeric(filters.bdActionId), stageId: numeric(filters.stageId), ...(view === "todo" ? {} : { todoListId: numeric(filters.todoListId) }),
       firstContactFrom: filters.firstContactFrom || undefined, firstContactTo: filters.firstContactTo || undefined, followUpFrom: filters.followUpFrom || undefined, followUpTo: filters.followUpTo || undefined,
       contractSignedFrom: filters.contractSignedFrom || undefined, contractSignedTo: filters.contractSignedTo || undefined,
     };
-  }, [view, page, filters, debouncedQ]);
+  }, [view, page, filters, debouncedQ, todoScope, todoTab]);
 
   const fetcher = useCallback(() => fetchLeads(query), [query]);
   const { data, error, loading } = useAsyncData<LeadPage>(fetcher, dataVersion);
+  const todoCountsFetcher = useCallback((): Promise<TodoCounts | null> => (view === "todo" ? fetchTodoCounts() : Promise.resolve(null)), [view]);
+  const todoCounts = useAsyncData<TodoCounts | null>(todoCountsFetcher, dataVersion).data ?? null;
+  const todoLists = reference.listValues.todo_list;
 
   // Changing the status filter resets the reason filter, which only applies to Lost Lead and Disqualified (LEAD-07).
   const update = (changes: Partial<Filters>) => { setFilters((current) => ({ ...current, ...(changes.statusId !== undefined ? { statusReasonId: "" } : {}), ...changes })); setPage(1); setSelected([]); };
@@ -94,16 +111,17 @@ export default function LeadListPage({ view }: { view: LeadListView }) {
   const activeFilterCount = Object.entries(filters).filter(([key, value]) => !["q", "sort", "direction"].includes(key) && value).length;
   const statusViews = ["cold", "warm", "hot", "client"];
   const owners = reference.users.filter((user) => user.role !== "recruiter");
-  const canSelect = view === "queued" ? false : can("archive_leads") || can("reassign_leads");
+  const canSelect = view === "queued" ? false : can("archive_leads") || can("reassign_leads") || can("edit_leads");
   const title = titles[view];
 
-  const runBulk = async (ids: number[], action: "archive" | "restore" | "reassign" | "stage", options: { ownerId?: number; reason?: string; stageId?: number }) => {
+  const runBulk = async (ids: number[], action: "archive" | "restore" | "reassign" | "stage" | "todo", options: { ownerId?: number; reason?: string; stageId?: number; todoListId?: number | null }) => {
     const result = await bulkLeads(ids, action, options);
     setDialog(null);
     setSelected([]);
     bumpData();
     const stageName = options.stageId ? reference.listValues.stage.find((stage) => stage.id === options.stageId)?.value ?? "the stage" : "";
-    notify(`${result.count} ${result.count === 1 ? "lead" : "leads"} ${action === "archive" ? "archived" : action === "restore" ? "restored" : action === "stage" ? `moved to ${stageName}` : "reassigned"}`);
+    const todoName = options.todoListId ? todoLists.find((list) => list.id === options.todoListId)?.value ?? "the list" : "";
+    notify(`${result.count} ${result.count === 1 ? "lead" : "leads"} ${action === "archive" ? "archived" : action === "restore" ? "restored" : action === "stage" ? `moved to ${stageName}` : action === "todo" ? (options.todoListId ? `moved to To Do: ${todoName}` : "taken off To Do") : "reassigned"}`);
   };
 
   const options = (list: { id: number; value: string }[], placeholder: string, value: string, key: keyof Filters) => (
@@ -126,6 +144,21 @@ export default function LeadListPage({ view }: { view: LeadListView }) {
 
       <section className="panel leads-panel">
         <div className="lead-list-wrap">
+          {view === "todo" && (
+            <div className="todo-bar">
+              <div className="todo-tabs" role="tablist" aria-label="To Do lists">
+                {todoTabs(todoLists, todoCounts, todoScope).map((tab) => (
+                  <button key={tab.id ?? "all"} role="tab" aria-selected={todoTab === tab.id} className={todoTab === tab.id ? "is-active" : ""} onClick={() => { setTodoTab(tab.id); setPage(1); setSelected([]); }}>
+                    {tab.label} <span className="todo-count">{tab.count}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="scope-toggle" role="group" aria-label="Whose leads">
+                <button className={todoScope === "mine" ? "is-active" : ""} onClick={() => { setTodoScope("mine"); setPage(1); setSelected([]); }}>My leads</button>
+                <button className={todoScope === "everyone" ? "is-active" : ""} onClick={() => { setTodoScope("everyone"); setPage(1); setSelected([]); }}>Everyone</button>
+              </div>
+            </div>
+          )}
           <div className="lead-toolbar">
             <div className="search-field lead-search">
               <Search size={16} />
@@ -169,6 +202,7 @@ export default function LeadListPage({ view }: { view: LeadListView }) {
                 {options(reference.listValues.client_response, "Any client response", filters.clientResponseId, "clientResponseId")}
                 {options(reference.listValues.bd_action, "Any BD action", filters.bdActionId, "bdActionId")}
                 {options(reference.listValues.stage, "Any stage", filters.stageId, "stageId")}
+                {view !== "todo" && options(todoLists, "Any To Do list", filters.todoListId, "todoListId")}
               </div>
               <div className="filter-grid date-filters">
                 <label><span>First contact from</span><input type="date" value={filters.firstContactFrom} onChange={(event) => update({ firstContactFrom: event.target.value })} /></label>
@@ -191,6 +225,8 @@ export default function LeadListPage({ view }: { view: LeadListView }) {
               {view !== "archive" && can("archive_leads") && <button onClick={() => setDialog({ kind: "archive", ids: selected })}>Archive selected</button>}
               {can("reassign_leads") && <button onClick={() => setDialog({ kind: "reassign-pick", ids: selected })}><UserRound size={13} /> Reassign owner</button>}
               {view !== "archive" && can("edit_leads") && <button onClick={() => { setBulkStageId(String(reference.listValues.stage.find((stage) => stage.code === entryStageCode)?.id ?? reference.listValues.stage[0]?.id ?? "")); setDialog({ kind: "stage", ids: selected }); }}><Kanban size={13} /> Move to stage</button>}
+              {view !== "archive" && can("edit_leads") && <button onClick={() => { setBulkTodoId(String(todoTab ?? todoLists.find((list) => list.active)?.id ?? "")); setDialog({ kind: "todo", ids: selected }); }}><ListChecks size={13} /> Move to To Do</button>}
+              {view === "todo" && can("edit_leads") && <button onClick={() => void runBulk(selected, "todo", { todoListId: null }).catch((caught: unknown) => notify(errorMessage(caught), "error"))}>Take off To Do</button>}
               <button className="bulk-clear" onClick={() => setSelected([])}>Clear selection</button>
             </div>
           )}
@@ -268,6 +304,23 @@ export default function LeadListPage({ view }: { view: LeadListView }) {
             <Field label="Target stage" required>
               <select value={bulkStageId} onChange={(event) => setBulkStageId(event.target.value)} required>
                 {reference.listValues.stage.map((stage) => <option key={stage.id} value={stage.id}>{stage.value}</option>)}
+              </select>
+            </Field>
+            <div className="modal-actions">
+              <button type="button" className="button button-outline" onClick={() => setDialog(null)}>Cancel</button>
+              <button type="submit" className="button button-primary">Move leads</button>
+            </div>
+          </form>
+        </Dialog>
+      )}
+      {dialog?.kind === "todo" && (
+        <Dialog title={`Move ${dialog.ids.length === 1 ? "lead" : `${dialog.ids.length} leads`} to a To Do list`} eyebrow="TO DO" size="narrow" onClose={() => setDialog(null)}>
+          <form className="stack-form" onSubmit={(event) => { event.preventDefault(); void runBulk(dialog.ids, "todo", { todoListId: bulkTodoId ? Number(bulkTodoId) : null }).catch((caught: unknown) => notify(errorMessage(caught), "error")); }}>
+            <p className="dialog-description">Each lead you may edit goes on the chosen list, with a timeline entry. A lead is on one list at a time, so it leaves the list it was on.</p>
+            <Field label="To Do list" required>
+              <select aria-label="To Do list" value={bulkTodoId} onChange={(event) => setBulkTodoId(event.target.value)}>
+                {todoLists.filter((list) => list.active).map((list) => <option key={list.id} value={list.id}>{list.value}</option>)}
+                <option value="">Not on a list (take off)</option>
               </select>
             </Field>
             <div className="modal-actions">

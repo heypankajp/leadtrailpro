@@ -884,6 +884,29 @@ const migrations = [
       );
     },
   },
+  {
+    version: 20,
+    name: "Tracker-imported leads credited to their Sales Manager: created_by held the administrator who ran the import, so reports counted those leads for the importer",
+    async run(client) {
+      // The import wrote each lead's 'created' timeline entry for the Sales Manager it gave the lead to (meta.imported);
+      // that person becomes the creator. The audit log keeps who ran the import. Leads made in the app are not touched.
+      await client.query(`
+        UPDATE leads l SET created_by = a.user_id
+        FROM lead_activities a
+        WHERE a.lead_id = l.id AND a.activity_type = 'created' AND a.meta->>'imported' = 'true' AND l.created_by <> a.user_id
+      `);
+    },
+  },
+  {
+    version: 21,
+    name: "To Do lists (TODO-01..05, SPEC §10.12): the todo_list values starting with To be visited, and the list a lead is on with the time it was put there",
+    async run(client) {
+      await client.query("INSERT INTO list_values (list_key, code, value, sort_order) VALUES ('todo_list', 'to_be_visited', 'To be visited', 1) ON CONFLICT DO NOTHING");
+      await addColumnIfMissing(client, "leads", "todo_list_id", "INTEGER NULL REFERENCES list_values(id) ON DELETE SET NULL");
+      await addColumnIfMissing(client, "leads", "todo_since", "TIMESTAMP(0) NULL");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_todo ON leads (todo_list_id) WHERE todo_list_id IS NOT NULL");
+    },
+  },
 ];
 
 if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port > 65535 || !/^[a-z_][a-z0-9_]*$/.test(databaseName)) {

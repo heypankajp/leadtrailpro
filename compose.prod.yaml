@@ -5,6 +5,12 @@
 #
 #   docker compose -f compose.yaml -f compose.prod.yaml run --rm setup
 #   docker compose -f compose.yaml -f compose.prod.yaml up -d --build
+#
+# After that first start nobody has to run commands here for a release: `migrate` upgrades the database every time the
+# stack comes up, and `deployer` rebuilds and restarts the stack whenever the repository's branch moves (a push) or an
+# administrator asks for it (POST /api/deploy; `npm run remote -- deploy`). Optional in `.env`: DEPLOY_BRANCH (master),
+# DEPLOY_REPO (default: this folder's origin), DEPLOY_GIT_TOKEN (read token once the repository is private),
+# DEPLOY_AUTO=off (deploy only when asked), DEPLOY_INTERVAL_SECONDS (60).
 
 services:
   db:
@@ -13,9 +19,34 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env for production}
     ports: !reset []
 
+  # Database upgrade, once each time the stack comes up: applies the migrations that are not in the database yet
+  # (scripts/create-database.mjs, as the PostgreSQL superuser) and exits. The app starts only after it succeeded.
+  migrate:
+    build:
+      context: .
+      target: runner
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-}
+    image: leadtrailpro
+    restart: "no"
+    env_file:
+      - path: .env.local
+        required: false
+    environment:
+      PGHOST: db
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env for production}
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["node", "scripts/create-database.mjs"]
+
   app:
     build:
       target: runner
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-}
     image: leadtrailpro
     restart: unless-stopped
     environment:
@@ -26,10 +57,15 @@ services:
         required: false
     volumes: !override
       - attachments:/app/storage/attachments
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
   jobs:
     build:
       target: runner
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-}
     image: leadtrailpro
     restart: unless-stopped
     environment:
@@ -37,5 +73,34 @@ services:
       JOBS_KEY: ${JOBS_KEY:?Set JOBS_KEY in .env for production (any long random string)}
     volumes: !override []
 
+  # Releases without commands on the server (scripts/deployer.mjs): follows the repository's branch and, when it moves
+  # or an administrator asks, rebuilds the images and restarts migrate, app, and jobs through the host's Docker socket.
+  # It builds from a clone of its own (the deployer_work volume); this folder is mounted read-only and only supplies
+  # .env, .env.local, and the repository address. Whoever can push to the branch can change what runs here.
+  deployer:
+    build:
+      context: .
+      target: deployer
+    image: leadtrailpro-deployer
+    init: true
+    restart: unless-stopped
+    environment:
+      DEPLOY_PROJECT: ${COMPOSE_PROJECT_NAME:-leadtrailpro}
+      DEPLOY_REPO: ${DEPLOY_REPO:-}
+      DEPLOY_BRANCH: ${DEPLOY_BRANCH:-master}
+      DEPLOY_GIT_TOKEN: ${DEPLOY_GIT_TOKEN:-}
+      DEPLOY_AUTO: ${DEPLOY_AUTO:-on}
+      DEPLOY_INTERVAL_SECONDS: ${DEPLOY_INTERVAL_SECONDS:-60}
+      DEPLOY_APP_URL: http://app:3000
+      JOBS_KEY: ${JOBS_KEY:?Set JOBS_KEY in .env for production (any long random string)}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - .:/host:ro
+      - deployer_work:/work
+    depends_on:
+      app:
+        condition: service_started
+
 volumes:
   attachments:
+  deployer_work:

@@ -1,3 +1,4 @@
+import { summarizeTodoCounts, todoMoveSummary, type TodoCounts } from "./todo-model";
 import { getDatabasePool, affectedRows, fromSqlDateTime, insertId, toSqlDateTime, withTransaction, type Queryable } from "@/lib/db";
 import { addDaysYmd, todayYmd } from "@/lib/dates";
 import { HttpError } from "@/lib/http";
@@ -33,6 +34,7 @@ export const leadSelect = `
     l.status_reason_id AS "statusReasonId", sr.value AS "statusReason",
     l.bd_action_id AS "bdActionId", ba.value AS "bdAction",
     l.stage_id AS "stageId", sg.value AS stage, sg.code AS "stageCode",
+    l.todo_list_id AS "todoListId", td.value AS "todoList", l.todo_since AS "todoSince",
     l.client_response_id AS "clientResponseId", cr.value AS "clientResponse",
     l.lead_category_id AS "leadCategoryId", lc.value AS "leadCategory",
     l.company_size_id AS "companySizeId", cs.value AS "companySize",
@@ -56,6 +58,7 @@ export const leadSelect = `
   LEFT JOIN list_values cs ON cs.id = l.company_size_id
   LEFT JOIN list_values ci ON ci.id = l.city_id
   LEFT JOIN list_values sg ON sg.id = l.stage_id
+  LEFT JOIN list_values td ON td.id = l.todo_list_id
 `;
 
 const parseEmails = (value: string | string[]): string[] => {
@@ -80,6 +83,8 @@ export function toLead(row: LeadRow): LeadSummary {
     statusLabel: statusLabel(row.status, row.statusReason),
     bdActionId: row.bdActionId === null ? null : Number(row.bdActionId),
     stageId: row.stageId === null ? null : Number(row.stageId),
+    todoListId: row.todoListId === null ? null : Number(row.todoListId),
+    todoSince: fromSqlDateTime(row.todoSince),
     clientResponseId: row.clientResponseId === null ? null : Number(row.clientResponseId),
     leadCategoryId: row.leadCategoryId === null ? null : Number(row.leadCategoryId),
     companySizeId: row.companySizeId === null ? null : Number(row.companySizeId),
@@ -139,6 +144,7 @@ const sortColumns: Record<LeadFilters["sort"], string> = {
   owner: '"ownerName"',
   created: "l.created_at",
   client_reply: "l.last_client_email_at",
+  todo_since: "l.todo_since",
 };
 
 export async function listLeads(filters: LeadFilters, viewer: UserAccount): Promise<LeadPage> {
@@ -147,10 +153,11 @@ export async function listLeads(filters: LeadFilters, viewer: UserAccount): Prom
   if (filters.mine) { clauses.push("l.owner_id = ?"); params.push(viewer.id); }
   if (filters.ownerId) { clauses.push("l.owner_id = ?"); params.push(filters.ownerId); }
   if (filters.statusCode) { clauses.push("st.code = ?"); params.push(filters.statusCode); }
+  if (filters.todo) clauses.push("l.todo_list_id IS NOT NULL");
   const idFilters: [number | null, string][] = [
     [filters.statusId, "l.status_id"], [filters.statusReasonId, "l.status_reason_id"], [filters.leadTypeId, "l.lead_type_id"], [filters.leadCategoryId, "l.lead_category_id"],
     [filters.companySizeId, "l.company_size_id"], [filters.cityId, "l.city_id"], [filters.clientResponseId, "l.client_response_id"],
-    [filters.bdActionId, "l.bd_action_id"], [filters.stageId, "l.stage_id"],
+    [filters.bdActionId, "l.bd_action_id"], [filters.stageId, "l.stage_id"], [filters.todoListId, "l.todo_list_id"],
   ];
   for (const [value, column] of idFilters) {
     if (value) { clauses.push(`${column} = ?`); params.push(value); }
@@ -179,6 +186,7 @@ export async function listLeads(filters: LeadFilters, viewer: UserAccount): Prom
   const orderBy = filters.sort === "follow_up"
     ? `l.follow_up_date ${direction} NULLS LAST, l.id DESC`
     : filters.sort === "client_reply" ? `l.last_client_email_at ${direction} NULLS LAST, l.id DESC`
+    : filters.sort === "todo_since" ? `l.todo_since ${direction} NULLS LAST, l.id DESC`
     : `${sortColumn} ${direction}, l.id DESC`;
   const offset = (filters.page - 1) * filters.pageSize;
   const db = getDatabasePool();
@@ -345,6 +353,54 @@ export async function setLeadStage(id: number, stageId: number, actor: UserAccou
 }
 
 /** Bulk move from the lead list (PIPE-11): every selected active lead the actor may edit moves to the stage; the others are skipped. */
+/**
+ * TODO-02: puts a lead on a To Do list, moves it to another, or (listId null) takes it off. By hand only: nothing in the
+ * app puts a lead on a list or removes it. One list at a time; the timeline keeps each move.
+ */
+export async function setLeadTodo(id: number, listId: number | null, actor: UserAccount): Promise<LeadSummary> {
+  return withTransaction(async (connection) => {
+    const lead = await getLead(id, connection);
+    if (!lead) throw new HttpError(404, "Lead not found.");
+    if (!canEditLead(actor, lead)) throw new HttpError(403, "You can only change the To Do list of leads you own.");
+    // A lead already on a list can always be taken off it, whatever its state.
+    if (listId && lead.recordState !== "active") throw new HttpError(400, "Only active leads go on a To Do list.");
+    if (listId) await assertListValue(connection, "todo_list", listId, { required: true, label: "To Do list" });
+    if (lead.todoListId === listId) return lead;
+    const now = new Date();
+    await connection.query("UPDATE leads SET todo_list_id = ?, todo_since = ? WHERE id = ?", [listId, listId ? toSqlDateTime(now) : null, id]);
+    const updated = (await getLead(id, connection))!;
+    const summary = todoMoveSummary(lead.todoList, updated.todoList);
+    await addActivity(connection, { leadId: id, userId: actor.id, type: "todo", summary, meta: { fromListId: lead.todoListId, toListId: listId }, occurredAt: now });
+    await recordAudit(connection, {
+      actorId: actor.id, action: "lead.todo", entityType: "lead", entityId: id, before: { todoList: lead.todoList }, after: { todoList: updated.todoList },
+      details: `${actor.name}: ${lead.clientName} — ${summary}`,
+    }, now);
+    return updated;
+  });
+}
+
+/** TODO-03: the same move for many leads; leads the person may not edit, and leads already there, are skipped. */
+export async function bulkSetTodo(ids: number[], listId: number | null, actor: UserAccount): Promise<number> {
+  let count = 0;
+  for (const id of ids) {
+    const lead = await getLead(id);
+    if (!lead || lead.todoListId === listId || !canEditLead(actor, lead) || (listId && lead.recordState !== "active")) continue;
+    await setLeadTodo(id, listId, actor);
+    count += 1;
+  }
+  return count;
+}
+
+/** TODO-04: how many active leads are on each To Do list, the viewer's own and everyone's. */
+export async function todoCounts(viewer: UserAccount, db: Queryable = getDatabasePool()): Promise<TodoCounts> {
+  const { rows } = await db.query(
+    `SELECT todo_list_id AS "listId", COUNT(*)::int AS everyone, (COUNT(*) FILTER (WHERE owner_id = ?))::int AS mine
+     FROM leads WHERE record_state = 'active' AND todo_list_id IS NOT NULL GROUP BY todo_list_id`,
+    [viewer.id],
+  );
+  return summarizeTodoCounts((rows as { listId: number; everyone: number; mine: number }[]).map((row) => ({ listId: Number(row.listId), everyone: Number(row.everyone), mine: Number(row.mine) })));
+}
+
 export async function bulkSetStage(ids: number[], stageId: number, actor: UserAccount): Promise<number> {
   let count = 0;
   for (const id of ids) {

@@ -1,51 +1,75 @@
 import { getDatabasePool, insertId, toSqlDateTime, type Queryable } from "@/lib/db";
-import { addDaysYmd, businessTimeZone, todayYmd } from "@/lib/dates";
+import { addDaysYmd, businessTimeZone, formatYmd, todayYmd, zonedParts } from "@/lib/dates";
 import { isMailerConfigured, sendMail } from "@/lib/mailer";
 import { recordAudit } from "@/features/audit/repository";
 import { buildTeamBoard } from "@/features/analytics/repository";
 import { getSettings, listHolidayDates } from "@/features/settings/repository";
 import type { UserAccount } from "@/features/users/model";
-import { listUsersWithPrivilege } from "@/features/users/repository";
-import { formatKpiHtml, formatKpiText, isKpiReportDue, kpiJobName, kpiPeriodKey, kpiPeriodLabel, kpiReportKinds, kpiReportLabels, kpiReportPeriod, kpiSubject, kpiTotals, type KpiReportData, type KpiReportKind, type KpiRow } from "./kpi-model";
+import { listUsers, listUsersWithPrivilege } from "@/features/users/repository";
+import { formatKpiHtml, formatKpiText, hasKpiActivity, isKpiReportDue, kpiActivityPeriod, kpiActivityTotals, kpiJobName, kpiPeriodKey, kpiPeriodLabel, kpiReportKinds, kpiReportLabels, kpiSubject, kpiTotals, type KpiActivityRow, type KpiReportData, type KpiReportKind, type KpiRow, type KpiStatus } from "./kpi-model";
 import { performanceReport } from "./repository";
 
 /**
- * The KPI report emails to administrators (SPEC §7.18): every Sales Manager's numbers for the last completed day,
- * week, or month next to their current state, and the system-wide totals and pipeline. `runKpiReports` is called by
- * the scheduler (POST /api/jobs/run) every minute and sends each report once per period, claimed through
- * `job_runs`; an administrator can also send one to themselves at once from Settings.
+ * The KPI report emails to administrators (SPEC §7.18): where every Sales Manager's leads stand when the report is
+ * built (how many, by status, what is waiting on the person), the totals, and the pipeline by stage; the weekly and
+ * monthly reports add what was recorded in the last completed week or month. `runKpiReports` is called by the
+ * scheduler (POST /api/jobs/run) every minute and sends each report once per period, claimed through `job_runs`;
+ * an administrator can also send one to themselves at once from Settings.
  */
 
 export type KpiRunResult = { job: string; kind: KpiReportKind; periodKey: string; recipients: number; failures: number };
 
 const reportsLink = () => { const base = process.env.APP_URL?.trim(); return base ? `${base.replace(/\/$/, "")}/#/reports` : null; };
 
-/** The numbers: the team performance report for the period, the team board for the current state, the pipeline by status. */
-export async function buildKpiReport(kind: KpiReportKind, viewer: UserAccount, db: Queryable = getDatabasePool()): Promise<KpiReportData> {
-  const [report, board, pipelineRows, stageRows] = await Promise.all([
-    performanceReport(kpiReportPeriod[kind], viewer, null),
-    buildTeamBoard(viewer, db),
-    db.query("SELECT s.value AS label, COUNT(*)::int AS count FROM leads l JOIN list_values s ON s.id = l.status_id WHERE l.record_state = 'active' GROUP BY s.value, s.sort_order ORDER BY s.sort_order"),
+/**
+ * The numbers. Listed: every active Sales Manager, and anyone else who owns a lead (an administrator, an account since
+ * switched off), so the totals row covers every lead that is neither archived nor deleted.
+ */
+export async function buildKpiReport(kind: KpiReportKind, viewer: UserAccount, db: Queryable = getDatabasePool(), now = new Date()): Promise<KpiReportData> {
+  const period = kpiActivityPeriod[kind];
+  const [users, statusRows, stageRows, report] = await Promise.all([
+    listUsers({ includeInactive: true }, db),
+    db.query(`SELECT l.owner_id AS "ownerId", s.id AS "statusId", s.value AS label, COUNT(*)::int AS count
+      FROM leads l JOIN list_values s ON s.id = l.status_id WHERE l.record_state = 'active' GROUP BY l.owner_id, s.id, s.value, s.sort_order ORDER BY s.sort_order, s.id`),
     // PIPE-12: the board's population by stage; a lead never placed counts in New Deal.
     db.query(`SELECT COALESCE(sg.value, 'New Deal') AS label, MIN(COALESCE(sg.sort_order, 0)) AS ord, COUNT(*)::int AS count
       FROM leads l JOIN list_values st ON st.id = l.status_id LEFT JOIN list_values sg ON sg.id = l.stage_id
       WHERE l.record_state = 'active' AND st.code NOT IN ('client', 'lost', 'disqualified') GROUP BY 1 ORDER BY ord, 1`),
+    period ? performanceReport(period, viewer, null) : null,
   ]);
+  const statuses: KpiStatus[] = [];
+  const byOwner = new Map<number, Record<string, number>>();
+  for (const row of statusRows.rows as { ownerId: number; statusId: number; label: string; count: number }[]) {
+    const key = String(row.statusId);
+    if (!statuses.some((status) => status.key === key)) statuses.push({ key, label: row.label });
+    const counts = byOwner.get(Number(row.ownerId)) ?? {};
+    counts[key] = Number(row.count);
+    byOwner.set(Number(row.ownerId), counts);
+  }
+  const people = users.filter((person) => (person.active && person.role === "sales_manager") || byOwner.has(person.id));
+  const board = await buildTeamBoard(viewer, db, people);
   const current = new Map(board.rows.map((row) => [row.userId, row]));
-  const rows: KpiRow[] = report.rows.map((row) => {
-    const now = current.get(row.userId);
+  const rows: KpiRow[] = people.map((person) => {
+    const byStatus = byOwner.get(person.id) ?? {};
+    const state = current.get(person.id);
     return {
-      userId: row.userId, name: row.name, role: row.role,
-      leadsCreated: row.leadsCreated, leadsUpdated: row.leadsUpdated, calls: row.calls, emails: row.emails, visits: row.visits, notes: row.notes, conversions: row.conversions, tasksCompleted: row.tasksCompleted, targetPercent: row.targetPercent,
-      activeLeads: now?.activeLeads ?? 0, overdueFollowUps: now?.overdueFollowUps ?? 0, stalled: now?.stalled ?? 0, repliesWaiting: now?.repliesWaiting ?? 0,
+      userId: person.id, name: person.active ? person.name : `${person.name} (inactive)`, role: person.role,
+      leads: Object.values(byStatus).reduce((sum, value) => sum + value, 0), byStatus,
+      overdueFollowUps: state?.overdueFollowUps ?? 0, stalled: state?.stalled ?? 0, repliesWaiting: state?.repliesWaiting ?? 0,
     };
-  });
-  const endYmd = addDaysYmd(report.range.endExclusiveYmd, -1);
-  const pipeline = (pipelineRows.rows as { label: string; count: number }[]).map((status) => ({ label: status.label, count: Number(status.count) }));
-  const pipelineByStage = (stageRows.rows as { label: string; count: number }[]).map((stage) => ({ label: stage.label, count: Number(stage.count) }));
+  }).sort((a, b) => b.leads - a.leads || a.name.localeCompare(b.name));
+  const activityRows: KpiActivityRow[] = (report?.rows ?? []).map((row) => ({
+    userId: row.userId, name: row.name, role: row.role,
+    leadsCreated: row.leadsCreated, leadsUpdated: row.leadsUpdated, calls: row.calls, emails: row.emails, visits: row.visits, notes: row.notes, conversions: row.conversions, tasksCompleted: row.tasksCompleted, targetPercent: row.targetPercent,
+  }));
+  const timeZone = businessTimeZone();
+  const at = zonedParts(now, timeZone);
   return {
-    kind, startYmd: report.range.startYmd, endYmd, periodLabel: kpiPeriodLabel(report.range.startYmd, endYmd), generatedAt: new Date().toISOString(),
-    rows, totals: kpiTotals(rows), pipeline, pipelineTotal: pipeline.reduce((sum, status) => sum + status.count, 0), pipelineByStage, appUrl: reportsLink(),
+    kind, asOf: `${formatYmd(at.year, at.month, at.day)} ${String(at.hour).padStart(2, "0")}:${String(at.minute).padStart(2, "0")}`, timeZone,
+    statuses, rows, totals: kpiTotals(rows),
+    pipelineByStage: (stageRows.rows as { label: string; count: number }[]).map((stage) => ({ label: stage.label, count: Number(stage.count) })),
+    activity: report ? { periodLabel: kpiPeriodLabel(report.range.startYmd, addDaysYmd(report.range.endExclusiveYmd, -1)), rows: activityRows.filter(hasKpiActivity), totals: kpiActivityTotals(activityRows) } : null,
+    appUrl: reportsLink(),
   };
 }
 
@@ -72,7 +96,7 @@ export async function runKpiReports(options: { force?: KpiReportKind | null; onl
     let recipients = 0;
     let failures = 0;
     if (admins.length && isMailerConfigured()) {
-      const data = await buildKpiReport(kind, admins[0], db);
+      const data = await buildKpiReport(kind, admins[0], db, now);
       const subject = kpiSubject(data);
       const text = formatKpiText(data);
       const html = formatKpiHtml(data);

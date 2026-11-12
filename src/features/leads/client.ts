@@ -3,10 +3,11 @@ import type { LeadAttachment } from "@/features/attachments/model";
 import type { AuditEntry } from "@/features/audit/model";
 import type { Task, TaskPriority } from "@/features/tasks/model";
 import type { LeadActivity, LeadInput, LeadPage, LeadRecordState, LeadSortKey, LeadSummary, LoggableActivityType } from "./model";
+import type { TodoCounts } from "./todo-model";
 
 export type LeadQuery = Partial<{
   state: LeadRecordState; q: string; mine: boolean; statusCode: string; statusId: number; statusReasonId: number; leadTypeId: number; leadCategoryId: number;
-  companySizeId: number; cityId: number; ownerId: number; clientResponseId: number; bdActionId: number; stageId: number;
+  companySizeId: number; cityId: number; ownerId: number; clientResponseId: number; bdActionId: number; stageId: number; todoListId: number; todo: boolean;
   firstContactFrom: string; firstContactTo: string; followUpFrom: string; followUpTo: string; contractSignedFrom: string; contractSignedTo: string;
   sort: LeadSortKey; direction: "asc" | "desc"; page: number; pageSize: number;
 }>;
@@ -30,7 +31,10 @@ export const updateLead = (id: number, changes: Partial<LeadInput>) => api<{ lea
 export const transferLead = (id: number, ownerId: number, reason: string) => api<{ lead: LeadSummary }>(`/api/leads/${id}/transfer`, { method: "POST", json: { ownerId, reason } });
 export const reviewLead = (id: number, approve: boolean, comment: string) => api<{ lead: LeadSummary }>(`/api/leads/${id}/review`, { method: "POST", json: { approve, comment } });
 export const setLeadState = (id: number, state: "active" | "archived", reason: string) => api<{ lead: LeadSummary }>(`/api/leads/${id}/state`, { method: "POST", json: { state, reason } });
-export const bulkLeads = (ids: number[], action: "archive" | "restore" | "reassign" | "stage", options: { ownerId?: number; reason?: string; stageId?: number } = {}) =>
+/** TODO-02: put the lead on a To Do list, move it to another, or take it off (null). */
+export const setLeadTodo = (id: number, listId: number | null) => api<{ lead: LeadSummary }>(`/api/leads/${id}/todo`, { method: "PATCH", json: { listId } });
+export const fetchTodoCounts = () => api<{ counts: TodoCounts }>("/api/leads/todo").then((result) => result.counts);
+export const bulkLeads = (ids: number[], action: "archive" | "restore" | "reassign" | "stage" | "todo", options: { ownerId?: number; reason?: string; stageId?: number; todoListId?: number | null } = {}) =>
   api<{ ok: true; count: number }>("/api/leads/bulk", { method: "POST", json: { ids, action, ...options } });
 /** Task the note asked for (NOTE-05); `setFollowUpDate` also moves the lead's next follow-up to the due date when the user may edit the lead. */
 export type FollowUpTaskInput = { title: string; description?: string; dueAt: string | null; assigneeId?: number; priority?: TaskPriority; setFollowUpDate?: boolean };

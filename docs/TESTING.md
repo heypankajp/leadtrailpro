@@ -140,7 +140,7 @@ Keep Git's line endings as they are (`git config core.autocrlf false` before clo
 
 Later on the server:
 
-- Upgrade: `git pull`, then `docker compose -f compose.yaml -f compose.prod.yaml build`, then the migrations from the new image, then `up -d`:
+- Upgrade, since November 12, 2026: nothing to do on the server. The `deployer` container notices a push to the branch within a minute, rebuilds, lets the `migrate` container upgrade the database, and restarts the app; from any machine with an API token, `npm run remote -- deploy-status` shows the commit that is running and the last deploys, and `npm run remote -- deploy` asks for one now. By hand it is `git pull` and `docker compose -f compose.yaml -f compose.prod.yaml up -d --build` (the database upgrade is part of it). The older way, still valid:
 
   ```bash
   docker compose -f compose.yaml -f compose.prod.yaml run --rm -e PGUSER=postgres -e PGPASSWORD=<POSTGRES_PASSWORD> app node scripts/create-database.mjs
@@ -160,6 +160,7 @@ Each line is a short path a tester can follow after the first administrator exis
 - **Leads**: New lead; open it; log a BD action; write a note with a phrase like "call back next Tuesday" and accept the suggested follow-up task; upload a document; post a message with an @mention under Collaboration; change the status to Disqualified with a reason; archive and restore from the list.
 - **Pipeline**: open Pipeline in the sidebar; a new lead sits in New Deal. Drag its card to Contact Made, or use the arrows on the card; the "What's next?" prompt opens pre-filled (a call on the next business day): save it or skip. Click Undo in the bar above the board. Open the card: the stage bar across the top shows the current stage; click another stage and confirm. Set the BD action to Shared Profiles on the Overview: the lead jumps forward to Profile Shared and the Timeline shows "Stage changed from … to Profile Shared". Switch Mine / Team, filter by status, search. On All leads, tick two leads and use Move to stage in the bar above the table.
 - **Pipeline administration** (administrator): List of values → BD action shows the stage each action lands a lead in; change one, then use Recompute stages from BD actions. Settings → Needs-attention rules carry a stage (six are seeded); Settings → Pipeline next steps sets the step each stage suggests and the two switches (ask for the next step; create it automatically).
+- **To Do**: open a lead and choose **To be visited** under To Do list on the Overview; the Timeline shows "To Do: added to To be visited". Open **To Do** in the sidebar: the lead is under its tab, the tab and the sidebar show the count, and My leads / Everyone switches whose leads are listed. Tick the lead and use **Take off To Do**. As an administrator add another list under List of values → To Do list; in All leads tick a few leads and use **Move to To Do**.
 - **Tasks**: complete a checklist item, comment on a task, mark all notifications read from the bell.
 - **Reports**: change the period and filters, export CSV, Excel, and PDF.
 - **Settings**: Email delivery shows every message the app "sent" in stub mode (use **Forgot password** on the sign-in screen and open the reset link from here); Business calendar, Needs-attention rules, Job sources.
@@ -179,11 +180,11 @@ Inside the dev container (`docker compose exec app …` while the stack runs, or
 ```bash
 npm run typecheck
 npm run lint
-npm run test:unit     # 158 tests, no database needed
+npm run test:unit     # 173 tests, no database needed
 npm run build
 ```
 
-Browser suite (Selenium in Docker, about ten minutes, 73 tests in 9 files as of November 12, 2026): `scripts/e2e.sh`, or one file with `scripts/e2e.sh tests/e2e/02-leads.test.mjs`. Watch it live at [http://localhost:7900](http://localhost:7900); failed tests leave screenshots and page sources in `tests/e2e/output/`. It uses its own throwaway database and never touches your data.
+Browser suite (Selenium in Docker, about ten minutes, 77 tests in 10 files as of November 12, 2026): `scripts/e2e.sh`, or one file with `scripts/e2e.sh tests/e2e/02-leads.test.mjs`. Watch it live at [http://localhost:7900](http://localhost:7900); failed tests leave screenshots and page sources in `tests/e2e/output/`. It uses its own throwaway database and never touches your data.
 
 GitHub Actions runs the same checks on every push and pull request. As of October 31, 2026 the typecheck, lint, and unit-test job passes and the browser job fails on the GitHub runner on every run, while the same suite passes locally; the job's log on the Actions tab of the repository is the next thing to read.
 

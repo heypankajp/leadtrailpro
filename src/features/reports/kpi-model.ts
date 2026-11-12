@@ -3,17 +3,22 @@ import { timeOfDayIn, weekdayOfYmd } from "../notifications/model.ts";
 
 /**
  * KPI report emails to administrators (asked for on November 9, 2026: a daily, weekly, and monthly Sales Manager
- * performance report plus the system-wide picture). Pure rules: which report is due when, the period each covers,
- * the totals, and the text and HTML bodies. No app imports, so the unit tests load this file directly; the data
- * itself comes from `kpi-email.ts` (performance report, team board, pipeline).
+ * report plus the system-wide picture; reworked on November 12, 2026 after the first real emails: yesterday's
+ * numbers next to today's read as a contradiction, so every report now leads with where each person's leads stand
+ * at the moment it is built, split by status). Pure rules: which report is due when, the totals, and the text and
+ * HTML bodies. No app imports, so the unit tests load this file directly; the data itself comes from
+ * `kpi-email.ts` (leads by owner and status, team board, pipeline by stage, performance report).
  */
 
 export const kpiReportKinds = ["daily", "weekly", "monthly"] as const;
 export type KpiReportKind = (typeof kpiReportKinds)[number];
 export const isKpiReportKind = (value: unknown): value is KpiReportKind => typeof value === "string" && (kpiReportKinds as readonly string[]).includes(value);
 export const kpiReportLabels: Record<KpiReportKind, string> = { daily: "Daily", weekly: "Weekly", monthly: "Monthly" };
-/** The period each report covers: the last completed one, so the numbers do not move after the email has gone out. */
-export const kpiReportPeriod: Record<KpiReportKind, ReportPeriod> = { daily: "yesterday", weekly: "last_week", monthly: "last_month" };
+/**
+ * The period whose activity a report adds below the current state: the last completed week or month. The daily
+ * report has none; it only shows where things stand.
+ */
+export const kpiActivityPeriod: Record<KpiReportKind, ReportPeriod | null> = { daily: null, weekly: "last_week", monthly: "last_month" };
 export const kpiJobName = (kind: KpiReportKind) => `kpi_${kind}`;
 
 export type KpiReportSettings = Record<KpiReportKind, boolean>;
@@ -49,118 +54,168 @@ export function kpiPeriodKey(kind: KpiReportKind, todayYmd: string): string {
   return kind === "daily" ? todayYmd : kind === "weekly" ? `week-${mondayOf(todayYmd)}` : `month-${todayYmd.slice(0, 7)}`;
 }
 
+/** A status of the lead status list that at least one lead has, in list order; `key` indexes `KpiRow.byStatus`. */
+export type KpiStatus = { key: string; label: string };
+
+/** Where one person's leads stand when the report is built. */
 export type KpiRow = {
   userId: number; name: string; role: string;
-  /** For the period. */
-  leadsCreated: number; leadsUpdated: number; calls: number; emails: number; visits: number; notes: number; conversions: number; tasksCompleted: number; targetPercent: number | null;
-  /** As things stand when the report is built. */
-  activeLeads: number; overdueFollowUps: number; stalled: number; repliesWaiting: number;
+  /** Every lead the person owns that is neither archived nor deleted; the sum of `byStatus`. */
+  leads: number;
+  byStatus: Record<string, number>;
+  overdueFollowUps: number; stalled: number; repliesWaiting: number;
 };
 
-export type KpiColumn = { key: Exclude<keyof KpiRow, "userId" | "name" | "role">; label: string; short: string; period: boolean };
-export const kpiColumns: readonly KpiColumn[] = [
-  { key: "leadsCreated", label: "Leads created", short: "Leads", period: true },
-  { key: "leadsUpdated", label: "Leads updated", short: "Updated", period: true },
-  { key: "calls", label: "Calls", short: "Calls", period: true },
-  { key: "emails", label: "Emails", short: "Emails", period: true },
-  { key: "visits", label: "Visits", short: "Visits", period: true },
-  { key: "notes", label: "Notes", short: "Notes", period: true },
-  { key: "conversions", label: "Conversions", short: "Conv.", period: true },
-  { key: "tasksCompleted", label: "Tasks done", short: "Tasks", period: true },
-  { key: "targetPercent", label: "Target %", short: "Target", period: true },
-  { key: "activeLeads", label: "Active leads", short: "Active", period: false },
-  { key: "overdueFollowUps", label: "Overdue follow-ups", short: "Overdue", period: false },
-  { key: "stalled", label: "Stalled leads", short: "Stalled", period: false },
-  { key: "repliesWaiting", label: "Client replies waiting", short: "Replies", period: false },
-];
+export const kpiAttentionColumns = [
+  { key: "overdueFollowUps", label: "the follow-up date has passed", short: "Overdue" },
+  { key: "stalled", label: "no activity for longer than the needs-attention rule allows", short: "Stalled" },
+  { key: "repliesWaiting", label: "a client email is waiting for an answer", short: "Replies" },
+] as const;
+
+/** What one person did in the period of a weekly or monthly report. */
+export type KpiActivityRow = {
+  userId: number; name: string; role: string;
+  leadsCreated: number; leadsUpdated: number; calls: number; emails: number; visits: number; notes: number; conversions: number; tasksCompleted: number; targetPercent: number | null;
+};
+
+export const kpiActivityColumns = [
+  { key: "leadsCreated", label: "Leads created", short: "Created" },
+  { key: "leadsUpdated", label: "Leads updated", short: "Updated" },
+  { key: "calls", label: "Calls", short: "Calls" },
+  { key: "emails", label: "Emails", short: "Emails" },
+  { key: "visits", label: "Visits", short: "Visits" },
+  { key: "notes", label: "Notes", short: "Notes" },
+  { key: "conversions", label: "Conversions", short: "Conv." },
+  { key: "tasksCompleted", label: "Tasks done", short: "Tasks" },
+  { key: "targetPercent", label: "Target %", short: "Target" },
+] as const;
 
 export type KpiReportData = {
   kind: KpiReportKind;
-  startYmd: string;
-  /** Inclusive. */
-  endYmd: string;
-  periodLabel: string;
-  generatedAt: string;
+  /** When the numbers were read, in the business time zone: "2026-11-12 07:30". */
+  asOf: string;
+  timeZone: string;
+  /** The status columns, in list order. */
+  statuses: KpiStatus[];
+  /** One row per Sales Manager, and per anyone else who owns a lead, so the totals cover every lead. */
   rows: KpiRow[];
   totals: KpiRow;
-  /** Active leads per status, system-wide, as things stand. */
-  pipeline: { label: string; count: number }[];
-  pipelineTotal: number;
   /** PIPE-12: leads on the Pipeline board per stage (active, not Client or closed), in board order. */
   pipelineByStage: { label: string; count: number }[];
+  /**
+   * Weekly and monthly reports: what was recorded in the last completed period, only the people who did something;
+   * the totals cover everyone. Null on the daily report.
+   */
+  activity: { periodLabel: string; rows: KpiActivityRow[]; totals: KpiActivityRow } | null;
   appUrl: string | null;
 };
 
 export const kpiPeriodLabel = (startYmd: string, endYmd: string) => (startYmd === endYmd ? startYmd : `${startYmd} to ${endYmd}`);
 
-/** The system-wide row: every count summed; the target percentage averaged over the people who have a target. */
+/** The system-wide row: every count summed, status by status. */
 export function kpiTotals(rows: readonly KpiRow[]): KpiRow {
-  const totals: KpiRow = { userId: 0, name: "All Sales Managers", role: "total", leadsCreated: 0, leadsUpdated: 0, calls: 0, emails: 0, visits: 0, notes: 0, conversions: 0, tasksCompleted: 0, targetPercent: null, activeLeads: 0, overdueFollowUps: 0, stalled: 0, repliesWaiting: 0 };
+  const totals: KpiRow = { userId: 0, name: "All Sales Managers", role: "total", leads: 0, byStatus: {}, overdueFollowUps: 0, stalled: 0, repliesWaiting: 0 };
+  for (const row of rows) {
+    totals.leads += row.leads;
+    for (const column of kpiAttentionColumns) totals[column.key] += row[column.key];
+    for (const [key, value] of Object.entries(row.byStatus)) totals.byStatus[key] = (totals.byStatus[key] ?? 0) + value;
+  }
+  return totals;
+}
+
+/** The period's totals: every count summed; the target percentage averaged over the people who have a target. */
+export function kpiActivityTotals(rows: readonly KpiActivityRow[]): KpiActivityRow {
+  const totals: KpiActivityRow = { userId: 0, name: "All Sales Managers", role: "total", leadsCreated: 0, leadsUpdated: 0, calls: 0, emails: 0, visits: 0, notes: 0, conversions: 0, tasksCompleted: 0, targetPercent: null };
   const percents: number[] = [];
   for (const row of rows) {
-    for (const column of kpiColumns) if (column.key !== "targetPercent") totals[column.key] += row[column.key] ?? 0;
+    for (const column of kpiActivityColumns) if (column.key !== "targetPercent") totals[column.key] += row[column.key];
     if (row.targetPercent !== null) percents.push(row.targetPercent);
   }
   totals.targetPercent = percents.length ? Math.round(percents.reduce((sum, value) => sum + value, 0) / percents.length) : null;
   return totals;
 }
 
-export const kpiSubject = (data: KpiReportData) => `LeadTrailPro KPI report (${kpiReportLabels[data.kind].toLowerCase()}): ${data.periodLabel}`;
+/** Whether the person recorded anything in the period; people who did not are left out of the activity table. */
+export const hasKpiActivity = (row: KpiActivityRow) => kpiActivityColumns.some((column) => column.key !== "targetPercent" && row[column.key] > 0);
 
-const cell = (row: KpiRow, column: KpiColumn) => (column.key === "targetPercent" ? (row.targetPercent === null ? "—" : `${row.targetPercent}%`) : String(row[column.key]));
+export const kpiSubject = (data: KpiReportData) => `LeadTrailPro KPI report (${kpiReportLabels[data.kind].toLowerCase()}): as of ${data.asOf.slice(0, 10)}`;
 
-const intro = (data: KpiReportData) => `${kpiReportLabels[data.kind]} KPI report for ${data.periodLabel}: ${data.rows.length} Sales Manager${data.rows.length === 1 ? "" : "s"}. The first nine columns are for that period; the last four are as of ${data.generatedAt.slice(0, 16).replace("T", " ")} UTC.`;
+const count = (value: number) => value.toLocaleString("en-US");
+const plural = (value: number, noun: string) => `${count(value)} ${noun}${value === 1 ? "" : "s"}`;
 
-/** Plain-text body: a fixed-width table, the totals, and the pipeline. */
-export function formatKpiText(data: KpiReportData): string {
-  const rows = [...data.rows, data.totals];
-  const nameWidth = Math.max(14, ...rows.map((row) => row.name.length));
-  const widths = kpiColumns.map((column) => Math.max(column.short.length, ...rows.map((row) => cell(row, column).length)));
-  const line = (name: string, values: string[]) => [name.padEnd(nameWidth), ...values.map((value, index) => value.padStart(widths[index]))].join("  ");
-  const table = [
-    line("Sales Manager", kpiColumns.map((column) => column.short)),
-    line("-".repeat(nameWidth), widths.map((width) => "-".repeat(width))),
-    ...data.rows.map((row) => line(row.name, kpiColumns.map((column) => cell(row, column)))),
-    line("-".repeat(nameWidth), widths.map((width) => "-".repeat(width))),
-    line(data.totals.name, kpiColumns.map((column) => cell(data.totals, column))),
-  ];
-  const pipeline = data.pipeline.length ? data.pipeline.map((status) => `${status.label} ${status.count}`).join(", ") : "no active leads";
+/** The current-state table: who, how many leads, one column per status, then what is waiting on the person. */
+const stateHeader = (data: KpiReportData) => ["Leads", ...data.statuses.map((status) => status.label), ...kpiAttentionColumns.map((column) => column.short)];
+const stateCells = (data: KpiReportData, row: KpiRow) => [count(row.leads), ...data.statuses.map((status) => count(row.byStatus[status.key] ?? 0)), ...kpiAttentionColumns.map((column) => count(row[column.key]))];
+const activityHeader = kpiActivityColumns.map((column) => column.short);
+const activityCells = (row: KpiActivityRow) => kpiActivityColumns.map((column) => (column.key === "targetPercent" ? (row.targetPercent === null ? "—" : `${row.targetPercent}%`) : count(row[column.key])));
+
+const intro = (data: KpiReportData) => `${kpiReportLabels[data.kind]} KPI report as of ${data.asOf} (${data.timeZone}): ${plural(data.totals.leads, "lead")} with ${plural(data.rows.length, "Sales Manager")}. Each row shows where that person's leads stand at that moment.`;
+const legend = `Leads = every lead the person owns (archived and deleted ones left out), split by status in the columns after it. ${kpiAttentionColumns.map((column) => `${column.short} = ${column.label}`).join("; ")}.`;
+const activityTitle = (label: string) => `Activity recorded in LeadTrailPro, ${label}`;
+const noActivity = (label: string) => `No activity was recorded in LeadTrailPro for ${label}.`;
+const stageLine = (data: KpiReportData, strong: (value: string) => string, label: (value: string) => string) => {
   const stages = data.pipelineByStage ?? [];
   const onBoard = stages.reduce((sum, stage) => sum + stage.count, 0);
-  const byStage = stages.length ? stages.map((stage) => `${stage.label} ${stage.count}`).join(", ") : "no leads on the board";
-  return [
+  return `Pipeline by stage (${count(onBoard)} on the board): ${stages.length ? stages.map((stage) => `${label(stage.label)} ${strong(count(stage.count))}`).join(", ") : "no leads on the board"}.`;
+};
+
+/** A fixed-width text table: the name column, right-aligned values, a rule above the totals. */
+function textTable(header: string[], rows: { name: string; cells: string[] }[], totals: { name: string; cells: string[] }): string {
+  const all = [...rows, totals];
+  const nameWidth = Math.max(14, ...all.map((row) => row.name.length));
+  const widths = header.map((title, index) => Math.max(title.length, ...all.map((row) => row.cells[index].length)));
+  const line = (name: string, values: string[]) => [name.padEnd(nameWidth), ...values.map((value, index) => value.padStart(widths[index]))].join("  ");
+  const rule = line("-".repeat(nameWidth), widths.map((width) => "-".repeat(width)));
+  return [line("Sales Manager", header), rule, ...rows.map((row) => line(row.name, row.cells)), rule, line(totals.name, totals.cells)].join("\n");
+}
+
+/** Plain-text body: the current state per person and in total, the pipeline by stage, and the period's activity on weekly and monthly reports. */
+export function formatKpiText(data: KpiReportData): string {
+  const plain = (value: string) => value;
+  const lines = [
     intro(data), "",
-    data.rows.length ? table.join("\n") : "No active Sales Manager.", "",
-    `Columns: ${kpiColumns.map((column) => `${column.short} = ${column.label}`).join("; ")}.`, "",
-    `Pipeline now (${data.pipelineTotal} active leads): ${pipeline}.`,
-    `Pipeline by stage (${onBoard} on the board): ${byStage}.`,
-    data.appUrl ? `\nOpen the reports in LeadTrailPro: ${data.appUrl}` : "",
-  ].join("\n").trim() + "\n";
+    data.rows.length ? textTable(stateHeader(data), data.rows.map((row) => ({ name: row.name, cells: stateCells(data, row) })), { name: data.totals.name, cells: stateCells(data, data.totals) }) : "No active Sales Manager.", "",
+    legend, "",
+    stageLine(data, plain, plain),
+  ];
+  if (data.activity) {
+    lines.push("");
+    if (data.activity.rows.length) lines.push(`${activityTitle(data.activity.periodLabel)}:`, "", textTable(activityHeader, data.activity.rows.map((row) => ({ name: row.name, cells: activityCells(row) })), { name: data.activity.totals.name, cells: activityCells(data.activity.totals) }), "", `${kpiActivityColumns.map((column) => `${column.short} = ${column.label}`).join("; ")}. People with nothing recorded in the period are left out.`);
+    else lines.push(noActivity(data.activity.periodLabel));
+  }
+  if (data.appUrl) lines.push("", `Open the reports in LeadTrailPro: ${data.appUrl}`);
+  return lines.join("\n").trim() + "\n";
 }
 
 const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] ?? char);
 
-/** HTML body for mail clients: the same table with the period and the current-state columns told apart. */
+/** HTML body for mail clients: the same tables, the status columns and the waiting columns under their own headings. */
 export function formatKpiHtml(data: KpiReportData): string {
   const th = (text: string, extra = "") => `<th style="padding:6px 8px;border-bottom:2px solid #d8dbe6;text-align:right;font-size:12px;color:#4b5068;${extra}">${escapeHtml(text)}</th>`;
   const td = (text: string, extra = "") => `<td style="padding:6px 8px;border-bottom:1px solid #eceef4;text-align:right;font-size:13px;${extra}">${escapeHtml(text)}</td>`;
-  const periodCount = kpiColumns.filter((column) => column.period).length;
-  const head = `<tr><th></th><th colspan="${periodCount}" style="padding:4px 8px;font-size:11px;color:#6b7190;text-align:center;border-bottom:1px solid #eceef4">${escapeHtml(data.periodLabel)}</th><th colspan="${kpiColumns.length - periodCount}" style="padding:4px 8px;font-size:11px;color:#6b7190;text-align:center;border-bottom:1px solid #eceef4">As of now</th></tr>`
-    + `<tr>${th("Sales Manager", "text-align:left")}${kpiColumns.map((column) => th(column.short)).join("")}</tr>`;
-  const body = data.rows.map((row) => `<tr>${td(row.name, "text-align:left;font-weight:600;color:#2d3246")}${kpiColumns.map((column) => td(cell(row, column))).join("")}</tr>`).join("");
-  const totals = `<tr>${td(data.totals.name, "text-align:left;font-weight:700;color:#2d3246;border-top:2px solid #d8dbe6")}${kpiColumns.map((column) => td(cell(data.totals, column), "font-weight:700;border-top:2px solid #d8dbe6")).join("")}</tr>`;
-  const pipeline = data.pipeline.length ? data.pipeline.map((status) => `${escapeHtml(status.label)} <strong>${status.count}</strong>`).join(", ") : "no active leads";
-  const stages = data.pipelineByStage ?? [];
-  const onBoard = stages.reduce((sum, stage) => sum + stage.count, 0);
-  const byStage = stages.length ? stages.map((stage) => `${escapeHtml(stage.label)} <strong>${stage.count}</strong>`).join(", ") : "no leads on the board";
-  return [
+  const group = (text: string, span: number) => (span ? `<th colspan="${span}" style="padding:4px 8px;font-size:11px;color:#6b7190;text-align:center;border-bottom:1px solid #eceef4">${escapeHtml(text)}</th>` : "");
+  const table = (groups: string, header: string[], rows: { name: string; cells: string[] }[], totals: { name: string; cells: string[] }) =>
+    `<table style="border-collapse:collapse;min-width:640px">${groups}<tr>${th("Sales Manager", "text-align:left")}${header.map((title) => th(title)).join("")}</tr>`
+    + rows.map((row) => `<tr>${td(row.name, "text-align:left;font-weight:600;color:#2d3246")}${row.cells.map((value) => td(value)).join("")}</tr>`).join("")
+    + `<tr>${td(totals.name, "text-align:left;font-weight:700;color:#2d3246;border-top:2px solid #d8dbe6")}${totals.cells.map((value) => td(value, "font-weight:700;border-top:2px solid #d8dbe6")).join("")}</tr></table>`;
+  const stateGroups = `<tr><th></th><th></th>${group("By status", data.statuses.length)}${group("Waiting on the person", kpiAttentionColumns.length)}</tr>`;
+  const small = (text: string) => `<p style="font-size:12px;color:#6b7190">${escapeHtml(text)}</p>`;
+  const parts = [
     `<div style="font-family:Arial,Helvetica,sans-serif;color:#2d3246">`,
     `<p>${escapeHtml(intro(data))}</p>`,
-    data.rows.length ? `<table style="border-collapse:collapse;min-width:720px">${head}${body}${totals}</table>` : "<p>No active Sales Manager.</p>",
-    `<p style="font-size:12px;color:#6b7190">${kpiColumns.map((column) => `${escapeHtml(column.short)} = ${escapeHtml(column.label)}`).join("; ")}.</p>`,
-    `<p>Pipeline now (${data.pipelineTotal} active leads): ${pipeline}.</p>`,
-    `<p>Pipeline by stage (${onBoard} on the board): ${byStage}.</p>`,
-    data.appUrl ? `<p><a href="${escapeHtml(data.appUrl)}">Open the reports in LeadTrailPro</a></p>` : "",
-    "</div>",
-  ].join("");
+    data.rows.length ? table(stateGroups, stateHeader(data), data.rows.map((row) => ({ name: row.name, cells: stateCells(data, row) })), { name: data.totals.name, cells: stateCells(data, data.totals) }) : "<p>No active Sales Manager.</p>",
+    small(legend),
+    `<p>${stageLine(data, (value) => `<strong>${value}</strong>`, escapeHtml)}</p>`,
+  ];
+  if (data.activity) {
+    if (data.activity.rows.length) parts.push(
+      `<p style="margin-top:22px"><strong>${escapeHtml(activityTitle(data.activity.periodLabel))}</strong></p>`,
+      table("", activityHeader, data.activity.rows.map((row) => ({ name: row.name, cells: activityCells(row) })), { name: data.activity.totals.name, cells: activityCells(data.activity.totals) }),
+      small(`${kpiActivityColumns.map((column) => `${column.short} = ${column.label}`).join("; ")}. People with nothing recorded in the period are left out.`),
+    );
+    else parts.push(`<p>${escapeHtml(noActivity(data.activity.periodLabel))}</p>`);
+  }
+  if (data.appUrl) parts.push(`<p><a href="${escapeHtml(data.appUrl)}">Open the reports in LeadTrailPro</a></p>`);
+  parts.push("</div>");
+  return parts.join("");
 }

@@ -1,6 +1,6 @@
-import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { handleRouteError, jsonError, readJsonBody, requireSameOrigin } from "@/lib/http";
+import { hasJobsKey } from "@/lib/jobs-key";
 import { runDigestJobs } from "@/features/notifications/digests";
 import { runScheduledOpportunities } from "@/features/opportunities/runner";
 import { runStalledReport } from "@/features/analytics/report-email";
@@ -8,14 +8,6 @@ import { runMailboxWatch } from "@/features/gmail/watch";
 import { runKpiReports } from "@/features/reports/kpi-email";
 import { isKpiReportKind } from "@/features/reports/kpi-model";
 import { getRequestUser, hasPrivilege } from "@/features/users/session";
-
-const keyMatches = (supplied: string | null) => {
-  const expected = process.env.JOBS_KEY?.trim();
-  if (!expected || !supplied) return false;
-  const a = Buffer.from(expected);
-  const b = Buffer.from(supplied);
-  return a.length === b.length && timingSafeEqual(a, b);
-};
 
 /**
  * Scheduled jobs (TASK-06 digests, OPP-06 opportunity searches, the weekly report, the KPI reports to administrators, the MAIL-01 mailbox watch). The scheduler (scripts/jobs.mjs or an external cron) calls this every minute with
@@ -27,7 +19,7 @@ export async function POST(request: Request) {
     const job = body.job === "daily" || body.job === "weekly" ? body.job : null;
     const kpiJob = typeof body.job === "string" && body.job.startsWith("kpi_") ? body.job.slice(4) : "";
     const kpiKind = isKpiReportKind(kpiJob) ? kpiJob : null;
-    if (keyMatches(request.headers.get("x-jobs-key"))) {
+    if (hasJobsKey(request)) {
       const digests = await runDigestJobs({ force: body.force === true ? job : null });
       const opportunities = await runScheduledOpportunities().catch((error: unknown) => { console.error("Scheduled opportunity search failed.", error instanceof Error ? error.message : error); return null; });
       const stalledReport = await runStalledReport().catch((error: unknown) => { console.error("Stalled-leads report failed.", error instanceof Error ? error.message : error); return null; });

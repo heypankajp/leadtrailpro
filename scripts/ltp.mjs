@@ -6,6 +6,7 @@ import { defaultSheetName } from "./lib/tracker-import.mjs";
  * Remote administration client for LeadTrailPro: calls the app's API from any machine with a personal access token
  * (Administration → API access; SPEC §4). The token acts as the administrator who created it, so every API that
  * person may call in the browser works here too: users, list values, settings, targets, audit, leads, and the tracker import.
+ * Two things have no screen and exist for this client: data corrections (`sql`) and releases (`deploy`).
  *
  *   LTP_URL=https://leadtrail.pro LTP_TOKEN=ltp_… node scripts/ltp.mjs <command> …
  *   npm run remote -- <command> …        (LTP_URL and LTP_TOKEN read from .env.remote.local, which is git-ignored)
@@ -20,6 +21,12 @@ import { defaultSheetName } from "./lib/tracker-import.mjs";
  *          [--default-owner email] [--owner "Name=email"]... [--archive-sheet name] [--clients-sheet name] [--report import-report.txt]
  *                                             preview (default) or apply the sales tracker; the report is printed and saved;
  *                                             companies with no Sales Manager go to the opportunity pool unless --default-owner is given
+ *   sql <statement | @file.sql> [--apply]     one SELECT / INSERT / UPDATE / DELETE as a data correction: without --apply it runs
+ *                                             and is rolled back, so the row count shows what would change; every call is audited
+ *   deploy-status [--log]                     what the server runs (commit, schema version), its deployer, the last deploys;
+ *                                             --log adds the end of the output of the most recent failed deploy
+ *   deploy [--no-wait]                        ask the server's deployer to rebuild and restart now, then wait for the result
+ *                                             (a push to the followed branch deploys by itself; this is for a change of .env.local or a retry)
  *
  * Examples:
  *   npm run remote -- get /api/users
@@ -27,9 +34,12 @@ import { defaultSheetName } from "./lib/tracker-import.mjs";
  *   npm run remote -- post /api/list-values '{"listKey":"city","value":"Guelph"}'
  *   npm run remote -- import "docs/Sales Leads 2026.xlsx"
  *   npm run remote -- import "docs/Sales Leads 2026.xlsx" --apply
+ *   npm run remote -- sql "UPDATE leads SET industry = 'Logistics' WHERE industry = 'Logistic'"            (preview)
+ *   npm run remote -- sql "UPDATE leads SET industry = 'Logistics' WHERE industry = 'Logistic'" --apply
+ *   npm run remote -- deploy-status
  */
 
-const usage = `Usage: node scripts/ltp.mjs <whoami | get <path> [k=v]... | post|patch|put|delete <path> [json|@file] | tokens | import-status | import <file> [options]>
+const usage = `Usage: node scripts/ltp.mjs <whoami | get <path> [k=v]... | post|patch|put|delete <path> [json|@file] | tokens | import-status | import <file> [options] | sql <statement|@file.sql> [--apply] | deploy-status [--log] | deploy [--no-wait]>
 Set LTP_URL (https://host) and LTP_TOKEN (ltp_…) in the environment or in .env.remote.local (npm run remote -- …).`;
 
 const args = process.argv.slice(2);
@@ -66,6 +76,15 @@ async function call(method, apiPath, { json, form } = {}) {
 }
 
 const print = (data) => console.log(JSON.stringify(data, null, 2));
+
+function printDeployStatus(status) {
+  console.log(`Running: commit ${status.commit ?? "unknown (image built by hand)"} · schema version ${status.schemaVersion ?? "?"}`);
+  if (!status.agent) console.log("Deployer: none has checked in (it starts with the next manual deploy).");
+  else console.log(`Deployer: ${status.agentOnline ? "online" : "NOT RUNNING"}, last seen ${status.agent.seenAt}; follows ${status.agent.branch} of ${status.agent.repo} (now at ${status.agent.remoteCommit?.slice(0, 12) ?? "?"}); automatic deploys ${status.agent.auto ? "on" : "off"}${status.behind ? "; the server is BEHIND the branch" : ""}`);
+  if (status.request) console.log(`Deploy requested by ${status.request.requestedByName} at ${status.request.requestedAt}, not picked up yet.`);
+  if (status.runs.length) { console.log("Last deploys:"); for (const run of status.runs) console.log(`  ${run.startedAt}  ${run.status.padEnd(7)}  ${run.commit}  ${run.details ?? ""}`); }
+  else console.log("No deploys recorded yet.");
+}
 
 async function bodyFrom(text) {
   if (text === undefined) return undefined;
@@ -146,6 +165,53 @@ switch (command) {
     console.log(`\nWarnings: ${report.warningCount}; full report in ${reportPath}`);
     console.log(report.dryRun ? "PREVIEW: nothing was written. Run again with --apply to import." : "Applied on the server.");
     break;
+  }
+  case "sql": {
+    const apply = args.includes("--apply");
+    const source = args.slice(1).find((value) => value !== "--apply");
+    if (!source) { console.log(usage); process.exit(1); }
+    const sql = source.startsWith("@") ? await readFile(source.slice(1), "utf8") : source;
+    const result = await call("POST", "/api/admin/sql", { json: { sql, apply } });
+    if (result.rows.length) console.table(result.rows.slice(0, 50));
+    if (result.rows.length > 50 || result.truncated) console.log(`… ${result.truncated ? "more than " : ""}${result.rows.length} rows returned; the first 50 are shown.`);
+    const counted = `${result.command} ${result.rowCount} row${result.rowCount === 1 ? "" : "s"}`;
+    if (result.applied) console.log(`${counted}. APPLIED on the server.`);
+    else if (/^(SELECT|EXPLAIN)$/i.test(result.command)) console.log(`${counted} (nothing is kept without --apply).`);
+    else console.log(`${counted}. PREVIEW: rolled back, nothing changed. Run again with --apply to keep it.`);
+    break;
+  }
+  case "deploy-status": {
+    const { status } = await call("GET", "/api/deploy");
+    printDeployStatus(status);
+    if (args.includes("--log")) console.log(status.failureLog ? `\nOutput of the failed deploy of ${status.failureLog.commit.slice(0, 12)} (${status.failureLog.at}):\n${status.failureLog.log}` : "\nNo failed deploy has left its output.");
+    break;
+  }
+  case "deploy": {
+    const before = (await call("GET", "/api/deploy")).status;
+    if (!before.agentOnline) { console.error(before.agent ? `The server's deployer last checked in at ${before.agent.seenAt}; it is not running, so nothing would pick the request up.` : "No deployer has checked in on this server yet: it starts with the next manual deploy (docker compose -f compose.yaml -f compose.prod.yaml up -d --build)."); process.exit(1); }
+    const lastRun = before.runs[0]?.id ?? 0;
+    await call("POST", "/api/deploy", { json: {} });
+    console.log(`Deploy requested on ${baseUrl}; the deployer checks every minute.`);
+    if (args.includes("--no-wait")) break;
+    // The app restarts during a deploy, so a failed request here only means "not back yet".
+    const deadline = Date.now() + 20 * 60_000;
+    let announced = false;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 10_000));
+      let status;
+      try {
+        const response = await fetch(`${baseUrl}/api/deploy`, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } });
+        if (!response.ok) continue;
+        status = (await response.json()).status;
+      } catch { continue; }
+      const run = status.runs.find((item) => item.id > lastRun);
+      if (!run) continue;
+      if (run.status === "running") { if (!announced) { console.log(`Deploying ${run.commit}…`); announced = true; } continue; }
+      printDeployStatus(status);
+      process.exit(run.status === "success" ? 0 : 1);
+    }
+    console.error("No result after 20 minutes; check with: npm run remote -- deploy-status");
+    process.exit(1);
   }
   default:
     console.error(`Unknown command "${command}".\n${usage}`);

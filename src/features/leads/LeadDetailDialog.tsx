@@ -24,7 +24,7 @@ import TaskFormDialog from "@/features/tasks/TaskFormDialog";
 import type { Task } from "@/features/tasks/model";
 import UserDirectoryDialog from "@/features/users/UserDirectoryDialog";
 import type { UserSummary } from "@/features/users/model";
-import { attachmentUrl, fetchLead, logActivity, removeAttachment, reviewLead, setLeadState, transferLead, updateLead, uploadAttachment, type LeadDetail } from "./client";
+import { attachmentUrl, fetchLead, logActivity, removeAttachment, reviewLead, setLeadState, transferLead, updateLead, uploadAttachment, type LeadDetail, setLeadTodo } from "./client";
 import NextStepDialog from "@/features/pipeline/NextStepDialog";
 import StageBar from "@/features/pipeline/StageBar";
 import LeadFormDialog from "./LeadFormDialog";
@@ -104,6 +104,15 @@ export default function LeadDetailDialog({ leadId, onClose }: { leadId: number; 
     }
   };
 
+  const changeTodo = async (listId: number | null) => {
+    try {
+      const result = await setLeadTodo(lead.id, listId);
+      await refresh(result.lead.todoList ? `Moved to To Do: ${result.lead.todoList}` : "Taken off the To Do list");
+    } catch (caught) {
+      notify(errorMessage(caught), "error");
+    }
+  };
+
   const headerActions = (
     <>
       {canEdit && lead.recordState !== "archived" && <button className="button button-outline button-small" onClick={() => setEditing(true)}><Pencil size={14} /> Edit</button>}
@@ -178,7 +187,7 @@ export default function LeadDetailDialog({ leadId, onClose }: { leadId: number; 
         />
 
         {tab === "overview" && (
-          <OverviewTab detail={detail} canEdit={canEdit} onQuickUpdate={quickUpdate} onScheduleFollowUp={async (date, time, note) => {
+          <OverviewTab detail={detail} canEdit={canEdit} onQuickUpdate={quickUpdate} onTodo={changeTodo} onScheduleFollowUp={async (date, time, note) => {
             await updateLead(lead.id, { followUpDate: date });
             await createTask({ leadId: lead.id, title: `Follow up with ${lead.clientExecutive || lead.clientName}`, description: note, assigneeId: lead.ownerId, dueAt: fromLocalInput(`${date}T${time}`), priority: "normal", checklist: [] });
             await refresh("Follow-up scheduled and added to tasks");
@@ -297,10 +306,12 @@ function StatusReasonDialog({ leadName, statusName, options, onConfirm, onClose 
   );
 }
 
-function OverviewTab({ detail, canEdit, onQuickUpdate, onScheduleFollowUp }: {
+function OverviewTab({ detail, canEdit, onQuickUpdate, onScheduleFollowUp, onTodo }: {
   detail: LeadDetail; canEdit: boolean;
   onQuickUpdate: (changes: { bdActionId?: number | null; clientResponseId?: number | null; statusReasonId?: number | null; stageId?: number | null }, message: string, prompt?: string) => Promise<void>;
   onScheduleFollowUp: (date: string, time: string, note: string) => Promise<void>;
+  /** TODO-02: put the lead on a To Do list, move it, or take it off (null). */
+  onTodo: (listId: number | null) => Promise<void>;
 }) {
   const { reference, can } = useApp();
   const { lead } = detail;
@@ -343,6 +354,15 @@ function OverviewTab({ detail, canEdit, onQuickUpdate, onScheduleFollowUp }: {
               {reference.listValues.stage.filter((item) => item.active || item.id === lead.stageId).map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
             </select>
           ) : <strong>{lead.stage ?? "Not set"}</strong>}
+        </div>
+        <div>
+          <small>TO DO LIST</small>
+          {canEdit && (lead.recordState === "active" || lead.todoListId) ? (
+            <select className="inline-select" aria-label="To Do list" value={lead.todoListId ?? ""} onChange={(event) => void onTodo(event.target.value ? Number(event.target.value) : null)}>
+              <option value="">Not on a list</option>
+              {reference.listValues.todo_list.filter((item) => item.active || item.id === lead.todoListId).map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
+            </select>
+          ) : <strong>{lead.todoList ?? "Not on a list"}</strong>}
         </div>
         <div>
           <small>CLIENT RESPONSE</small>

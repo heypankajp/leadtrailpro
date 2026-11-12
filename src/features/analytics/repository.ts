@@ -362,9 +362,12 @@ async function boardPeople(viewer: UserAccount, db: Queryable): Promise<UserAcco
   return hasPrivilege(viewer, "view_team_reports") ? people : people.filter((person) => person.id === viewer.id);
 }
 
-/** The team board: counts per salesperson now (active, overdue, stalled, replies waiting), this week's activity, and when each person last did anything. */
-export async function buildTeamBoard(viewer: UserAccount, db: Queryable = getDatabasePool()): Promise<TeamBoard> {
-  const people = await boardPeople(viewer, db);
+/**
+ * The team board: counts per salesperson now (active, overdue, stalled, replies waiting), this week's activity, and when each person last did anything.
+ * `only` replaces the usual list of people (every active Sales Manager and administrator the viewer may see); the KPI email passes the lead owners.
+ */
+export async function buildTeamBoard(viewer: UserAccount, db: Queryable = getDatabasePool(), only: UserAccount[] | null = null): Promise<TeamBoard> {
+  const people = only ?? await boardPeople(viewer, db);
   const ids = people.map((person) => person.id);
   const settings = await getSettings(db);
   const today = todayYmd();

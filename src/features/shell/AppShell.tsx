@@ -3,13 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   AlertCircle, Activity, Briefcase, BriefcaseBusiness, Building2, Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, Clock3, Compass, FileSpreadsheet, FileText, Flame, Kanban, KeyRound,
-  BellRing, LayoutDashboard, ListTodo, LogOut, Map, Menu, PanelLeftClose, PanelLeftOpen, Search, Settings2, ShieldCheck, SlidersHorizontal, Target, TrendingUp, UsersRound,
+  BellRing, LayoutDashboard, ListChecks, ListTodo, LogOut, Map, Menu, PanelLeftClose, PanelLeftOpen, Search, Settings2, ShieldCheck, SlidersHorizontal, Target, TrendingUp, UsersRound,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAsyncData } from "@/lib/useAsyncData";
 import ActionCenter from "@/features/dashboard/ActionCenter";
 import ChangePasswordDialog from "@/features/auth/ChangePasswordDialog";
-import { fetchLeads } from "@/features/leads/client";
+import { fetchLeads, fetchTodoCounts } from "@/features/leads/client";
 import LeadDetailDialog from "@/features/leads/LeadDetailDialog";
 import LeadFormDialog from "@/features/leads/LeadFormDialog";
 import LeadListPage, { leadListViews, type LeadListView } from "@/features/leads/LeadListPage";
@@ -31,7 +31,7 @@ import { hasPrivilege } from "@/features/users/model";
 import { AppContext, useHashRoute, type AppContextValue, type ToastTone } from "./AppContext";
 import { fetchReference } from "./client";
 
-type NavItem = { id: string; label: string; icon: LucideIcon; privilege?: UserPrivilege; tone?: string; count?: "queued" | "tasks" | "opportunities"; preview?: boolean; hideForRecruiter?: boolean };
+type NavItem = { id: string; label: string; icon: LucideIcon; privilege?: UserPrivilege; tone?: string; count?: "queued" | "tasks" | "opportunities" | "todo"; preview?: boolean; hideForRecruiter?: boolean };
 
 const navigation: { title: string; items: NavItem[] }[] = [
   {
@@ -40,6 +40,7 @@ const navigation: { title: string; items: NavItem[] }[] = [
       { id: "home", label: "Action center", icon: LayoutDashboard },
       { id: "pipeline", label: "Pipeline", icon: Kanban, privilege: "view_leads", hideForRecruiter: true },
       { id: "leads", label: "My leads", icon: UsersRound, privilege: "view_leads", hideForRecruiter: true },
+      { id: "todo", label: "To Do", icon: ListChecks, privilege: "view_leads", count: "todo", hideForRecruiter: true },
       { id: "all-leads", label: "All leads", icon: BriefcaseBusiness, privilege: "view_leads" },
       { id: "cold", label: "Cold leads", icon: CircleHelp, tone: "cold", privilege: "view_leads" },
       { id: "warm", label: "Warm leads", icon: Activity, tone: "warm", privilege: "view_leads" },
@@ -75,7 +76,7 @@ const navigation: { title: string; items: NavItem[] }[] = [
 ];
 
 const pageTitles: Record<string, string> = {
-  home: "Action center", pipeline: "Pipeline", leads: "My leads", "all-leads": "All leads", cold: "Cold leads", warm: "Warm leads", hot: "Hot leads", client: "Clients",
+  home: "Action center", pipeline: "Pipeline", leads: "My leads", todo: "To Do", "all-leads": "All leads", cold: "Cold leads", warm: "Warm leads", hot: "Hot leads", client: "Clients",
   queued: "Queued leads", archive: "Archive", lead: "Lead", opportunities: "Opportunities", "lead-generation": "Lead generation", tasks: "Tasks & reminders", trips: "Sales trip planner", planner: "Road visit planner",
   reports: "Analytics", targets: "Targets & templates", admin: "User management", values: "List of values", devices: "Device authorization", settings: "Settings",
   import: "Tracker import", api: "API access",
@@ -104,14 +105,16 @@ export default function AppShell({ user, setUser, signOut, passwordSignIn }: { u
   const shownLeadId = activeLeadId ?? routeLeadId;
 
   const countsFetcher = useCallback(async () => {
-    const [queued, tasks, opportunities] = await Promise.all([
+    const [queued, tasks, opportunities, todo] = await Promise.all([
       can("review_queued") ? fetchLeads({ state: "queued", pageSize: 1 }).then((page) => page.total).catch(() => 0) : Promise.resolve(0),
       fetchTasks({ status: "open" }).then((result) => result.tasks.length).catch(() => 0),
       can("create_leads") ? fetchOpportunities({ status: "new", pageSize: 1 }).then((page) => page.counts.new).catch(() => 0) : Promise.resolve(0),
+      // TODO-04: the person's own leads waiting on a To Do list.
+      can("view_leads") ? fetchTodoCounts().then((result) => result.mine).catch(() => 0) : Promise.resolve(0),
     ]);
-    return { queued, tasks, opportunities };
+    return { queued, tasks, opportunities, todo };
   }, [can]);
-  const counts = useAsyncData(countsFetcher, dataVersion).data ?? { queued: 0, tasks: 0, opportunities: 0 };
+  const counts = useAsyncData(countsFetcher, dataVersion).data ?? { queued: 0, tasks: 0, opportunities: 0, todo: 0 };
 
   const notify = useCallback((message: string, tone: ToastTone = "success") => {
     setToast({ id: Date.now(), message, tone });
