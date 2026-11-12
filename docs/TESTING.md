@@ -35,7 +35,7 @@ Ports: the app listens on 3000; the Docker database is published on 127.0.0.1:54
    docker compose run --rm setup
    ```
 
-   Expected ending: twelve `Applied migration …` lines, `The leadtrailpro schema is ready`, and `Created the restricted app role leadtrailpro_app and the user-management key in the ignored .env.local.` The accounts in `seed/accounts.csv` (in the repository) are created in the same step: the ending also lists `Created admin …` lines and `Seed accounts: N created, 0 already existed.`
+   Expected ending: nineteen `Applied migration …` lines (one per migration as of November 12, 2026; each release that changes the schema adds one), `The leadtrailpro schema is ready`, and `Created the restricted app role leadtrailpro_app and the user-management key in the ignored .env.local.` The accounts in `seed/accounts.csv` (in the repository) are created in the same step: the ending also lists `Created admin …` lines and `Seed accounts: N created, 0 already existed.`
 
 3. Start the stack and watch it come up:
 
@@ -156,8 +156,10 @@ Later on the server:
 
 Each line is a short path a tester can follow after the first administrator exists (sample data makes the lists fuller).
 
-- **Action Center**: overdue and due-today follow-ups, open tasks, leads needing attention, targets.
+- **Action Center**: overdue and due-today follow-ups, open tasks, leads needing attention, leads with no next step, targets.
 - **Leads**: New lead; open it; log a BD action; write a note with a phrase like "call back next Tuesday" and accept the suggested follow-up task; upload a document; post a message with an @mention under Collaboration; change the status to Disqualified with a reason; archive and restore from the list.
+- **Pipeline**: open Pipeline in the sidebar; a new lead sits in New Deal. Drag its card to Contact Made, or use the arrows on the card; the "What's next?" prompt opens pre-filled (a call on the next business day): save it or skip. Click Undo in the bar above the board. Open the card: the stage bar across the top shows the current stage; click another stage and confirm. Set the BD action to Shared Profiles on the Overview: the lead jumps forward to Profile Shared and the Timeline shows "Stage changed from … to Profile Shared". Switch Mine / Team, filter by status, search. On All leads, tick two leads and use Move to stage in the bar above the table.
+- **Pipeline administration** (administrator): List of values → BD action shows the stage each action lands a lead in; change one, then use Recompute stages from BD actions. Settings → Needs-attention rules carry a stage (six are seeded); Settings → Pipeline next steps sets the step each stage suggests and the two switches (ask for the next step; create it automatically).
 - **Tasks**: complete a checklist item, comment on a task, mark all notifications read from the bell.
 - **Reports**: change the period and filters, export CSV, Excel, and PDF.
 - **Settings**: Email delivery shows every message the app "sent" in stub mode (use **Forgot password** on the sign-in screen and open the reset link from here); Business calendar, Needs-attention rules, Job sources.
@@ -165,7 +167,7 @@ Each line is a short path a tester can follow after the first administrator exis
 - **Sign in with Google**: sign out, click **Sign in with Google**, pick a Google account whose email exists under User management; a Google account that is not registered gets "Sign-in failed: these credentials are not valid or you are not registered. Please contact your administrator." The first Google sign-in also asks for read-only Gmail; afterwards a lead's Emails tab shows the mailbox as connected.
 - **Sales trip planner**: plan a trip from an address on the sample provider, shortlist a company, export to Excel.
 - **Opportunities**: as an administrator, add a search under Opportunities → Searches & runs (job title “baker”, location “Mississauga, ON”; the form is pre-filled from Settings → Opportunity searches) and click Run searches now; the Pool shows three sample companies. Assign one as a lead (the form is pre-filled, pick the owner), mark another not relevant and bring it back. Then try Add a lead with the same company name: the duplicate guard points to the existing lead.
-- **Analytics**: as an administrator the Team board heads the page (click a salesperson's number for the leads behind it); then pick Last 30 days, then a custom range; filter by status or industry; click a status tile for the leads behind it; read the stalled-leads reasons and open one; export the stalled list as CSV.
+- **Analytics**: as an administrator the Team board heads the page (click a salesperson's number for the leads behind it); then pick Last 30 days, then a custom range; filter by status or industry; click a status tile for the leads behind it; under By stage click a stage tile for the leads in that stage, then read Stage over time and Time in stage (they fill as leads are moved); read the stalled-leads reasons and open one; export the stalled list as CSV.
 - **Send email** (needs the Google client and a connected mailbox): open a lead with a client email, Emails tab, Send email; the message appears in the trail and on the timeline, and Reply keeps the thread.
 - **Email delivery** (administrator): Settings → Email delivery, choose the sending mailbox and save; the Email log below shows what was sent.
 - **Digest**: Settings → "Send me today's digest" puts a digest in the outbox and the bell.
@@ -177,11 +179,11 @@ Inside the dev container (`docker compose exec app …` while the stack runs, or
 ```bash
 npm run typecheck
 npm run lint
-npm run test:unit     # 96 tests, no database needed
+npm run test:unit     # 158 tests, no database needed
 npm run build
 ```
 
-Browser suite (Selenium in Docker, about ten minutes, 59 tests in 8 files): `scripts/e2e.sh`, or one file with `scripts/e2e.sh tests/e2e/02-leads.test.mjs`. Watch it live at [http://localhost:7900](http://localhost:7900); failed tests leave screenshots and page sources in `tests/e2e/output/`. It uses its own throwaway database and never touches your data.
+Browser suite (Selenium in Docker, about ten minutes, 73 tests in 9 files as of November 12, 2026): `scripts/e2e.sh`, or one file with `scripts/e2e.sh tests/e2e/02-leads.test.mjs`. Watch it live at [http://localhost:7900](http://localhost:7900); failed tests leave screenshots and page sources in `tests/e2e/output/`. It uses its own throwaway database and never touches your data.
 
 GitHub Actions runs the same checks on every push and pull request. As of October 31, 2026 the typecheck, lint, and unit-test job passes and the browser job fails on the GitHub runner on every run, while the same suite passes locally; the job's log on the Actions tab of the repository is the next thing to read.
 

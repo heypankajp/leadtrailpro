@@ -8,12 +8,13 @@ LeadTrailPro (renamed from SalesTrackPro on October 30, 2026) is a sales workspa
 |---|---|
 | Stack | Next.js 16.4.3 (App Router, Turbopack; the October 30, 2026 security release), React 19, TypeScript 5, PostgreSQL 17 (14 or newer works), hand-written CSS |
 | Packaging | Docker: hot-reloading development stack, standalone production image, one-shot setup service |
-| Tests | ESLint, `tsc`, production build, unit suites for the date parser, status helpers, trip matching, reminder rules, digests, rich text, mentions, the tracker import rules, the job-listing sources and their usage meter, the mailbox watch, the opportunity pool, and the team board, and a Selenium browser suite with an axe-core accessibility audit, all in Docker; GitHub Actions runs all of it on every push and pull request |
+| Tests | ESLint, `tsc`, production build, unit suites for the date parser, status helpers, trip matching, reminder rules, digests, rich text, mentions, the tracker import rules, the job-listing sources and their usage meter, the mailbox watch, the opportunity pool, the team board, and the pipeline rules (stages, next steps, reminder days per stage), and a Selenium browser suite with an axe-core accessibility audit, all in Docker; GitHub Actions runs all of it on every push and pull request |
 | Notifications | Bell in the top bar for task, lead, queue, file, and client-email events; daily and weekly digests by email and in-app, scheduled by the `jobs` service; daily, weekly, and monthly KPI reports emailed to administrators |
 | Email | Sent through the Google app from the mailbox an administrator chooses under Settings → Email delivery (`MAIL_PROVIDER=gmail`, the default once the Google client is set). `MAIL_PROVIDER=stub` records messages under Settings → Email log instead of sending (test stacks). No SMTP account is needed |
 | Sales trip planner | Built from the October 2026 change note; runs on sample company data until `MAPS_API_KEY` is set. Google calls are metered in the app: the planner pages show everyone a live usage card (per allowance, what is left, reset date), searches stop at the monthly budgets under Settings → Google Maps usage, and administrators are notified at 80% and 100%. Hiring counts come from a job-sources layer that combines Adzuna, JSearch, and Indeed via HasData behind a cache with per-source budgets (keys optional, set under Settings) |
 | Job listings | Indeed through HasData is the live source (Adzuna and JSearch optional); per-source daily and monthly call budgets, the credits they cost and HasData's live account balance under Settings → Job listing sources, a usage card for everyone on Opportunities and the planner, administrator alerts at the warning level and at 100% |
 | Team oversight | Analytics opens for administrators with the Team board (per salesperson: active leads, overdue follow-ups, stalled leads, client replies waiting, this week's activity, last active; every number opens the leads); the mailbox watch flags leads awaiting a client reply and notifies owners; colleagues see a lead's client emails from any connected mailbox |
+| Pipeline | A Pipedrive-style board over the leads (November 11 and 12, 2026): seven stages from New Deal to Contract Signed, drag-and-drop or a menu to move a card, every BD action mapped to a stage, a "What's next?" prompt after each activity or move, reminder days per stage, a stage bar on the lead page, bulk move from the lists, and the pipeline by stage in Analytics and the KPI emails (SPEC.md §10.11) |
 | Preview pages | Lead generation and the road visit planner show sample content until data sources are connected |
 
 ## Quick start with Docker
@@ -293,7 +294,7 @@ Stored email threads with reply and forward, AI summaries, OCR of business cards
 npm run lint
 npm run typecheck
 npm run build
-npm run test:unit     # date parser, status helpers, trip matching, reminder rules, digest schedule, tracker import rules, API tokens (node:test, no database needed)
+npm run test:unit     # date parser, status helpers, trip matching, reminder rules (status, BD action, stage), digest schedule, tracker import rules, API tokens, pipeline stage and next-step rules (node:test, no database needed)
 ```
 
 Inside Docker, prefix each with `docker compose exec app`.
@@ -302,7 +303,7 @@ Inside Docker, prefix each with `docker compose exec app`.
 
 `.github/workflows/ci.yml` runs on every push to `master` and every pull request: typecheck, lint, and the unit tests on Node 22, then the browser suite through `scripts/e2e.sh` on the GitHub runner's Docker. Screenshots of failed browser tests are attached to the run as the `e2e-failures` artifact.
 
-As of October 31, 2026 the checks job passes but the browser job fails on every run (its logs have not been examined yet), so the browser suite is verified locally with `scripts/e2e.sh`, where all 54 tests passed on October 31, 2026. The repository moved to `github.com/heypankajp/leadtrailpro` with the rename; the old address redirects.
+As of October 31, 2026 the checks job passes but the browser job fails on every run (its logs have not been examined yet), so the browser suite is verified locally with `scripts/e2e.sh`, where all 54 tests passed on October 31, 2026 and all 73 tests in nine files on November 12, 2026, after the Pipeline board. The repository moved to `github.com/heypankajp/leadtrailpro` with the rename; the old address redirects.
 
 ### Browser end-to-end tests (Selenium)
 
@@ -316,13 +317,14 @@ scripts/e2e.sh tests/e2e/02-leads.test.mjs   # one or more files
 | File | Covers |
 |---|---|
 | `01-auth.test.mjs` | Sign-in screen, first administrator via the setup link, sign out, wrong password, password reset request accepted in stub mail mode, password change and re-login |
-| `02-leads.test.mjs` | Create a lead, BD action, call and note on the timeline, a note that offers and creates a follow-up task, Emails tab without Gmail configured, follow-up that becomes a task, document upload, edit, status change, Disqualified with a reason, list and global search, archive and restore |
+| `02-leads.test.mjs` | Create a lead, BD action, call and note on the timeline, a note that offers and creates a follow-up task, Emails tab without Gmail configured, follow-up that becomes a task, document upload, edit, status change, Disqualified with a reason, list and global search, archive and restore; the "What's next?" prompt after the BD action and the logged call is skipped |
 | `03-tasks.test.mjs` | Create a task linked to a lead, complete it, edit it, type a due date in words and confirm the resolved date |
 | `04-team.test.mjs` | Create a Sales Manager, assign them a task, a per-account sign-out time ends a session started before it, role-limited navigation, the task shows in the notification bell, historical date queues a lead, admin approval, transfer, termination hand-off, terminated account cannot sign in |
-| `05-admin-reports.test.mjs` | List of values, role rename reflected in the sidebar, a needs-attention rule that shows on the Action Center, a set-password link read from the stub outbox and used to reset the password, the daily digest and the daily KPI report sent on demand, business-calendar holiday, target template, report drill-down, stage filter, PDF and Excel export responses, action-center metric link |
+| `05-admin-reports.test.mjs` | List of values, role rename reflected in the sidebar, a needs-attention rule that shows on the Action Center, a set-password link read from the stub outbox and used to reset the password, the daily digest and the daily KPI report sent on demand, business-calendar holiday, target template, report drill-down, stage filter, PDF and Excel export responses, action-center metric link; a BD action mapped to a pipeline stage and Recompute stages, a seventh needs-attention rule next to the six seeded stage rules, the next step a stage suggests under Settings → Pipeline next steps, the By stage, Stage over time, and Time in stage sections on Analytics, an API token created and revoked, the Tracker import page |
 | `06-trips.test.mjs` | Plan a sales trip on the stub provider, a lead recognised by website domain, job listings dialog, shortlist and planned visit, Show and Action filters, Excel export response, trip list |
 | `07-accessibility.test.mjs` | axe-core WCAG 2.1 A/AA audit of the sign-in screen, Action Center, lead dialog, lead list, tasks, reports, settings, list of values, user management, and trip planner; serious or critical findings fail |
 | `08-opportunities.test.mjs` | A search on the sample source, Run searches now, cards in the pool, Assign as lead with the pre-filled form and the Timeline entry, the duplicate guard, Not relevant and Back to the pool |
+| `09-pipeline.test.mjs` | A new lead starts in New Deal and moves through the stage menu on its card, the undo bar, the "What's next?" prompt (skipped after a move, saved as a task after a BD action that advances the stage), the timeline's stage entry, the status filter on the board, the stage bar on the lead page with its confirmation, the Action Center's No next step panel, and a bulk move of two leads from All leads |
 
 - Tests are written with `node:test` and `selenium-webdriver`; the page helpers (labels, dialogs, toasts, navigation) live in `tests/e2e/helpers/ui.mjs`, test data and the bootstrap shortcut in `tests/e2e/helpers/data.mjs`.
 - Watch the browser at [http://localhost:7900](http://localhost:7900) while a run is in progress.
