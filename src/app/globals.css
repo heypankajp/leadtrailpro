@@ -1403,3 +1403,17 @@ h1 { margin: 9px 0 5px; color: #242941; font-size: 25px; font-weight: 690; lette
 @media (max-width: 640px) {
   .rule-row.rule-row-stage, .stage-step-row { grid-template-columns: 1fr; }
 }
+
+/* Pipeline Phase 3 (PIPE-11/12): the stage bar on the lead page, the analytics subheading */
+.stage-bar { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 0; padding: 0; list-style: none; }
+.stage-step button { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 10px 0 6px; border: 1px solid #e6e8f0; border-radius: 999px; background: #fff; color: #62697b; font-size: 9.5px; font-weight: 600; cursor: pointer; }
+.stage-step button:disabled { cursor: default; }
+.stage-step button:not(:disabled):hover { border-color: #7180e1; color: #4c5ed9; }
+.stage-step-index { display: inline-grid; place-items: center; width: 17px; height: 17px; border-radius: 50%; background: #eef0f5; color: #62697b; font-size: 8.5px; font-weight: 700; }
+.stage-step.is-done button { color: #36755b; background: #f2faf5; border-color: #d7efe2; }
+.stage-step.is-done .stage-step-index { background: #d7efe2; color: #2f6e55; }
+.stage-step.is-current button { color: #fff; background: #5361d2; border-color: #5361d2; }
+.stage-step.is-current .stage-step-index { background: #ffffff33; color: #fff; }
+.analytics-subheading { margin-top: 18px; padding-top: 14px; border-top: 1px solid #eff0f5; }
+.analytics-subheading h3 { margin: 0; color: #4a5066; font-size: 11px; font-weight: 650; }
+.analytics-subheading p { margin: 3px 0 0; color: #636a7d; font-size: 9.5px; }

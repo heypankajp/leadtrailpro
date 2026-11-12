@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
-  bucketKindFor, buckets, median, parseAnalyticsFilters, percentile, spellsOf, stalledAssessment, statusSeries, summarizeTransitions, weekStart,
+  bucketKindFor, buckets, median, parseAnalyticsFilters, percentile, spellsOf, stalledAssessment, statusSeries, summarizeStageMoves, summarizeTransitions, weekStart,
   sortTeamBoard, teamBoardAttention,
 } from "../../src/features/analytics/model.ts";
 
@@ -24,6 +24,15 @@ describe("Analytics rules", () => {
       { label: "2026-11-04", counts: { cold: 0, warm: 1, hot: 0 } },
       { label: "2026-11-07", counts: { cold: 1, warm: 0, hot: 1 } },
     ]);
+  });
+
+  test("stage moves (PIPE-12): what each stage received and how many moves went forward or back in board order", () => {
+    const order = ["new_deal", "contact_made", "qualified", "profile_shared"];
+    const summary = summarizeStageMoves([
+      { fromCode: "new_deal", toCode: "contact_made" }, { fromCode: "contact_made", toCode: "profile_shared" }, { fromCode: "profile_shared", toCode: "qualified" },
+      { fromCode: "", toCode: "qualified" }, { fromCode: "qualified", toCode: "retired" },
+    ], order);
+    assert.deepEqual(summary, { entered: { contact_made: 1, profile_shared: 1, qualified: 2, retired: 1 }, forward: 2, backwards: 1, total: 5 });
   });
 
   test("movement: funnel steps, conversions from anywhere, moves backwards, and closing reasons", () => {

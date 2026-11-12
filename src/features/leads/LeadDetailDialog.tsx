@@ -26,6 +26,7 @@ import UserDirectoryDialog from "@/features/users/UserDirectoryDialog";
 import type { UserSummary } from "@/features/users/model";
 import { attachmentUrl, fetchLead, logActivity, removeAttachment, reviewLead, setLeadState, transferLead, updateLead, uploadAttachment, type LeadDetail } from "./client";
 import NextStepDialog from "@/features/pipeline/NextStepDialog";
+import StageBar from "@/features/pipeline/StageBar";
 import LeadFormDialog from "./LeadFormDialog";
 import { activityLabels, type LeadActivity, type LoggableActivityType } from "./model";
 
@@ -156,6 +157,9 @@ export default function LeadDetailDialog({ leadId, onClose }: { leadId: number; 
           <div className="detail-owner"><small>OWNER</small><strong>{lead.ownerName}</strong></div>
           <div className="detail-header-actions">{headerActions}</div>
         </div>
+        {lead.recordState !== "archived" && (
+          <StageBar lead={lead} canMove={canEdit} onMoved={(message, task) => { void refresh(message); if (!task) offerNextStep("You moved the lead to a new stage."); }} />
+        )}
         {lead.stateReason && <div className="form-note state-note"><History size={14} /> {lead.stateReason}</div>}
 
         <Tabs

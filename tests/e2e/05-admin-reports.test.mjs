@@ -200,6 +200,10 @@ describe("Administration and reports", () => {
     await page.wait(By.xpath("//section[contains(@class,'team-board')]//table//th[normalize-space()='Client replies waiting']"));
     await page.click(By.xpath("//div[contains(@class,'report-periods')]//button[normalize-space()='Last 30 days']"), { global: true });
     await page.wait(By.xpath("//h2[normalize-space()='Status over time']"));
+    // PIPE-12: the stage sections.
+    await page.wait(By.xpath("//h3[normalize-space()='By stage']"));
+    await page.wait(By.xpath("//h2[normalize-space()='Stage over time']"));
+    await page.wait(By.xpath("//h2[normalize-space()='Time in stage']"));
   });
 
   uiTest("reports filter by stage and export to PDF and Excel", async () => {

@@ -49,7 +49,7 @@ describe("KPI report emails (SPEC §7.18)", () => {
 
   test("the text and HTML bodies carry the table, the totals, and the pipeline; HTML is escaped", () => {
     const rows = [row("Ada Admin"), row("Sam <Seller>", { userId: 2, targetPercent: null })];
-    const data = { kind: "weekly", startYmd: "2026-11-02", endYmd: "2026-11-08", periodLabel: "2026-11-02 to 2026-11-08", generatedAt: "2026-11-09T13:00:00.000Z", rows, totals: kpiTotals(rows), pipeline: [{ label: "Cold", count: 30 }, { label: "Hot", count: 4 }], pipelineTotal: 34, appUrl: "https://leadtrail.pro/#/reports" };
+    const data = { kind: "weekly", startYmd: "2026-11-02", endYmd: "2026-11-08", periodLabel: "2026-11-02 to 2026-11-08", generatedAt: "2026-11-09T13:00:00.000Z", rows, totals: kpiTotals(rows), pipeline: [{ label: "Cold", count: 30 }, { label: "Hot", count: 4 }], pipelineTotal: 34, pipelineByStage: [{ label: "New Deal", count: 20 }, { label: "Contact Made", count: 10 }], appUrl: "https://leadtrail.pro/#/reports" };
     assert.equal(kpiSubject(data), "LeadTrailPro KPI report (weekly): 2026-11-02 to 2026-11-08");
     const text = formatKpiText(data);
     assert.match(text, /Weekly KPI report for 2026-11-02 to 2026-11-08: 2 Sales Managers/);
@@ -57,6 +57,7 @@ describe("KPI report emails (SPEC §7.18)", () => {
     assert.match(text, /Ada Admin\s+2\s+3\s+10\s+4\s+1\s+0\s+1\s+2\s+50%\s+20\s+3\s+1\s+0/);
     assert.match(text, /All Sales Managers\s+4\s+6\s+20/);
     assert.match(text, /Pipeline now \(34 active leads\): Cold 30, Hot 4\./);
+    assert.match(text, /Pipeline by stage \(30 on the board\): New Deal 20, Contact Made 10\./);
     assert.match(text, /https:\/\/leadtrail\.pro\/#\/reports/);
     const html = formatKpiHtml(data);
     assert.match(html, /<table/);
@@ -64,9 +65,11 @@ describe("KPI report emails (SPEC §7.18)", () => {
     assert.doesNotMatch(html, /<Seller>/);
     assert.match(html, /All Sales Managers/);
     assert.match(html, /Pipeline now \(34 active leads\)/);
-    const empty = formatKpiText({ ...data, rows: [], totals: kpiTotals([]), pipeline: [], pipelineTotal: 0, appUrl: null });
+    assert.match(html, /Pipeline by stage \(30 on the board\): New Deal <strong>20<\/strong>/);
+    const empty = formatKpiText({ ...data, rows: [], totals: kpiTotals([]), pipeline: [], pipelineTotal: 0, pipelineByStage: [], appUrl: null });
     assert.match(empty, /No active Sales Manager/);
     assert.match(empty, /no active leads/);
+    assert.match(empty, /no leads on the board/);
   });
 
   test("the switches default to on and survive the email settings round trip", () => {

@@ -11,7 +11,8 @@ export async function GET(request: Request) {
     requirePrivilege(user, "view_reports", "You do not have permission to view analytics.");
     const params = new URL(request.url).searchParams;
     const drillOwner = Number(params.get("drillOwnerId"));
-    const leads = await listAnalyticsLeads(user, parseAnalyticsFilters((key) => params.get(key)), asString(params.get("status"), 40) || null, Number.isSafeInteger(drillOwner) && drillOwner > 0 ? drillOwner : null);
+    const stageId = Number(params.get("stageId"));
+    const leads = await listAnalyticsLeads(user, parseAnalyticsFilters((key) => params.get(key)), asString(params.get("status"), 40) || null, Number.isSafeInteger(drillOwner) && drillOwner > 0 ? drillOwner : null, Number.isSafeInteger(stageId) && stageId > 0 ? stageId : null);
     return NextResponse.json({ leads });
   } catch (error) {
     return handleRouteError(error, "Analytics drill-down");

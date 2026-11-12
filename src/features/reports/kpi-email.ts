@@ -22,10 +22,14 @@ const reportsLink = () => { const base = process.env.APP_URL?.trim(); return bas
 
 /** The numbers: the team performance report for the period, the team board for the current state, the pipeline by status. */
 export async function buildKpiReport(kind: KpiReportKind, viewer: UserAccount, db: Queryable = getDatabasePool()): Promise<KpiReportData> {
-  const [report, board, pipelineRows] = await Promise.all([
+  const [report, board, pipelineRows, stageRows] = await Promise.all([
     performanceReport(kpiReportPeriod[kind], viewer, null),
     buildTeamBoard(viewer, db),
     db.query("SELECT s.value AS label, COUNT(*)::int AS count FROM leads l JOIN list_values s ON s.id = l.status_id WHERE l.record_state = 'active' GROUP BY s.value, s.sort_order ORDER BY s.sort_order"),
+    // PIPE-12: the board's population by stage; a lead never placed counts in New Deal.
+    db.query(`SELECT COALESCE(sg.value, 'New Deal') AS label, MIN(COALESCE(sg.sort_order, 0)) AS ord, COUNT(*)::int AS count
+      FROM leads l JOIN list_values st ON st.id = l.status_id LEFT JOIN list_values sg ON sg.id = l.stage_id
+      WHERE l.record_state = 'active' AND st.code NOT IN ('client', 'lost', 'disqualified') GROUP BY 1 ORDER BY ord, 1`),
   ]);
   const current = new Map(board.rows.map((row) => [row.userId, row]));
   const rows: KpiRow[] = report.rows.map((row) => {
@@ -38,9 +42,10 @@ export async function buildKpiReport(kind: KpiReportKind, viewer: UserAccount, d
   });
   const endYmd = addDaysYmd(report.range.endExclusiveYmd, -1);
   const pipeline = (pipelineRows.rows as { label: string; count: number }[]).map((status) => ({ label: status.label, count: Number(status.count) }));
+  const pipelineByStage = (stageRows.rows as { label: string; count: number }[]).map((stage) => ({ label: stage.label, count: Number(stage.count) }));
   return {
     kind, startYmd: report.range.startYmd, endYmd, periodLabel: kpiPeriodLabel(report.range.startYmd, endYmd), generatedAt: new Date().toISOString(),
-    rows, totals: kpiTotals(rows), pipeline, pipelineTotal: pipeline.reduce((sum, status) => sum + status.count, 0), appUrl: reportsLink(),
+    rows, totals: kpiTotals(rows), pipeline, pipelineTotal: pipeline.reduce((sum, status) => sum + status.count, 0), pipelineByStage, appUrl: reportsLink(),
   };
 }
 

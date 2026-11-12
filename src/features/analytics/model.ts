@@ -98,6 +98,21 @@ export function summarizeTransitions(transitions: readonly Transition[]): Moveme
   return summary;
 }
 
+/** PIPE-12: the stage moves of a period: what each stage received, and how many moves went forward or back in board order. */
+export function summarizeStageMoves(moves: readonly { fromCode: string; toCode: string }[], order: readonly string[]): { entered: Record<string, number>; forward: number; backwards: number; total: number } {
+  const rank = new Map(order.map((code, index) => [code, index]));
+  const summary = { entered: {} as Record<string, number>, forward: 0, backwards: 0, total: 0 };
+  for (const { fromCode, toCode } of moves) {
+    summary.total += 1;
+    summary.entered[toCode] = (summary.entered[toCode] ?? 0) + 1;
+    const from = rank.get(fromCode);
+    const to = rank.get(toCode);
+    if (from === undefined || to === undefined || from === to) continue;
+    if (to > from) summary.forward += 1; else summary.backwards += 1;
+  }
+  return summary;
+}
+
 export function percentile(values: readonly number[], p: number): number | null {
   if (!values.length) return null;
   const sorted = [...values].sort((a, b) => a - b);
@@ -159,6 +174,12 @@ export type AnalyticsReport = {
   movement: MovementSummary & { byOwner: { ownerId: number; name: string; toWarm: number; toHot: number; toClient: number; lost: number; disqualified: number }[] };
   timeInStatus: { code: string; label: string; medianDays: number | null; p75Days: number | null; samples: number }[];
   stalled: { total: number; leads: StalledLead[] };
+  /** PIPE-12: the pipeline by stage (leads on the board: active, not Client or closed), stage over time from the stage_change entries, completed stays per stage, and the moves of the period. */
+  stages: { id: number; code: string; label: string }[];
+  pipelineByStage: { total: number; byStage: { id: number; code: string; label: string; count: number }[]; byOwner: { ownerId: number; name: string; counts: Record<string, number>; total: number }[] };
+  stageOverTime: { label: string; counts: Record<string, number> }[];
+  timeInStage: { code: string; label: string; medianDays: number | null; p75Days: number | null; samples: number }[];
+  stageMovement: { entered: Record<string, number>; forward: number; backwards: number; total: number };
   pool: { totals: { found: number; newCompanies: number; assigned: number; notRelevant: number; attached: number; medianHoursToAssign: number | null }; runs: { date: string; listingsFound: number; newCompanies: number; attached: number }[]; byJobType: { type: string; companies: number; assigned: number }[] };
   breakdown: { industries: BreakdownRow[]; cities: BreakdownRow[]; leadTypes: BreakdownRow[]; topClients: { leadId: number; clientName: string; ownerName: string; statusLabel: string; activities: number }[] };
   leaderboard: { ownerId: number; name: string; leadsCreated: number; conversions: number; activities: number; overdueFollowUps: number; opportunitiesTaken: number }[];

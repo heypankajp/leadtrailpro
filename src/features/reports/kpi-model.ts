@@ -86,6 +86,8 @@ export type KpiReportData = {
   /** Active leads per status, system-wide, as things stand. */
   pipeline: { label: string; count: number }[];
   pipelineTotal: number;
+  /** PIPE-12: leads on the Pipeline board per stage (active, not Client or closed), in board order. */
+  pipelineByStage: { label: string; count: number }[];
   appUrl: string | null;
 };
 
@@ -123,11 +125,15 @@ export function formatKpiText(data: KpiReportData): string {
     line(data.totals.name, kpiColumns.map((column) => cell(data.totals, column))),
   ];
   const pipeline = data.pipeline.length ? data.pipeline.map((status) => `${status.label} ${status.count}`).join(", ") : "no active leads";
+  const stages = data.pipelineByStage ?? [];
+  const onBoard = stages.reduce((sum, stage) => sum + stage.count, 0);
+  const byStage = stages.length ? stages.map((stage) => `${stage.label} ${stage.count}`).join(", ") : "no leads on the board";
   return [
     intro(data), "",
     data.rows.length ? table.join("\n") : "No active Sales Manager.", "",
     `Columns: ${kpiColumns.map((column) => `${column.short} = ${column.label}`).join("; ")}.`, "",
     `Pipeline now (${data.pipelineTotal} active leads): ${pipeline}.`,
+    `Pipeline by stage (${onBoard} on the board): ${byStage}.`,
     data.appUrl ? `\nOpen the reports in LeadTrailPro: ${data.appUrl}` : "",
   ].join("\n").trim() + "\n";
 }
@@ -144,12 +150,16 @@ export function formatKpiHtml(data: KpiReportData): string {
   const body = data.rows.map((row) => `<tr>${td(row.name, "text-align:left;font-weight:600;color:#2d3246")}${kpiColumns.map((column) => td(cell(row, column))).join("")}</tr>`).join("");
   const totals = `<tr>${td(data.totals.name, "text-align:left;font-weight:700;color:#2d3246;border-top:2px solid #d8dbe6")}${kpiColumns.map((column) => td(cell(data.totals, column), "font-weight:700;border-top:2px solid #d8dbe6")).join("")}</tr>`;
   const pipeline = data.pipeline.length ? data.pipeline.map((status) => `${escapeHtml(status.label)} <strong>${status.count}</strong>`).join(", ") : "no active leads";
+  const stages = data.pipelineByStage ?? [];
+  const onBoard = stages.reduce((sum, stage) => sum + stage.count, 0);
+  const byStage = stages.length ? stages.map((stage) => `${escapeHtml(stage.label)} <strong>${stage.count}</strong>`).join(", ") : "no leads on the board";
   return [
     `<div style="font-family:Arial,Helvetica,sans-serif;color:#2d3246">`,
     `<p>${escapeHtml(intro(data))}</p>`,
     data.rows.length ? `<table style="border-collapse:collapse;min-width:720px">${head}${body}${totals}</table>` : "<p>No active Sales Manager.</p>",
     `<p style="font-size:12px;color:#6b7190">${kpiColumns.map((column) => `${escapeHtml(column.short)} = ${escapeHtml(column.label)}`).join("; ")}.</p>`,
     `<p>Pipeline now (${data.pipelineTotal} active leads): ${pipeline}.</p>`,
+    `<p>Pipeline by stage (${onBoard} on the board): ${byStage}.</p>`,
     data.appUrl ? `<p><a href="${escapeHtml(data.appUrl)}">Open the reports in LeadTrailPro</a></p>` : "",
     "</div>",
   ].join("");

@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { asString, handleRouteError, jsonError, readJsonBody, requireSameOrigin } from "@/lib/http";
-import { bulkReassign, bulkSetState } from "@/features/leads/repository";
+import { bulkReassign, bulkSetStage, bulkSetState } from "@/features/leads/repository";
 import { requirePrivilege, requireUser } from "@/features/users/session";
 
-/** Bulk archive, restore, or reassign: { ids, action, ownerId?, reason? }. */
+/** Bulk archive, restore, reassign, or move to a stage (PIPE-11): { ids, action, ownerId?, reason?, stageId? }. */
 export async function POST(request: Request) {
   try {
     requireSameOrigin(request);
@@ -24,7 +24,14 @@ export async function POST(request: Request) {
       const count = await bulkReassign(ids, ownerId, reason, user);
       return NextResponse.json({ ok: true, count });
     }
-    return jsonError(400, "Action must be archive, restore, or reassign.");
+    if (body?.action === "stage") {
+      requirePrivilege(user, "edit_leads", "You do not have permission to move leads.");
+      const stageId = Number(body.stageId);
+      if (!Number.isSafeInteger(stageId) || stageId < 1) return jsonError(400, "Choose the stage.");
+      const count = await bulkSetStage(ids, stageId, user);
+      return NextResponse.json({ ok: true, count });
+    }
+    return jsonError(400, "Action must be archive, restore, reassign, or stage.");
   } catch (error) {
     return handleRouteError(error, "Bulk lead update");
   }

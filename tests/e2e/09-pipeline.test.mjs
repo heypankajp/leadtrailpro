@@ -70,6 +70,21 @@ describe("Pipeline board (PIPE-*)", () => {
     await page.wait(cardIn("Profile Shared", name));
   });
 
+  uiTest("the stage bar on the lead page moves the lead after a confirmation", async () => {
+    await page.click(By.xpath(`${column("Profile Shared")}//button[contains(@class,"pipeline-card-title")][.//strong[normalize-space()=${xq(name)}]]`), { global: true });
+    await page.dialogTitle(name);
+    assert.equal(await (await page.wait(By.css('.stage-bar button[aria-current="step"]'))).getAttribute("aria-label"), "Profile Shared (current stage)");
+    await page.click(By.css('.stage-bar button[aria-label="Move to Qualified"]'));
+    await page.dialogTitle(`Move ${name} to Qualified?`);
+    await page.clickButton("Move to Qualified");
+    await page.toast("Moved to Qualified");
+    await page.dialogTitle(`What's next for ${name}?`);
+    await page.clickButton("Skip");
+    await page.wait(By.css('.stage-bar button[aria-current="step"][aria-label="Qualified (current stage)"]'));
+    await page.closeDialog();
+    await page.wait(cardIn("Qualified", name));
+  });
+
   uiTest("the Action Center lists leads with no next step", async () => {
     const quiet = `Harbour Bakery ${runId}`;
     await addLead(page, { name: quiet });
@@ -79,5 +94,21 @@ describe("Pipeline board (PIPE-*)", () => {
     const panel = '//section[contains(@class,"reminder-panel")][.//h2[normalize-space()="No next step"]]';
     await page.wait(By.xpath(`${panel}//strong[normalize-space()=${xq(quiet)}]`));
     assert.equal((await driver.findElements(By.xpath(`${panel}//strong[normalize-space()=${xq(name)}]`))).length, 0, "a lead with an open task is not listed");
+  });
+
+  uiTest("moves several leads to a stage from the lead list", async () => {
+    const quiet = `Harbour Bakery ${runId}`;
+    await page.nav("All leads");
+    await page.heading("All leads");
+    await page.click(By.css(`input[aria-label="Select ${name}"]`), { global: true });
+    await page.click(By.css(`input[aria-label="Select ${quiet}"]`), { global: true });
+    await page.clickButton("Move to stage", { global: true });
+    await page.dialogTitle("Move 2 leads to a stage");
+    await page.fill("Target stage", "Contact Made");
+    await page.clickButton("Move leads");
+    await page.toast("2 leads moved to Contact Made");
+    for (const client of [name, quiet]) {
+      await page.wait(By.xpath(`//table[contains(@class,"lead-table")]//tr[.//strong[normalize-space()=${xq(client)}]]//span[contains(@class,"stage-cell") and normalize-space()="Contact Made"]`));
+    }
   });
 });

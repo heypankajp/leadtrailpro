@@ -321,7 +321,7 @@ export async function stageForAction(db: Queryable, bdActionId: number | null | 
 }
 
 /** Moves a lead to a stage from the board or the lead page (PIPE-05): a timeline entry and an audit row; whoever may edit the lead may move it. */
-export async function setLeadStage(id: number, stageId: number, actor: UserAccount, via: "board" | "detail" = "board"): Promise<LeadSummary> {
+export async function setLeadStage(id: number, stageId: number, actor: UserAccount, via: "board" | "detail" | "list" = "board"): Promise<LeadSummary> {
   return withTransaction(async (connection) => {
     const lead = await getLead(id, connection);
     if (!lead) throw new HttpError(404, "Lead not found.");
@@ -342,6 +342,18 @@ export async function setLeadStage(id: number, stageId: number, actor: UserAccou
     }, now);
     return updated;
   });
+}
+
+/** Bulk move from the lead list (PIPE-11): every selected active lead the actor may edit moves to the stage; the others are skipped. */
+export async function bulkSetStage(ids: number[], stageId: number, actor: UserAccount): Promise<number> {
+  let count = 0;
+  for (const id of ids) {
+    const lead = await getLead(id);
+    if (!lead || lead.recordState !== "active" || lead.stageId === stageId || !canEditLead(actor, lead)) continue;
+    await setLeadStage(id, stageId, actor, "list");
+    count += 1;
+  }
+  return count;
 }
 
 /**

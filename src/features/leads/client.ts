@@ -30,7 +30,7 @@ export const updateLead = (id: number, changes: Partial<LeadInput>) => api<{ lea
 export const transferLead = (id: number, ownerId: number, reason: string) => api<{ lead: LeadSummary }>(`/api/leads/${id}/transfer`, { method: "POST", json: { ownerId, reason } });
 export const reviewLead = (id: number, approve: boolean, comment: string) => api<{ lead: LeadSummary }>(`/api/leads/${id}/review`, { method: "POST", json: { approve, comment } });
 export const setLeadState = (id: number, state: "active" | "archived", reason: string) => api<{ lead: LeadSummary }>(`/api/leads/${id}/state`, { method: "POST", json: { state, reason } });
-export const bulkLeads = (ids: number[], action: "archive" | "restore" | "reassign", options: { ownerId?: number; reason?: string } = {}) =>
+export const bulkLeads = (ids: number[], action: "archive" | "restore" | "reassign" | "stage", options: { ownerId?: number; reason?: string; stageId?: number } = {}) =>
   api<{ ok: true; count: number }>("/api/leads/bulk", { method: "POST", json: { ids, action, ...options } });
 /** Task the note asked for (NOTE-05); `setFollowUpDate` also moves the lead's next follow-up to the due date when the user may edit the lead. */
 export type FollowUpTaskInput = { title: string; description?: string; dueAt: string | null; assigneeId?: number; priority?: TaskPriority; setFollowUpDate?: boolean };

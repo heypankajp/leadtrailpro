@@ -45,6 +45,10 @@ export default function AnalyticsSections({ period, custom, ownerId }: Props) {
   const drillTo = (title: string, statusCode: string | null, drillOwner: number | null) => drillWith(title, () => fetchAnalyticsLeads(effective, statusCode, drillOwner));
 
   const statusSeries = (report: AnalyticsReport) => report.statuses.map((status, index) => ({ key: status.code, label: status.label, color: colorFor(status.code, index) }));
+  // PIPE-12: stages take the categorical hues in board order.
+  const stageColor = (index: number) => seriesColors[index % seriesColors.length];
+  const stageSeries = (report: AnalyticsReport) => report.stages.map((stage, index) => ({ key: stage.code, label: stage.label, color: stageColor(index) }));
+  const drillStage = (stage: { id: number; label: string }, drillOwner: number | null, ownerName?: string) => drillWith(`${ownerName ? `${ownerName} · ` : ""}${stage.label} stage`, () => fetchAnalyticsLeads(effective, null, drillOwner, stage.id));
   const bucketLabel = (report: AnalyticsReport, label: string) => (report.bucketKind === "month" ? label.slice(0, 7) : formatShortDate(label));
 
   return (
@@ -78,7 +82,45 @@ export default function AnalyticsSections({ period, custom, ownerId }: Props) {
                 data={data.pipeline.byOwner.map((owner) => ({ name: owner.name, ownerId: owner.ownerId, ...owner.counts }))}
                 onBarClick={(row, code) => void drillTo(`${String(row.name)} · ${data.statuses.find((status) => status.code === code)?.label ?? code}`, code, Number(row.ownerId))} />
             )}
+            {data.stages.length > 0 && (
+              <>
+                <div className="panel-heading analytics-subheading"><div><h3>By stage</h3><p>{data.pipelineByStage.total} leads on the Pipeline board (active, not Client or closed){data.teamWide ? ", by stage and salesperson" : ""}</p></div></div>
+                <div className="opportunity-stats">
+                  {data.pipelineByStage.byStage.map((stage, index) => (
+                    <button type="button" key={stage.code} className="small-stat small-stat-button" onClick={() => void drillStage(stage, null)}>
+                      <div className="small-stat-top"><span><i className="stat-dot" style={{ background: stageColor(index) }} /> {stage.label}</span></div><strong>{stage.count}</strong><small>of {data.pipelineByStage.total}</small>
+                    </button>
+                  ))}
+                </div>
+                {data.teamWide && data.pipelineByStage.byOwner.length > 0 && (
+                  <StackedBars horizontal height={Math.max(160, 34 * data.pipelineByStage.byOwner.length + 60)} xKey="name" series={stageSeries(data)}
+                    data={data.pipelineByStage.byOwner.map((owner) => ({ name: owner.name, ownerId: owner.ownerId, ...owner.counts }))}
+                    onBarClick={(row, code) => { const stage = data.stages.find((item) => item.code === code); if (stage) void drillStage(stage, Number(row.ownerId), String(row.name)); }} />
+                )}
+              </>
+            )}
           </section>
+
+          {data.stages.length > 0 && (
+            <div className="analytics-grid">
+              <section className="panel analytics-panel">
+                <div className="panel-heading"><div><h2>Stage over time</h2><p>How the board looked at the end of each {data.bucketKind}, from every stage move on the timeline; leads placed by the migration count in their first known stage</p></div></div>
+                {data.stageOverTime.length === 0 ? <EmptyState title="Nothing in this period" /> : (
+                  <StackedBars height={240} xKey="label" series={stageSeries(data)} data={data.stageOverTime.map((point) => ({ label: bucketLabel(data, point.label), ...point.counts }))} />
+                )}
+              </section>
+              <section className="panel analytics-panel">
+                <div className="panel-heading"><div><h2>Time in stage</h2><p>Median days a lead stayed in a stage before moving on (stays that ended in the period) · {data.stageMovement.total} stage move{data.stageMovement.total === 1 ? "" : "s"} in the period, {data.stageMovement.forward} forward, {data.stageMovement.backwards} back</p></div></div>
+                {data.timeInStage.every((row) => row.samples === 0) ? <EmptyState title="No completed stays in this period" /> : (
+                  <>
+                    <CategoryBars labelKey="label" valueKey="medianDays" valueLabel="Median days" colorOf={(_row, index) => stageColor(index)} data={data.timeInStage.map((row) => ({ label: row.label, code: row.code, medianDays: row.medianDays ?? 0 }))} />
+                    <table className="opp-table"><thead><tr><th>Stage</th><th>Median days</th><th>Slowest quarter from</th><th>Leads measured</th><th>Entered in period</th></tr></thead>
+                      <tbody>{data.timeInStage.map((row) => <tr key={row.code}><td>{row.label}</td><td>{row.medianDays ?? "—"}</td><td>{row.p75Days ?? "—"}</td><td>{row.samples}</td><td>{data.stageMovement.entered[row.code] ?? 0}</td></tr>)}</tbody></table>
+                  </>
+                )}
+              </section>
+            </div>
+          )}
 
           <section className="panel analytics-panel">
             <div className="panel-heading"><div><h2>Status over time</h2><p>How the pipeline looked at the end of each {data.bucketKind}, from every status change on the timeline</p></div></div>

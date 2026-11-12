@@ -11,5 +11,5 @@ const filterQuery = (period: ReportPeriod, custom: CustomRange | null, filters: 
 export const fetchAnalytics = (period: ReportPeriod, custom: CustomRange | null, filters: AnalyticsFilters) => api<AnalyticsReport>(`/api/analytics${toQuery(filterQuery(period, custom, filters))}`);
 export const fetchTeamBoard = () => api<TeamBoard>("/api/analytics/team");
 export const fetchTeamBoardLeads = (userId: number, metric: TeamBoardMetric) => api<{ leads: LeadSummary[] }>(`/api/analytics/team/leads${toQuery({ userId, metric })}`);
-export const fetchAnalyticsLeads = (filters: AnalyticsFilters, statusCode: string | null, ownerId: number | null) =>
-  api<{ leads: LeadSummary[] }>(`/api/analytics/leads${toQuery({ ...filterQuery("this_week", null, filters), period: undefined, status: statusCode, drillOwnerId: ownerId })}`);
+export const fetchAnalyticsLeads = (filters: AnalyticsFilters, statusCode: string | null, ownerId: number | null, stageId: number | null = null) =>
+  api<{ leads: LeadSummary[] }>(`/api/analytics/leads${toQuery({ ...filterQuery("this_week", null, filters), period: undefined, status: statusCode, drillOwnerId: ownerId, stageId })}`);

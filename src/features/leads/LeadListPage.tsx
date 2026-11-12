@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { errorMessage } from "@/lib/api";
 import { useAsyncData } from "@/lib/useAsyncData";
-import { ChevronDown, Filter, Plus, Search, SlidersHorizontal, UserRound, X } from "lucide-react";
+import { ChevronDown, Filter, Kanban, Plus, Search, SlidersHorizontal, UserRound, X } from "lucide-react";
 import { reasonListFor } from "@/features/list-values/model";
 import { useApp } from "@/features/shell/AppContext";
-import { ErrorText, Loading, Pagination, PromptDialog } from "@/features/shell/components";
+import { Dialog, ErrorText, Field, Loading, Pagination, PromptDialog } from "@/features/shell/components";
+import { entryStageCode } from "@/features/list-values/model";
 import UserDirectoryDialog from "@/features/users/UserDirectoryDialog";
 import type { UserSummary } from "@/features/users/model";
 import { bulkLeads, fetchLeads, reviewLead, setLeadState, type LeadQuery } from "./client";
@@ -58,8 +60,11 @@ export default function LeadListPage({ view }: { view: LeadListView }) {
     | { kind: "restore"; ids: number[] }
     | { kind: "reassign-pick"; ids: number[] }
     | { kind: "reassign-reason"; ids: number[]; user: UserSummary }
+    | { kind: "stage"; ids: number[] }
     | null
   >(null);
+  // PIPE-11: bulk move to a stage; the entry stage is pre-selected.
+  const [bulkStageId, setBulkStageId] = useState("");
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedQ(filters.q), 300);
@@ -92,12 +97,13 @@ export default function LeadListPage({ view }: { view: LeadListView }) {
   const canSelect = view === "queued" ? false : can("archive_leads") || can("reassign_leads");
   const title = titles[view];
 
-  const runBulk = async (ids: number[], action: "archive" | "restore" | "reassign", options: { ownerId?: number; reason?: string }) => {
+  const runBulk = async (ids: number[], action: "archive" | "restore" | "reassign" | "stage", options: { ownerId?: number; reason?: string; stageId?: number }) => {
     const result = await bulkLeads(ids, action, options);
     setDialog(null);
     setSelected([]);
     bumpData();
-    notify(`${result.count} ${result.count === 1 ? "lead" : "leads"} ${action === "archive" ? "archived" : action === "restore" ? "restored" : "reassigned"}`);
+    const stageName = options.stageId ? reference.listValues.stage.find((stage) => stage.id === options.stageId)?.value ?? "the stage" : "";
+    notify(`${result.count} ${result.count === 1 ? "lead" : "leads"} ${action === "archive" ? "archived" : action === "restore" ? "restored" : action === "stage" ? `moved to ${stageName}` : "reassigned"}`);
   };
 
   const options = (list: { id: number; value: string }[], placeholder: string, value: string, key: keyof Filters) => (
@@ -184,6 +190,7 @@ export default function LeadListPage({ view }: { view: LeadListView }) {
               {view === "archive" && can("archive_leads") && <button onClick={() => setDialog({ kind: "restore", ids: selected })}>Restore selected</button>}
               {view !== "archive" && can("archive_leads") && <button onClick={() => setDialog({ kind: "archive", ids: selected })}>Archive selected</button>}
               {can("reassign_leads") && <button onClick={() => setDialog({ kind: "reassign-pick", ids: selected })}><UserRound size={13} /> Reassign owner</button>}
+              {view !== "archive" && can("edit_leads") && <button onClick={() => { setBulkStageId(String(reference.listValues.stage.find((stage) => stage.code === entryStageCode)?.id ?? reference.listValues.stage[0]?.id ?? "")); setDialog({ kind: "stage", ids: selected }); }}><Kanban size={13} /> Move to stage</button>}
               <button className="bulk-clear" onClick={() => setSelected([])}>Clear selection</button>
             </div>
           )}
@@ -253,6 +260,22 @@ export default function LeadListPage({ view }: { view: LeadListView }) {
           onClose={() => setDialog(null)}
           onPick={(user) => setDialog({ kind: "reassign-reason", ids: dialog.ids, user })}
         />
+      )}
+      {dialog?.kind === "stage" && (
+        <Dialog title={`Move ${dialog.ids.length === 1 ? "lead" : `${dialog.ids.length} leads`} to a stage`} eyebrow="PIPELINE STAGE" size="narrow" onClose={() => setDialog(null)}>
+          <form className="stack-form" onSubmit={(event) => { event.preventDefault(); void runBulk(dialog.ids, "stage", { stageId: Number(bulkStageId) }).catch((caught: unknown) => notify(errorMessage(caught), "error")); }}>
+            <p className="dialog-description">Each lead you may edit moves to the chosen stage with a timeline entry; leads already there, queued, or closed are skipped.</p>
+            <Field label="Target stage" required>
+              <select value={bulkStageId} onChange={(event) => setBulkStageId(event.target.value)} required>
+                {reference.listValues.stage.map((stage) => <option key={stage.id} value={stage.id}>{stage.value}</option>)}
+              </select>
+            </Field>
+            <div className="modal-actions">
+              <button type="button" className="button button-outline" onClick={() => setDialog(null)}>Cancel</button>
+              <button type="submit" className="button button-primary">Move leads</button>
+            </div>
+          </form>
+        </Dialog>
       )}
       {dialog?.kind === "reassign-reason" && (
         <PromptDialog title={`Reassign to ${dialog.user.name}`} eyebrow="OWNERSHIP" label="Reason (optional)" confirmLabel="Reassign" onClose={() => setDialog(null)} onConfirm={(reason) => runBulk(dialog.ids, "reassign", { ownerId: dialog.user.id, reason })} />

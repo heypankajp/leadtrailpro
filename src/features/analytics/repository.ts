@@ -9,7 +9,7 @@ import { listUsers } from "@/features/users/repository";
 import { hasPrivilege } from "@/features/users/model";
 import type { UserAccount } from "@/features/users/model";
 import {
-  bucketKindFor, buckets, closedCodes, median, percentile, spellsOf, stalledAssessment, statusSeries, summarizeTransitions,
+  bucketKindFor, buckets, closedCodes, median, percentile, spellsOf, stalledAssessment, statusSeries, summarizeStageMoves, summarizeTransitions,
   sortTeamBoard, type AnalyticsFilters, type AnalyticsReport, type BreakdownRow, type StalledLead, type StatusEvent, type TeamBoard, type TeamBoardMetric, type Transition,
 } from "./model";
 
@@ -60,7 +60,7 @@ export async function buildAnalytics(viewer: UserAccount, period: ReportPeriod, 
   const timeZone = businessTimeZone();
   const { where, params } = leadFilterSql(filters);
 
-  const [{ rows: statusRows }, { rows: leadRows }] = await Promise.all([
+  const [{ rows: statusRows }, { rows: leadRows }, { rows: stageRows }] = await Promise.all([
     db.query("SELECT code, value FROM list_values WHERE list_key = 'status' AND is_active = TRUE ORDER BY sort_order, id"),
     db.query(
       `SELECT l.id, l.owner_id AS "ownerId", CONCAT(o.first_name, ' ', o.last_name) AS "ownerName", l.status_id AS "statusId", st.code AS "statusCode", st.value AS status, sr.value AS "statusReason",
@@ -71,8 +71,15 @@ export async function buildAnalytics(viewer: UserAccount, period: ReportPeriod, 
        WHERE ${where}`,
       params,
     ),
+    db.query("SELECT id, code, value FROM list_values WHERE list_key = 'stage' AND is_active = TRUE ORDER BY sort_order, id"),
   ]);
   const statuses = (statusRows as { code: string; value: string }[]).map((row) => ({ code: row.code, label: row.value }));
+  // PIPE-12: the stages in board order; a lead never placed counts in the entry stage, like on the board.
+  const stages = (stageRows as { id: number; code: string; value: string }[]).map((row) => ({ id: Number(row.id), code: row.code, label: row.value }));
+  const stageCodes = stages.map((stage) => stage.code);
+  const entryStage = stages.find((stage) => stage.code === "new_deal") ?? stages[0] ?? null;
+  const stageCodeOf = (stageId: number | null) => stages.find((stage) => stage.id === stageId)?.code ?? entryStage?.code ?? "";
+  const stageLabelOf = (code: string) => stages.find((stage) => stage.code === code)?.label ?? code;
   const codes = statuses.map((status) => status.code);
   const labelOf = (code: string) => statuses.find((status) => status.code === code)?.label ?? code;
   const leads = (leadRows as LeadRow[]).map((row) => ({
@@ -109,6 +116,27 @@ export async function buildAnalytics(viewer: UserAccount, period: ReportPeriod, 
   }
   const leadInfo = new Map(leads.map((lead) => [lead.id, lead]));
 
+  // Stage history (PIPE-12): a lead is taken to have been in the "from" stage of its first stage_change since creation, else in its current stage all along.
+  type StageEventRow = { leadId: number; at: string; code: string | null; meta: Record<string, unknown> | string | null };
+  const stageEvents = ids.length && stages.length
+    ? ((await db.query(`SELECT lead_id AS "leadId", occurred_at AS at, value_code AS code, meta FROM lead_activities WHERE activity_type = 'stage_change' AND lead_id = ANY(?) ORDER BY occurred_at, id`, [ids])).rows as StageEventRow[])
+      .map((row) => { let meta: Record<string, unknown> = {}; if (typeof row.meta === "string") { try { meta = JSON.parse(row.meta) as Record<string, unknown>; } catch { meta = {}; } } else if (row.meta) meta = row.meta; return { leadId: Number(row.leadId), at: fromSqlDateTime(row.at) ?? row.at, toCode: (typeof meta.toCode === "string" ? meta.toCode : row.code) ?? "", fromCode: typeof meta.fromCode === "string" ? meta.fromCode : "" }; })
+    : [];
+  const stageHistory = new Map<number, { at: string; code: string }[]>();
+  const firstFrom = new Map<number, string>();
+  const stageChanges: StatusEvent[] = [];
+  const stageMoves: { fromCode: string; toCode: string; at: string }[] = [];
+  for (const event of stageEvents) {
+    if (!event.toCode) continue;
+    if (!firstFrom.has(event.leadId) && event.fromCode) firstFrom.set(event.leadId, event.fromCode);
+    stageChanges.push({ leadId: event.leadId, at: event.at, code: event.toCode });
+    const list = stageHistory.get(event.leadId) ?? [];
+    if (!stageHistory.has(event.leadId)) stageHistory.set(event.leadId, list);
+    list.push({ at: event.at, code: event.toCode });
+    if (event.fromCode) stageMoves.push({ fromCode: event.fromCode, toCode: event.toCode, at: event.at });
+  }
+  const initialStage = (lead: { id: number; stageId: number | null }) => firstFrom.get(lead.id) ?? stageCodeOf(lead.stageId);
+
   // Pipeline now
   const byStatusCount = new Map<string, number>();
   const byOwnerMap = new Map<number, { ownerId: number; name: string; counts: Record<string, number>; total: number }>();
@@ -120,11 +148,40 @@ export async function buildAnalytics(viewer: UserAccount, period: ReportPeriod, 
     owner.total += 1;
   }
 
+  // Pipeline by stage (PIPE-12): the leads on the board, as the Pipeline page counts them
+  const onBoard = leads.filter((lead) => lead.recordState === "active" && !closedCodes.includes(lead.statusCode) && lead.statusCode !== "client");
+  const byStageCount = new Map<string, number>();
+  const byOwnerStage = new Map<number, { ownerId: number; name: string; counts: Record<string, number>; total: number }>();
+  for (const lead of onBoard) {
+    const code = stageCodeOf(lead.stageId);
+    byStageCount.set(code, (byStageCount.get(code) ?? 0) + 1);
+    const owner = byOwnerStage.get(lead.ownerId) ?? { ownerId: lead.ownerId, name: lead.ownerName, counts: Object.fromEntries(stageCodes.map((item) => [item, 0])), total: 0 };
+    if (!byOwnerStage.has(lead.ownerId)) byOwnerStage.set(lead.ownerId, owner);
+    owner.counts[code] = (owner.counts[code] ?? 0) + 1;
+    owner.total += 1;
+  }
+
   // Status over time
   const bucketKind = bucketKindFor(range.startYmd, range.endExclusiveYmd);
   const bucketList = buckets(range.startYmd, range.endExclusiveYmd, bucketKind);
   const bucketEnds = bucketList.map((bucket, index) => ({ label: bucket.start, endIso: index === bucketList.length - 1 ? range.end.toISOString() : startOfDayUtc(bucket.endExclusive, timeZone).toISOString() }));
   const statusOverTime = statusSeries(leads.map((lead) => ({ id: lead.id, createdAt: lead.createdAt, initialCode: initialCode.get(lead.id) ?? lead.statusCode })), changes, bucketEnds, codes);
+  // Stage over time, time in stage, and the stage moves of the period (PIPE-12)
+  const periodStartIso = range.start.toISOString();
+  const periodEndIso = range.end.toISOString();
+  const stageOverTime = stages.length ? statusSeries(leads.map((lead) => ({ id: lead.id, createdAt: lead.createdAt, initialCode: initialStage(lead) })), stageChanges, bucketEnds, stageCodes) : [];
+  const stageSpells = new Map<string, number[]>();
+  for (const lead of leads) {
+    const events = [{ at: lead.createdAt, code: initialStage(lead) }, ...(stageHistory.get(lead.id) ?? [])];
+    for (const spell of spellsOf(events)) {
+      if (spell.endedAt < periodStartIso || spell.endedAt >= periodEndIso) continue;
+      const values = stageSpells.get(spell.code) ?? [];
+      if (!stageSpells.has(spell.code)) stageSpells.set(spell.code, values);
+      values.push(spell.days);
+    }
+  }
+  const timeInStage = stages.map((stage) => { const values = stageSpells.get(stage.code) ?? []; return { code: stage.code, label: stage.label, medianDays: median(values), p75Days: percentile(values, 0.75), samples: values.length }; });
+  const stageMovement = summarizeStageMoves(stageMoves.filter((move) => move.at >= periodStartIso && move.at < periodEndIso), stageCodes);
 
   // Movement in the period
   const startIso = range.start.toISOString();
@@ -252,6 +309,11 @@ export async function buildAnalytics(viewer: UserAccount, period: ReportPeriod, 
     movement: { ...movement, byOwner: [...movementByOwner.values()].sort((a, b) => b.toClient - a.toClient || b.toHot - a.toHot) },
     timeInStatus,
     stalled: { total: stalledLeads.length, leads: stalledLeads.slice(0, 100) },
+    stages,
+    pipelineByStage: { total: onBoard.length, byStage: stages.map((stage) => ({ ...stage, count: byStageCount.get(stage.code) ?? 0 })), byOwner: [...byOwnerStage.values()].sort((a, b) => b.total - a.total) },
+    stageOverTime,
+    timeInStage: timeInStage.map((row) => ({ ...row, label: stageLabelOf(row.code) })),
+    stageMovement,
     pool,
     breakdown: { industries: top(industries), cities: top(cities), leadTypes: top(leadTypes), topClients },
     leaderboard,
@@ -259,11 +321,16 @@ export async function buildAnalytics(viewer: UserAccount, period: ReportPeriod, 
 }
 
 /** The leads behind a chart segment: the same filters, narrowed to a status and/or an owner (drill-down). */
-export async function listAnalyticsLeads(viewer: UserAccount, requested: AnalyticsFilters, statusCode: string | null, ownerId: number | null, db: Queryable = getDatabasePool()): Promise<LeadSummary[]> {
+export async function listAnalyticsLeads(viewer: UserAccount, requested: AnalyticsFilters, statusCode: string | null, ownerId: number | null, stageId: number | null = null, db: Queryable = getDatabasePool()): Promise<LeadSummary[]> {
   const { filters } = scopedFilters(viewer, requested);
   const { where, params } = leadFilterSql(ownerId ? { ...filters, ownerId } : filters);
   const clauses = [where];
   if (statusCode) { clauses.push("st.code = ?"); params.push(statusCode); }
+  if (stageId) {
+    // The board's population: a lead never placed counts in the entry stage.
+    clauses.push("l.record_state = 'active' AND st.code NOT IN ('client', 'lost', 'disqualified') AND (l.stage_id = ? OR (l.stage_id IS NULL AND ? = (SELECT id FROM list_values WHERE list_key = 'stage' AND code = 'new_deal')))");
+    params.push(stageId, stageId);
+  }
   return selectLeads(clauses.join(" AND "), params, "l.last_activity_at DESC", 200, db);
 }
 
