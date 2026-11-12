@@ -184,7 +184,9 @@ export async function buildDashboard(viewer: UserAccount, scope: "mine" | "team"
   const nowMs = Date.now();
 
   // The dashboard's queries are independent, so they run concurrently on the pool (NFR-01: the Action Center stays fast as the lead base grows).
-  const [thisCounts, lastCounts, overdue, dueToday, dueTomorrow, template, weekLeads, monthConversions, ownCounts, candidates, openTasks, recentLeads, clientReplies] = await Promise.all([
+  // PIPE-10: a lead on the board with nothing scheduled: no open task and no follow-up date today or later.
+  const noNextStepWhere = "l.record_state = 'active' AND st.code NOT IN ('client', 'lost', 'disqualified') AND (l.follow_up_date IS NULL OR l.follow_up_date < ?) AND NOT EXISTS (SELECT 1 FROM tasks t WHERE t.lead_id = l.id AND t.status = 'open')";
+  const [thisCounts, lastCounts, overdue, dueToday, dueTomorrow, template, weekLeads, monthConversions, ownCounts, candidates, openTasks, recentLeads, clientReplies, noNextStep, noNextStepCount] = await Promise.all([
     activityCounts(db, userIds, thisWeek),
     activityCounts(db, userIds, lastWeek),
     selectLeads(`l.record_state = 'active' AND l.follow_up_date < ? ${ownerClause}`, [today, ...ownerParams], "l.follow_up_date ASC, l.id DESC", 50, db),
@@ -198,6 +200,8 @@ export async function buildDashboard(viewer: UserAccount, scope: "mine" | "team"
     listTasks({ assigneeId: teamWide ? undefined : viewer.id, status: "open", limit: 200 }, db),
     selectLeads(`l.record_state = 'active' ${ownerClause}`, ownerParams, "l.last_activity_at DESC", 8, db),
     selectLeads(`l.record_state = 'active' AND l.last_client_email_at IS NOT NULL AND l.last_client_email_at > COALESCE(l.last_team_email_at, '1970-01-01'::timestamp) AND l.last_client_email_at > l.last_activity_at ${ownerClause}`, ownerParams, "l.last_client_email_at DESC", 20, db),
+    selectLeads(`${noNextStepWhere} ${ownerClause}`, [today, ...ownerParams], "l.last_activity_at DESC", 20, db),
+    db.query(`SELECT COUNT(*) AS count FROM leads l JOIN list_values st ON st.id = l.status_id WHERE ${noNextStepWhere} ${ownerClause}`, [today, ...ownerParams]).then((result) => Number((result.rows as { count: number }[])[0].count)),
   ]);
   const followUps = { overdue, today: dueToday, tomorrow: dueTomorrow };
   const weekVisits = (ownCounts ?? thisCounts).get(viewer.id)?.visits ?? 0;
@@ -233,6 +237,8 @@ export async function buildDashboard(viewer: UserAccount, scope: "mine" | "team"
     inactivityDays: settings.reminders.inactivityDays,
     inactiveLimits,
     inactivityRuleCount: reminders.rules.length,
+    noNextStep,
+    noNextStepCount,
     openTasks: openTasks.slice(0, 10),
     overdueTaskCount: openTasks.filter((task) => task.dueAt && task.dueAt < nowIso).length,
     recentLeads,

@@ -28,6 +28,20 @@ describe("Administration and reports", () => {
     await page.wait(By.xpath(`//table//strong[normalize-space()=${xq(value)}]`));
   });
 
+  uiTest("maps a BD action to a pipeline stage and recomputes the stages", async () => {
+    await page.click(By.xpath('.//nav[contains(@class,"values-nav")]//button[starts-with(normalize-space(.), "BD action")]'), { global: true });
+    const select = await page.wait(By.css('select[aria-label="Stage for First Call"]'));
+    assert.equal(await page.selectedText(select), "Contact Made");
+    await page.setValue(select, "Qualified");
+    await page.toast('"First Call" now lands leads in Qualified');
+    await page.setValue(await page.wait(By.css('select[aria-label="Stage for First Call"]')), "Contact Made");
+    await page.toast('"First Call" now lands leads in Contact Made');
+    await page.clickButton("Recompute stages from BD actions", { global: true });
+    await page.dialogTitle("Recompute stages from BD actions");
+    await page.clickButton("Recompute stages");
+    await page.toast("placed again from their BD actions");
+  });
+
   uiTest("renames a role in settings and the sidebar follows", async () => {
     await page.nav("Settings");
     await page.heading("Settings");
@@ -41,20 +55,40 @@ describe("Administration and reports", () => {
     await page.waitText(By.css(".workspace-switcher strong"), "Admin");
   });
 
-  uiTest("adds a needs-attention rule for a status", async () => {
+  uiTest("adds a needs-attention rule for a status next to the seeded stage rules", async () => {
+    // Migration 19 seeds six rules by stage (board order); the new one is the seventh.
+    assert.equal(await page.selectedText(await page.wait(By.css('select[aria-label="Rule 1 stage"]'))), "New Deal");
+    assert.equal(await page.selectedText(await page.wait(By.css('select[aria-label="Rule 6 stage"]'))), "Negotiations started");
+    assert.equal((await driver.findElements(By.css('select[aria-label="Rule 7 stage"]'))).length, 0, "six seeded rules before adding one");
     await page.clickButton("Add rule", { global: true });
-    await page.setValue(await page.wait(By.css('select[aria-label="Rule 1 status"]')), "Hot");
-    await page.setValue(await page.wait(By.css('input[aria-label="Rule 1 days"]')), "3");
+    await page.setValue(await page.wait(By.css('select[aria-label="Rule 7 status"]')), "Hot");
+    await page.setValue(await page.wait(By.css('input[aria-label="Rule 7 days"]')), "3");
     await page.clickButton("Save settings", { global: true });
     await page.toast("Settings saved");
     await driver.navigate().refresh();
     await page.heading("Settings");
-    assert.equal(await page.selectedText(await page.wait(By.css('select[aria-label="Rule 1 status"]'))), "Hot");
-    assert.equal(await (await page.wait(By.css('input[aria-label="Rule 1 days"]'))).getAttribute("value"), "3");
+    assert.equal(await page.selectedText(await page.wait(By.css('select[aria-label="Rule 7 status"]'))), "Hot");
+    assert.equal(await (await page.wait(By.css('input[aria-label="Rule 7 days"]'))).getAttribute("value"), "3");
     await page.nav("Action center");
-    await page.waitText(By.xpath('//section[contains(@class,"reminder-panel")][.//h2[normalize-space()="Needs attention"]]//p'), "1 status/action rule");
+    await page.waitText(By.xpath('//section[contains(@class,"reminder-panel")][.//h2[normalize-space()="Needs attention"]]//p'), "7 rules by status, BD action, or stage");
     await page.nav("Settings");
     await page.heading("Settings");
+  });
+
+  uiTest("sets the next step a stage suggests under Settings → Pipeline", async () => {
+    assert.equal(await page.selectedText(await page.wait(By.css('select[aria-label="Contact Made next step"]'))), "Call");
+    await page.setValue(await page.wait(By.css('select[aria-label="Contact Made next step"]')), "Email");
+    await page.setValue(await page.wait(By.css('input[aria-label="Contact Made business days"]')), "2");
+    await page.clickButton("Save settings", { global: true });
+    await page.toast("Settings saved");
+    await driver.navigate().refresh();
+    await page.heading("Settings");
+    assert.equal(await page.selectedText(await page.wait(By.css('select[aria-label="Contact Made next step"]'))), "Email");
+    assert.equal(await (await page.wait(By.css('input[aria-label="Contact Made business days"]'))).getAttribute("value"), "2");
+    await page.setValue(await page.wait(By.css('select[aria-label="Contact Made next step"]')), "Call");
+    await page.setValue(await page.wait(By.css('input[aria-label="Contact Made business days"]')), "1");
+    await page.clickButton("Save settings", { global: true });
+    await page.toast("Settings saved");
   });
 
   uiTest("a set-password link from the stub outbox resets the password", async () => {

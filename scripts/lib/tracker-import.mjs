@@ -376,7 +376,7 @@ export async function runTrackerImport(options) {
 
   // List values.
   const lists = {};
-  for (const row of (await query('SELECT id, list_key AS "listKey", code, value, sort_order AS "sortOrder" FROM list_values')).rows) (lists[row.listKey] ??= []).push(row);
+  for (const row of (await query('SELECT id, list_key AS "listKey", code, value, sort_order AS "sortOrder", stage_id AS "stageId" FROM list_values')).rows) (lists[row.listKey] ??= []).push(row);
   async function ensureValue(listKey, value) {
     const text = clean(value);
     if (!text) return null;
@@ -393,6 +393,14 @@ export async function runTrackerImport(options) {
   }
   const listItem = (listKey, id) => (lists[listKey] ?? []).find((item) => item.id === id) ?? null;
   const statusIdByCode = Object.fromEntries((lists.status ?? []).map((item) => [item.code, item.id]));
+  // PIPE-03 (SPEC §10.11): the stage a BD action lands a lead in (List of values → BD action); an action with no mapping counts as
+  // Contact Made, no action as New Deal. Mirrors resolveStageForAction in features/pipeline/model.ts.
+  const stageByCode = Object.fromEntries((lists.stage ?? []).map((item) => [item.code, item]));
+  const stageIdForAction = (actionId) => {
+    const action = actionId ? listItem("bd_action", actionId) : null;
+    const mapped = action?.stageId ? listItem("stage", Number(action.stageId)) : null;
+    return (mapped ?? stageByCode[actionId ? "contact_made" : "new_deal"] ?? stageByCode.new_deal ?? null)?.id ?? null;
+  };
   for (const code of ["cold", "warm", "hot", "client"]) if (!statusIdByCode[code]) throw new TrackerImportError("status_missing", `Status "${code}" is missing from the list of values.`);
 
   // Leads already in the database, one per normalised company name (an active lead first, then the oldest).
@@ -400,7 +408,7 @@ export async function runTrackerImport(options) {
   const leadById = new Map();
   const leadRows = (await query(
     `SELECT l.id, l.owner_id AS "ownerId", l.lead_type_id AS "leadTypeId", l.status_id AS "statusId", s.code AS "statusCode", s.value AS "statusLabel",
-       l.bd_action_id AS "bdActionId", l.client_response_id AS "clientResponseId", l.city_id AS "cityId", l.client_name AS "clientName", l.address, l.comments,
+       l.bd_action_id AS "bdActionId", l.stage_id AS "stageId", l.client_response_id AS "clientResponseId", l.city_id AS "cityId", l.client_name AS "clientName", l.address, l.comments,
        l.client_executive AS "clientExecutive", l.contact_phone AS "contactPhone", l.contact_alt_phone AS "contactAltPhone", l.contact_remark AS "contactRemark",
        l.client_emails AS "clientEmails", l.industry, l.positions, to_char(l.first_contact_date, 'YYYY-MM-DD') AS "firstContactDate",
        to_char(l.follow_up_date, 'YYYY-MM-DD') AS "followUpDate", to_char(l.contract_signed_date, 'YYYY-MM-DD') AS "contractSignedDate",
@@ -545,13 +553,14 @@ export async function runTrackerImport(options) {
     const actionName = lead.action ? canonicalBdAction(lead.action.name, keepActionNames) : null;
     if (lead.action && actionName !== lead.action.name) decision(`BD action "${lead.action.name}" imported as "${actionName}"`);
     const cityId = await ensureValue("city", lead.city);
+    const actionId = await ensureValue("bd_action", actionName);
     const { rows: [created] } = await query(
-      `INSERT INTO leads (owner_id, created_by, lead_type_id, status_id, status_reason_id, bd_action_id, client_response_id, lead_category_id, company_size_id, city_id,
+      `INSERT INTO leads (owner_id, created_by, lead_type_id, status_id, status_reason_id, bd_action_id, client_response_id, lead_category_id, company_size_id, city_id, stage_id,
          client_name, company_url, address, comments, client_executive, contact_phone, contact_alt_phone, contact_remark, client_emails, industry, positions,
          first_contact_date, follow_up_date, contract_signed_date, record_state, state_reason, state_changed_by, state_changed_at, last_activity_at, created_at)
-       VALUES (?, ?, ?, ?, NULL, ?, ?, NULL, NULL, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+       VALUES (?, ?, ?, ?, NULL, ?, ?, NULL, NULL, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
       [
-        ownerId, actor.id, await ensureValue("lead_type", leadType), statusIdByCode[statusCode], await ensureValue("bd_action", actionName), await ensureValue("client_response", lead.response), cityId,
+        ownerId, actor.id, await ensureValue("lead_type", leadType), statusIdByCode[statusCode], actionId, await ensureValue("client_response", lead.response), cityId, stageIdForAction(actionId),
         truncate(lead.name, 200), lead.address, lead.comments || null, lead.executive, lead.phone, lead.altPhone, lead.contactRemark, JSON.stringify(lead.emails), lead.industry, lead.positions || null,
         firstContact, lead.followUp, lead.contract,
         insertOptions.archived ? "archived" : "active", insertOptions.archived ? insertOptions.reason : null, insertOptions.archived ? actor.id : null, insertOptions.archived ? nowSql : null,
@@ -594,7 +603,14 @@ export async function runTrackerImport(options) {
     const statusId = lead.status ? statusIdByCode[lead.status] : null;
     if (statusId && statusId !== existing.statusId) { change("status_id", "status", existing.statusId, statusId); changed.push({ column: "status_reason_id", label: null, before: undefined, after: null }); }
     const actionName = lead.action ? canonicalBdAction(lead.action.name, keepActionNames) : null;
-    if (actionName) change("bd_action_id", "BD action", existing.bdActionId, await ensureValue("bd_action", actionName));
+    if (actionName) {
+      const actionId = await ensureValue("bd_action", actionName);
+      change("bd_action_id", "BD action", existing.bdActionId, actionId);
+      // PIPE-03: an action from a later stage moves the lead forward, never back.
+      const target = listItem("stage", stageIdForAction(actionId));
+      const current = existing.stageId ? listItem("stage", Number(existing.stageId)) : null;
+      if (target && (!current || Number(target.sortOrder) > Number(current.sortOrder))) change("stage_id", "stage", existing.stageId, target.id);
+    }
     if (lead.response) change("client_response_id", "client response", existing.clientResponseId, await ensureValue("client_response", lead.response));
     if (lead.city) change("city_id", "city", existing.cityId, await ensureValue("city", lead.city));
     if (lead.type) change("lead_type_id", "lead type", existing.leadTypeId, await ensureValue("lead_type", lead.type));

@@ -31,12 +31,12 @@ const sortLabels: Record<LeadSortKey, string> = {
 };
 
 type Filters = {
-  q: string; statusId: string; statusReasonId: string; leadTypeId: string; leadCategoryId: string; companySizeId: string; cityId: string; ownerId: string; clientResponseId: string; bdActionId: string;
+  q: string; statusId: string; statusReasonId: string; leadTypeId: string; leadCategoryId: string; companySizeId: string; cityId: string; ownerId: string; clientResponseId: string; bdActionId: string; stageId: string;
   firstContactFrom: string; firstContactTo: string; followUpFrom: string; followUpTo: string; contractSignedFrom: string; contractSignedTo: string; sort: LeadSortKey; direction: "asc" | "desc";
 };
 
 const emptyFilters: Filters = {
-  q: "", statusId: "", statusReasonId: "", leadTypeId: "", leadCategoryId: "", companySizeId: "", cityId: "", ownerId: "", clientResponseId: "", bdActionId: "",
+  q: "", statusId: "", statusReasonId: "", leadTypeId: "", leadCategoryId: "", companySizeId: "", cityId: "", ownerId: "", clientResponseId: "", bdActionId: "", stageId: "",
   firstContactFrom: "", firstContactTo: "", followUpFrom: "", followUpTo: "", contractSignedFrom: "", contractSignedTo: "", sort: "last_activity", direction: "desc",
 };
 
@@ -74,7 +74,7 @@ export default function LeadListPage({ view }: { view: LeadListView }) {
     return {
       ...base,
       statusId: numeric(filters.statusId), statusReasonId: numeric(filters.statusReasonId), leadTypeId: numeric(filters.leadTypeId), leadCategoryId: numeric(filters.leadCategoryId), companySizeId: numeric(filters.companySizeId),
-      cityId: numeric(filters.cityId), ownerId: numeric(filters.ownerId), clientResponseId: numeric(filters.clientResponseId), bdActionId: numeric(filters.bdActionId),
+      cityId: numeric(filters.cityId), ownerId: numeric(filters.ownerId), clientResponseId: numeric(filters.clientResponseId), bdActionId: numeric(filters.bdActionId), stageId: numeric(filters.stageId),
       firstContactFrom: filters.firstContactFrom || undefined, firstContactTo: filters.firstContactTo || undefined, followUpFrom: filters.followUpFrom || undefined, followUpTo: filters.followUpTo || undefined,
       contractSignedFrom: filters.contractSignedFrom || undefined, contractSignedTo: filters.contractSignedTo || undefined,
     };
@@ -162,6 +162,7 @@ export default function LeadListPage({ view }: { view: LeadListView }) {
                 )}
                 {options(reference.listValues.client_response, "Any client response", filters.clientResponseId, "clientResponseId")}
                 {options(reference.listValues.bd_action, "Any BD action", filters.bdActionId, "bdActionId")}
+                {options(reference.listValues.stage, "Any stage", filters.stageId, "stageId")}
               </div>
               <div className="filter-grid date-filters">
                 <label><span>First contact from</span><input type="date" value={filters.firstContactFrom} onChange={(event) => update({ firstContactFrom: event.target.value })} /></label>

@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { AlertTriangle, ArrowDown, ArrowUp, Briefcase, BriefcaseBusiness, CalendarDays, Mail, MapPinned, Plus, RefreshCw, Save, Send, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, Briefcase, BriefcaseBusiness, CalendarDays, Kanban, Mail, MapPinned, Plus, RefreshCw, Save, Send, X } from "lucide-react";
 import { errorMessage } from "@/lib/api";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { useApp } from "@/features/shell/AppContext";
 import { ErrorText, Field, Loading } from "@/features/shell/components";
-import { maxHolidayNameLength, maxInactivityDays, maxInactivityRules, type AppSettings, type InactivityRule } from "@/features/settings/model";
+import { maxFollowUpBusinessDays, maxHolidayNameLength, maxInactivityDays, maxInactivityRules, stageFollowUpActivities, type AppSettings, type InactivityRule, type StageFollowUp, type StageFollowUpActivity } from "@/features/settings/model";
+import { activityTitles } from "@/features/pipeline/model";
 import { defaultRoleLabels, systemRoles } from "@/features/users/model";
 import { jobSourceLabels, maxCacheHours, maxPrefetch, type JobSourceId, type JobSourceStatus } from "@/features/jobs/model";
 import { mapsSkuHints, mapsSkuIds, mapsSkuLabels, mapsSkuUnits, maxMapsBudget, type MapsOverview } from "@/features/maps/model";
@@ -39,7 +40,7 @@ export default function SettingsPanel() {
     if (!settings) return;
     setBusy(true);
     try {
-      const result = await updateSettings({ roleLabels: settings.roleLabels, reminders: settings.reminders, digests: settings.digests, jobSources: settings.jobSources, opportunities: settings.opportunities, email: settings.email, maps: settings.maps, holidays: settings.holidays });
+      const result = await updateSettings({ roleLabels: settings.roleLabels, reminders: settings.reminders, digests: settings.digests, pipeline: settings.pipeline, jobSources: settings.jobSources, opportunities: settings.opportunities, email: settings.email, maps: settings.maps, holidays: settings.holidays });
       setSettings(result.settings);
       await refreshReference();
       notify("Settings saved");
@@ -100,6 +101,13 @@ export default function SettingsPanel() {
   // TASK-05: needs-attention rules by status and BD action.
   const setRules = (rules: InactivityRule[]) => { if (settings) setSettings({ ...settings, reminders: { ...settings.reminders, rules } }); };
   const updateRule = (index: number, changes: Partial<InactivityRule>) => { if (settings) setRules(settings.reminders.rules.map((rule, position) => (position === index ? { ...rule, ...changes } : rule))); };
+  // PIPE-09: the next step each stage suggests.
+  const setFollowUp = (code: string, value: StageFollowUp | null) => {
+    if (!settings) return;
+    const followUps = { ...settings.pipeline.followUps };
+    if (value) followUps[code] = value; else delete followUps[code];
+    setSettings({ ...settings, pipeline: { ...settings.pipeline, followUps } });
+  };
 
   return (
     <>
@@ -116,11 +124,11 @@ export default function SettingsPanel() {
               ))}
               <Field label="Inactivity reminder after (days)" hint="Default: leads with no recorded activity for this long appear under Needs attention."><input type="number" min={1} max={90} value={settings.reminders.inactivityDays} onChange={(event) => setSettings({ ...settings, reminders: { ...settings.reminders, inactivityDays: Number(event.target.value) } })} required /></Field>
               <fieldset className="user-privileges rules-editor">
-                <legend><AlertTriangle size={12} /> Needs-attention rules by status and BD action</legend>
-                <p className="field-hint">Override the default for particular statuses or BD actions. The most specific rule wins: status and BD action together, then BD action, then status.</p>
+                <legend><AlertTriangle size={12} /> Needs-attention rules by status, BD action, or stage</legend>
+                <p className="field-hint">Override the default for particular statuses, BD actions, or pipeline stages. The most specific rule wins: status and BD action together, then BD action, then status and stage, then stage, then status.</p>
                 {settings.reminders.rules.length === 0 && <p className="field-hint">No rules yet: every lead uses the default above.</p>}
                 {settings.reminders.rules.map((rule, index) => (
-                  <div className="rule-row" key={index}>
+                  <div className="rule-row rule-row-stage" key={index}>
                     <select aria-label={`Rule ${index + 1} status`} value={rule.statusId ?? ""} onChange={(event) => updateRule(index, { statusId: event.target.value ? Number(event.target.value) : null })}>
                       <option value="">Any status</option>
                       {reference.listValues.status.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
@@ -129,14 +137,37 @@ export default function SettingsPanel() {
                       <option value="">Any BD action</option>
                       {reference.listValues.bd_action.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
                     </select>
+                    <select aria-label={`Rule ${index + 1} stage`} value={rule.stageId ?? ""} onChange={(event) => updateRule(index, { stageId: event.target.value ? Number(event.target.value) : null })}>
+                      <option value="">Any stage</option>
+                      {reference.listValues.stage.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
+                    </select>
                     <span className="rule-days"><input aria-label={`Rule ${index + 1} days`} type="number" min={1} max={maxInactivityDays} value={rule.days} onChange={(event) => updateRule(index, { days: Number(event.target.value) })} required /> days</span>
                     <button type="button" className="icon-button" aria-label={`Remove rule ${index + 1}`} onClick={() => setRules(settings.reminders.rules.filter((_, position) => position !== index))}><X size={12} /></button>
                   </div>
                 ))}
                 {settings.reminders.rules.length < maxInactivityRules && (
-                  <button type="button" className="button button-outline button-small" onClick={() => setRules([...settings.reminders.rules, { statusId: null, bdActionId: null, days: settings.reminders.inactivityDays }])}><Plus size={13} /> Add rule</button>
+                  <button type="button" className="button button-outline button-small" onClick={() => setRules([...settings.reminders.rules, { statusId: null, bdActionId: null, stageId: null, days: settings.reminders.inactivityDays }])}><Plus size={13} /> Add rule</button>
                 )}
-                <small className="field-hint">A rule needs a status, a BD action, or both. Rules apply when you save settings.</small>
+                <small className="field-hint">A rule needs a status, a BD action, a stage, or a combination. Rules apply when you save settings.</small>
+              </fieldset>
+              <fieldset className="user-privileges pipeline-editor">
+                <legend><Kanban size={12} /> Pipeline next steps</legend>
+                <p className="field-hint">The next step each stage suggests when a lead reaches it. The prompt after a logged call, email, or visit, a BD action, or a move on the board is pre-filled with it; due dates count business days from the business calendar.</p>
+                {reference.listValues.stage.map((stage) => {
+                  const item = settings.pipeline.followUps[stage.code];
+                  return (
+                    <div className="stage-step-row" key={stage.id}>
+                      <span className="rule-label">{stage.value}</span>
+                      <select aria-label={`${stage.value} next step`} value={item?.activity ?? ""} onChange={(event) => setFollowUp(stage.code, event.target.value ? { activity: event.target.value as StageFollowUpActivity, businessDays: item?.businessDays ?? 1 } : null)}>
+                        <option value="">No suggestion</option>
+                        {stageFollowUpActivities.map((activity) => <option key={activity} value={activity}>{activity === "task" ? "Task" : activityTitles[activity]}</option>)}
+                      </select>
+                      <span className="rule-days"><input aria-label={`${stage.value} business days`} type="number" min={0} max={maxFollowUpBusinessDays} value={item?.businessDays ?? 1} disabled={!item} onChange={(event) => item && setFollowUp(stage.code, { ...item, businessDays: Number(event.target.value) })} /> business days later</span>
+                    </div>
+                  );
+                })}
+                <label className="checklist-item"><input type="checkbox" checked={settings.pipeline.promptNextStep} onChange={(event) => setSettings({ ...settings, pipeline: { ...settings.pipeline, promptNextStep: event.target.checked } })} /><span>Ask for the next step after a logged call, email, or visit, a BD action, or a stage move</span></label>
+                <label className="checklist-item"><input type="checkbox" checked={settings.pipeline.autoFollowUp} onChange={(event) => setSettings({ ...settings, pipeline: { ...settings.pipeline, autoFollowUp: event.target.checked } })} /><span>Create the stage&apos;s suggested task automatically when a lead reaches the stage, assigned to the owner, without asking</span></label>
               </fieldset>
               <fieldset className="user-privileges digest-editor">
                 <legend><Send size={12} /> Summary emails</legend>

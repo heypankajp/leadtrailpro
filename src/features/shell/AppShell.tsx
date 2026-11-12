@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
-  AlertCircle, Activity, Briefcase, BriefcaseBusiness, Building2, Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, Clock3, Compass, FileSpreadsheet, FileText, Flame, KeyRound,
+  AlertCircle, Activity, Briefcase, BriefcaseBusiness, Building2, Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, Clock3, Compass, FileSpreadsheet, FileText, Flame, Kanban, KeyRound,
   BellRing, LayoutDashboard, ListTodo, LogOut, Map, Menu, PanelLeftClose, PanelLeftOpen, Search, Settings2, ShieldCheck, SlidersHorizontal, Target, TrendingUp, UsersRound,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -15,6 +15,7 @@ import LeadFormDialog from "@/features/leads/LeadFormDialog";
 import LeadListPage, { leadListViews, type LeadListView } from "@/features/leads/LeadListPage";
 import NotificationsMenu from "@/features/notifications/NotificationsMenu";
 import OpportunitiesPage from "@/features/opportunities/OpportunitiesPage";
+import PipelinePage from "@/features/pipeline/PipelinePage";
 import { fetchOpportunities } from "@/features/opportunities/client";
 import PreferencesDialog from "@/features/notifications/PreferencesDialog";
 import AdminPage, { adminTabs, type AdminTab } from "@/features/admin/AdminPage";
@@ -37,6 +38,7 @@ const navigation: { title: string; items: NavItem[] }[] = [
     title: "WORKSPACE",
     items: [
       { id: "home", label: "Action center", icon: LayoutDashboard },
+      { id: "pipeline", label: "Pipeline", icon: Kanban, privilege: "view_leads", hideForRecruiter: true },
       { id: "leads", label: "My leads", icon: UsersRound, privilege: "view_leads", hideForRecruiter: true },
       { id: "all-leads", label: "All leads", icon: BriefcaseBusiness, privilege: "view_leads" },
       { id: "cold", label: "Cold leads", icon: CircleHelp, tone: "cold", privilege: "view_leads" },
@@ -73,7 +75,7 @@ const navigation: { title: string; items: NavItem[] }[] = [
 ];
 
 const pageTitles: Record<string, string> = {
-  home: "Action center", leads: "My leads", "all-leads": "All leads", cold: "Cold leads", warm: "Warm leads", hot: "Hot leads", client: "Clients",
+  home: "Action center", pipeline: "Pipeline", leads: "My leads", "all-leads": "All leads", cold: "Cold leads", warm: "Warm leads", hot: "Hot leads", client: "Clients",
   queued: "Queued leads", archive: "Archive", lead: "Lead", opportunities: "Opportunities", "lead-generation": "Lead generation", tasks: "Tasks & reminders", trips: "Sales trip planner", planner: "Road visit planner",
   reports: "Analytics", targets: "Targets & templates", admin: "User management", values: "List of values", devices: "Device authorization", settings: "Settings",
   import: "Tracker import", api: "API access",
@@ -193,6 +195,7 @@ export default function AppShell({ user, setUser, signOut, passwordSignIn }: { u
     const listKey = `${view}:${route.query.toString()}`;
     if (leadListViews.includes(view as LeadListView)) return <LeadListPage key={listKey} view={view as LeadListView} />;
     if (view === "lead") return <LeadListPage key={listKey} view="all-leads" />;
+    if (view === "pipeline") return can("view_leads") ? <PipelinePage /> : <NoAccess />;
     if (view === "opportunities") return can("view_leads") ? <OpportunitiesPage /> : <NoAccess />;
     if (view === "tasks") return <TasksPage />;
     if (view === "reports") return can("view_reports") ? <ReportsPage /> : <NoAccess />;

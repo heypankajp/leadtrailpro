@@ -71,8 +71,14 @@ if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port >
         const michael = userIds["michael.patel@example.com"];
         const jordan = userIds["jordan.taylor@example.com"];
 
-        const { rows: values } = await query('SELECT id, list_key AS "listKey", code FROM list_values');
+        const { rows: values } = await query('SELECT id, list_key AS "listKey", code, stage_id AS "stageId" FROM list_values');
         const valueId = (listKey, code) => values.find((row) => row.listKey === listKey && row.code === code)?.id ?? null;
+        // PIPE-03: the stage of the BD action, Contact Made when unmapped, New Deal without an action.
+        const stageIdFor = (actionCode) => {
+          const action = actionCode ? values.find((row) => row.listKey === "bd_action" && row.code === actionCode) : null;
+          const mapped = action?.stageId ? values.find((row) => row.id === Number(action.stageId)) : null;
+          return (mapped ?? values.find((row) => row.listKey === "stage" && row.code === (actionCode ? "contact_made" : "new_deal")))?.id ?? null;
+        };
 
         const leads = [
           // [owner, type, status, statusReason, bdAction, response, category, size, city, name, executive, phone, email, industry, firstContactDaysAgo, followUpOffsetDays, state]
@@ -96,13 +102,13 @@ if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port >
           const lastActivity = daysAgo(Math.min(firstContactDays, state === "archived" ? 15 : 1), 15);
           const followUp = followUpOffset === null ? null : ymd(daysAgo(-followUpOffset));
           const { rows: [inserted] } = await query(
-            `INSERT INTO leads (owner_id, created_by, lead_type_id, status_id, status_reason_id, bd_action_id, client_response_id, lead_category_id, company_size_id, city_id,
+            `INSERT INTO leads (owner_id, created_by, lead_type_id, status_id, status_reason_id, bd_action_id, client_response_id, lead_category_id, company_size_id, city_id, stage_id,
                client_name, company_url, address, comments, client_executive, contact_phone, contact_alt_phone, contact_remark, client_emails, industry, positions,
                first_contact_date, follow_up_date, contract_signed_date, record_state, state_reason, state_changed_at, last_activity_at, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', NULL, ?, ?, '', '', ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', NULL, ?, ?, '', '', ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
             [
               owner, owner, valueId("lead_type", type), valueId("status", status), reasonId, valueId("bd_action", action), valueId("client_response", response),
-              valueId("lead_category", category), valueId("company_size", size), valueId("city", city),
+              valueId("lead_category", category), valueId("company_size", size), valueId("city", city), stageIdFor(action),
               name, executive, phone, JSON.stringify(email ? [email] : []), industry,
               ymd(createdAt), followUp, status === "client" ? ymd(daysAgo(3)) : null,
               state, state === "queued" ? "Historical first-contact date awaiting Admin approval" : state === "archived" ? "No response after three follow-ups" : null,

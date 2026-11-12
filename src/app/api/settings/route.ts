@@ -34,7 +34,8 @@ export async function PATCH(request: Request) {
     const opportunities = body.opportunities !== undefined ? body.opportunities : undefined;
     const email = body.email !== undefined ? body.email : undefined;
     const maps = body.maps !== undefined ? body.maps : undefined;
-    const settings = await updateSettings({ roleLabels, reminders, digests, jobSources, opportunities, email, maps, holidays }, user.id);
+    const pipeline = body.pipeline !== undefined ? body.pipeline : undefined;
+    const settings = await updateSettings({ roleLabels, reminders, digests, pipeline, jobSources, opportunities, email, maps, holidays }, user.id);
     return NextResponse.json({ settings });
   } catch (error) {
     return handleRouteError(error, "Update settings");

@@ -1,10 +1,10 @@
 import { getDatabasePool, insertId, withTransaction, type Queryable } from "@/lib/db";
 import { HttpError } from "@/lib/http";
 import { recordAudit } from "@/features/audit/repository";
-import { fixedListKeys, isListKey, listKeys, slugify, statusCodes } from "./model";
+import { entryStageCode, fixedListKeys, isListKey, listKeys, slugify, statusCodes } from "./model";
 import type { ListKey, ListValue, ListValuesByKey } from "./model";
 
-type Row = { id: number; listKey: string; code: string; value: string; sortOrder: number; active: number | boolean };
+type Row = { id: number; listKey: string; code: string; value: string; sortOrder: number; active: number | boolean; stageId: number | null };
 
 const toListValue = (row: Row): ListValue => ({
   id: Number(row.id),
@@ -13,11 +13,12 @@ const toListValue = (row: Row): ListValue => ({
   value: row.value,
   sortOrder: Number(row.sortOrder),
   active: Boolean(row.active),
+  stageId: row.stageId === null || row.stageId === undefined ? null : Number(row.stageId),
 });
 
 export async function listValues(options: { includeInactive?: boolean } = {}, db: Queryable = getDatabasePool()): Promise<ListValuesByKey> {
   const { rows } = await db.query(
-    `SELECT id, list_key AS "listKey", code, value, sort_order AS "sortOrder", is_active AS active FROM list_values
+    `SELECT id, list_key AS "listKey", code, value, sort_order AS "sortOrder", is_active AS active, stage_id AS "stageId" FROM list_values
      ${options.includeInactive ? "" : "WHERE is_active = TRUE"} ORDER BY list_key, sort_order, value`,
   );
   const grouped = Object.fromEntries(listKeys.map((key) => [key, [] as ListValue[]])) as ListValuesByKey;
@@ -28,7 +29,7 @@ export async function listValues(options: { includeInactive?: boolean } = {}, db
 }
 
 export async function getListValue(id: number, db: Queryable = getDatabasePool()): Promise<ListValue | null> {
-  const { rows } = await db.query(`SELECT id, list_key AS "listKey", code, value, sort_order AS "sortOrder", is_active AS active FROM list_values WHERE id = ?`, [id]);
+  const { rows } = await db.query(`SELECT id, list_key AS "listKey", code, value, sort_order AS "sortOrder", is_active AS active, stage_id AS "stageId" FROM list_values WHERE id = ?`, [id]);
   const row = (rows as Row[])[0];
   return row ? toListValue(row) : null;
 }
@@ -66,7 +67,7 @@ export async function createListValue(listKey: ListKey, value: string, actorId: 
   });
 }
 
-export async function updateListValue(id: number, changes: { value?: string; active?: boolean; sortOrder?: number }, actorId: number): Promise<ListValue> {
+export async function updateListValue(id: number, changes: { value?: string; active?: boolean; sortOrder?: number; stageId?: number | null }, actorId: number): Promise<ListValue> {
   return withTransaction(async (connection) => {
     const existing = await getListValue(id, connection);
     if (!existing) throw new HttpError(404, "List value not found.");
@@ -88,10 +89,19 @@ export async function updateListValue(id: number, changes: { value?: string; act
       if (!changes.active && fixedListKeys.includes(existing.listKey)) {
         throw new HttpError(400, "These values are fixed by the requirement and cannot be deactivated. Rename them instead.");
       }
+      if (!changes.active && existing.listKey === "stage" && existing.code === entryStageCode) {
+        throw new HttpError(400, "New Deal is the entry stage of the pipeline and cannot be deactivated. Rename it instead.");
+      }
       assignments.push("is_active = ?"); params.push(changes.active); before.active = existing.active; after.active = changes.active;
     }
     if (changes.sortOrder !== undefined && changes.sortOrder !== existing.sortOrder) {
       assignments.push("sort_order = ?"); params.push(changes.sortOrder); before.sortOrder = existing.sortOrder; after.sortOrder = changes.sortOrder;
+    }
+    if (changes.stageId !== undefined && changes.stageId !== existing.stageId) {
+      // PIPE-03: only BD actions carry a stage; the stage must exist and be active.
+      if (existing.listKey !== "bd_action") throw new HttpError(400, "Only BD actions are mapped to a pipeline stage.");
+      if (changes.stageId !== null) await assertListValue(connection, "stage", changes.stageId, { label: "Stage" });
+      assignments.push("stage_id = ?"); params.push(changes.stageId); before.stageId = existing.stageId; after.stageId = changes.stageId;
     }
     if (assignments.length) {
       params.push(id);

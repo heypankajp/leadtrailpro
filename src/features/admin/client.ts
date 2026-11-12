@@ -5,14 +5,14 @@ import type { MapsOverview, MapsSettings } from "@/features/maps/model";
 import { api, toQuery } from "@/lib/api";
 import type { AuditEntry } from "@/features/audit/model";
 import type { ListKey, ListValue, ListValuesByKey } from "@/features/list-values/model";
-import type { AppSettings, DigestSettings, Holiday, InactivityRule } from "@/features/settings/model";
+import type { AppSettings, DigestSettings, Holiday, InactivityRule, PipelineSettings } from "@/features/settings/model";
 import type { TargetTemplate, TargetTemplateInput } from "@/features/targets/model";
 import type { SystemRole } from "@/features/users/model";
 import type { ApiToken } from "@/features/users/api-token-model";
 
 export const fetchListValues = (includeInactive: boolean) => api<{ listValues: ListValuesByKey }>(`/api/list-values${toQuery({ includeInactive })}`);
 export const createListValue = (listKey: ListKey, value: string) => api<{ value: ListValue }>("/api/list-values", { method: "POST", json: { listKey, value } });
-export const updateListValue = (id: number, changes: { value?: string; active?: boolean; sortOrder?: number }) => api<{ value: ListValue }>(`/api/list-values/${id}`, { method: "PATCH", json: changes });
+export const updateListValue = (id: number, changes: { value?: string; active?: boolean; sortOrder?: number; stageId?: number | null }) => api<{ value: ListValue }>(`/api/list-values/${id}`, { method: "PATCH", json: changes });
 export const reorderListValues = (listKey: ListKey, orderedIds: number[]) => api<{ ok: true }>("/api/list-values/reorder", { method: "POST", json: { listKey, orderedIds } });
 
 export const fetchTargetTemplates = () => api<{ templates: TargetTemplate[] }>("/api/target-templates");
@@ -22,7 +22,7 @@ export const assignTargetTemplate = (id: number, userIds: number[]) => api<{ ok:
 
 export type MailStatus = { senders: { userId: number; name: string; email: string }[]; provider: "gmail" | "stub" | "smtp" | "off"; outbox: { id: number; to: string; subject: string; status: "stubbed" | "sent" | "failed"; error: string | null; text: string | null; createdAt: string }[] };
 export const fetchSettings = () => api<{ settings: AppSettings; mailerConfigured: boolean; mail: MailStatus; jobSources: JobSourceStatus[]; maps: MapsOverview | null; timeZone: string }>("/api/settings");
-export const updateSettings = (changes: { roleLabels?: Partial<Record<SystemRole, string>>; reminders?: { inactivityDays: number; rules?: InactivityRule[] }; digests?: DigestSettings; jobSources?: JobSourceSettings; opportunities?: OpportunitySettings; email?: EmailSettings; maps?: MapsSettings; holidays?: Holiday[] }) =>
+export const updateSettings = (changes: { roleLabels?: Partial<Record<SystemRole, string>>; reminders?: { inactivityDays: number; rules?: InactivityRule[] }; digests?: DigestSettings; pipeline?: PipelineSettings; jobSources?: JobSourceSettings; opportunities?: OpportunitySettings; email?: EmailSettings; maps?: MapsSettings; holidays?: Holiday[] }) =>
   api<{ settings: AppSettings }>("/api/settings", { method: "PATCH", json: changes });
 
 export const fetchAudit = (query: { entityType?: string; entityId?: number; actorId?: number; limit?: number } = {}) => api<{ entries: AuditEntry[] }>(`/api/audit${toQuery(query)}`);

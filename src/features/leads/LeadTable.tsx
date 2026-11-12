@@ -31,6 +31,7 @@ export default function LeadTable({ leads, selected, today, view, canSelect, can
             {canSelect && <th><input aria-label="Select all leads" type="checkbox" checked={allSelected} onChange={(event) => onToggleAll(event.target.checked)} /></th>}
             <th>CLIENT</th>
             <th>STATUS</th>
+            <th>STAGE</th>
             <th>LAST BD ACTION</th>
             <th>{view === "archive" ? "REASON" : "FOLLOW-UP"}</th>
             <th>FIRST CONTACT</th>
@@ -53,6 +54,7 @@ export default function LeadTable({ leads, selected, today, view, canSelect, can
                   {lead.lastClientEmailAt && <small className={replyWaiting(lead) ? "reply-badge reply-waiting" : "reply-badge"}><MailOpen size={11} /> Client wrote {relativeTime(lead.lastClientEmailAt)}{replyWaiting(lead) ? " · awaiting reply" : ""}</small>}
                 </td>
                 <td><StatusPill status={lead.statusLabel} code={lead.statusCode} /></td>
+                <td><span className="muted-cell stage-cell">{lead.stage ?? "—"}</span></td>
                 <td><span className="action-cell">{lead.bdAction ?? "—"}</span><small className="activity-time">{relativeTime(lead.lastActivityAt)}</small></td>
                 <td>
                   {view === "archive"
@@ -73,7 +75,7 @@ export default function LeadTable({ leads, selected, today, view, canSelect, can
               </tr>
             );
           })}
-          {!leads.length && <tr><td colSpan={canSelect ? 8 : 7} className="empty-state">No leads match these filters.</td></tr>}
+          {!leads.length && <tr><td colSpan={canSelect ? 9 : 8} className="empty-state">No leads match these filters.</td></tr>}
         </tbody>
       </table>
     </div>

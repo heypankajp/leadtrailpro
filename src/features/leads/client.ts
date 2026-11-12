@@ -6,7 +6,7 @@ import type { LeadActivity, LeadInput, LeadPage, LeadRecordState, LeadSortKey, L
 
 export type LeadQuery = Partial<{
   state: LeadRecordState; q: string; mine: boolean; statusCode: string; statusId: number; statusReasonId: number; leadTypeId: number; leadCategoryId: number;
-  companySizeId: number; cityId: number; ownerId: number; clientResponseId: number; bdActionId: number;
+  companySizeId: number; cityId: number; ownerId: number; clientResponseId: number; bdActionId: number; stageId: number;
   firstContactFrom: string; firstContactTo: string; followUpFrom: string; followUpTo: string; contractSignedFrom: string; contractSignedTo: string;
   sort: LeadSortKey; direction: "asc" | "desc"; page: number; pageSize: number;
 }>;
@@ -25,7 +25,8 @@ export type LeadDetail = {
 export const fetchLeads = (query: LeadQuery) => api<LeadPage>(`/api/leads${toQuery(query)}`);
 export const fetchLead = (id: number) => api<LeadDetail>(`/api/leads/${id}`);
 export const createLead = (input: LeadInput & { ownerId?: number | null; opportunityId?: number | null; allowSimilar?: boolean }) => api<{ lead: LeadSummary }>("/api/leads", { method: "POST", json: input });
-export const updateLead = (id: number, changes: Partial<LeadInput>) => api<{ lead: LeadSummary }>(`/api/leads/${id}`, { method: "PATCH", json: changes });
+/** `task`: the stage's suggested task when the change moved the lead to a new stage and Settings → Pipeline creates it automatically (PIPE-09). */
+export const updateLead = (id: number, changes: Partial<LeadInput>) => api<{ lead: LeadSummary; task?: Task | null }>(`/api/leads/${id}`, { method: "PATCH", json: changes });
 export const transferLead = (id: number, ownerId: number, reason: string) => api<{ lead: LeadSummary }>(`/api/leads/${id}/transfer`, { method: "POST", json: { ownerId, reason } });
 export const reviewLead = (id: number, approve: boolean, comment: string) => api<{ lead: LeadSummary }>(`/api/leads/${id}/review`, { method: "POST", json: { approve, comment } });
 export const setLeadState = (id: number, state: "active" | "archived", reason: string) => api<{ lead: LeadSummary }>(`/api/leads/${id}/state`, { method: "POST", json: { state, reason } });

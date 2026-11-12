@@ -25,6 +25,7 @@ import type { Task } from "@/features/tasks/model";
 import UserDirectoryDialog from "@/features/users/UserDirectoryDialog";
 import type { UserSummary } from "@/features/users/model";
 import { attachmentUrl, fetchLead, logActivity, removeAttachment, reviewLead, setLeadState, transferLead, updateLead, uploadAttachment, type LeadDetail } from "./client";
+import NextStepDialog from "@/features/pipeline/NextStepDialog";
 import LeadFormDialog from "./LeadFormDialog";
 import { activityLabels, type LeadActivity, type LoggableActivityType } from "./model";
 
@@ -49,6 +50,7 @@ export default function LeadDetailDialog({ leadId, onClose }: { leadId: number; 
   const { data: detail, error, reload } = useAsyncData<LeadDetail>(fetcher);
   const [tab, setTab] = useState<Tab>("overview");
   const [editing, setEditing] = useState(false);
+  const [nextStep, setNextStep] = useState<string | null>(null);
   const [dialog, setDialog] = useState<
     | { kind: "transfer-pick" } | { kind: "transfer-reason"; user: UserSummary } | { kind: "archive" } | { kind: "restore" } | { kind: "review"; approve: boolean } | { kind: "task"; task?: Task }
     | { kind: "status-reason"; statusId: number; statusName: string; listKey: ListKey }
@@ -69,6 +71,10 @@ export default function LeadDetailDialog({ leadId, onClose }: { leadId: number; 
   const { lead, permissions } = detail;
   const canEdit = permissions.edit;
   const canTransfer = can("reassign_leads") || (can("transfer_leads") && lead.ownerId === user.id);
+  // PIPE-09: ask for the next step after an activity, a BD action, or a stage move, unless Settings → Pipeline creates it without asking.
+  const offerNextStep = (reason: string) => {
+    if (reference.pipeline.promptNextStep && !reference.pipeline.autoFollowUp && can("manage_tasks") && lead.recordState === "active") setNextStep(reason);
+  };
   const owners = reference.users.filter((item) => item.role !== "recruiter");
   const documents = detail.attachments.filter((file) => file.category === "document");
   const profiles = detail.attachments.filter((file) => file.category === "profile");
@@ -87,10 +93,11 @@ export default function LeadDetailDialog({ leadId, onClose }: { leadId: number; 
   };
   const reasonKey = reasonListFor(lead.statusCode);
 
-  const quickUpdate = async (changes: Parameters<typeof updateLead>[1], message: string) => {
+  const quickUpdate = async (changes: Parameters<typeof updateLead>[1], message: string, prompt?: string) => {
     try {
-      await updateLead(lead.id, changes);
-      await refresh(message);
+      const result = await updateLead(lead.id, changes);
+      await refresh(result.task ? `${message} · ${result.task.title} scheduled for ${result.task.dueAt ? result.task.dueAt.slice(0, 10) : "later"}` : message);
+      if (prompt && !result.task) offerNextStep(prompt);
     } catch (caught) {
       notify(errorMessage(caught), "error");
     }
@@ -173,7 +180,12 @@ export default function LeadDetailDialog({ leadId, onClose }: { leadId: number; 
             await refresh("Follow-up scheduled and added to tasks");
           }} />
         )}
-        {tab === "timeline" && <TimelineTab detail={detail} onLogged={(message) => refresh(message ?? "Activity recorded")} />}
+        {tab === "timeline" && (
+          <TimelineTab detail={detail} onLogged={async (message, logged) => {
+            await refresh(message ?? "Activity recorded");
+            if (logged && logged.type !== "note" && !logged.taskCreated) offerNextStep(`You logged ${logged.type === "email" ? "an email" : `a ${logged.type}`}.`);
+          }} />
+        )}
         {tab === "collaboration" && <CollaborationTab leadId={lead.id} attachments={detail.attachments} canPost={can("collaborate") && lead.recordState !== "archived"} onChanged={() => { reload(); bumpData(); }} />}
         {tab === "emails" && <LeadEmails leadId={lead.id} addresses={lead.clientEmails} attachments={detail.attachments} />}
         {(tab === "files" || tab === "profiles") && (
@@ -242,6 +254,9 @@ export default function LeadDetailDialog({ leadId, onClose }: { leadId: number; 
       {dialog?.kind === "task" && (
         <TaskFormDialog task={dialog.task} leadId={lead.id} leadName={lead.clientName} defaultAssigneeId={lead.ownerId} onClose={() => setDialog(null)} onSaved={() => { setDialog(null); void refresh(dialog.task ? "Task updated" : "Task created"); }} />
       )}
+      {nextStep && (
+        <NextStepDialog key={`${lead.id}:${lead.stageId}`} lead={lead} reason={nextStep} onClose={() => setNextStep(null)} onSaved={(message) => { setNextStep(null); void refresh(message); }} />
+      )}
     </>
   );
 }
@@ -280,7 +295,7 @@ function StatusReasonDialog({ leadName, statusName, options, onConfirm, onClose 
 
 function OverviewTab({ detail, canEdit, onQuickUpdate, onScheduleFollowUp }: {
   detail: LeadDetail; canEdit: boolean;
-  onQuickUpdate: (changes: { bdActionId?: number | null; clientResponseId?: number | null; statusReasonId?: number | null }, message: string) => Promise<void>;
+  onQuickUpdate: (changes: { bdActionId?: number | null; clientResponseId?: number | null; statusReasonId?: number | null; stageId?: number | null }, message: string, prompt?: string) => Promise<void>;
   onScheduleFollowUp: (date: string, time: string, note: string) => Promise<void>;
 }) {
   const { reference, can } = useApp();
@@ -310,11 +325,20 @@ function OverviewTab({ detail, canEdit, onQuickUpdate, onScheduleFollowUp }: {
         <div>
           <small>BD ACTION</small>
           {canEdit ? (
-            <select className="inline-select" aria-label="BD action" value={lead.bdActionId ?? ""} onChange={(event) => void onQuickUpdate({ bdActionId: event.target.value ? Number(event.target.value) : null }, "BD action updated")}>
+            <select className="inline-select" aria-label="BD action" value={lead.bdActionId ?? ""} onChange={(event) => void onQuickUpdate({ bdActionId: event.target.value ? Number(event.target.value) : null }, "BD action updated", "You recorded a BD action.")}>
               <option value="">Not set</option>
               {reference.listValues.bd_action.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
             </select>
           ) : <strong>{lead.bdAction ?? "Not set"}</strong>}
+        </div>
+        <div>
+          <small>PIPELINE STAGE</small>
+          {canEdit && lead.recordState === "active" ? (
+            <select className="inline-select" aria-label="Stage" value={lead.stageId ?? ""} onChange={(event) => void onQuickUpdate({ stageId: event.target.value ? Number(event.target.value) : null }, "Stage updated", "You moved the lead to a new stage.")}>
+              {!lead.stageId && <option value="">Not set</option>}
+              {reference.listValues.stage.filter((item) => item.active || item.id === lead.stageId).map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
+            </select>
+          ) : <strong>{lead.stage ?? "Not set"}</strong>}
         </div>
         <div>
           <small>CLIENT RESPONSE</small>
@@ -358,7 +382,7 @@ function OverviewTab({ detail, canEdit, onQuickUpdate, onScheduleFollowUp }: {
 
 type FollowUpDraft = { key: string; enabled: boolean; title: string; date: string; time: string };
 
-function TimelineTab({ detail, onLogged }: { detail: LeadDetail; onLogged: (message?: string) => Promise<void> }) {
+function TimelineTab({ detail, onLogged }: { detail: LeadDetail; onLogged: (message?: string, logged?: { type: LoggableActivityType; taskCreated: boolean }) => Promise<void> }) {
   const { can, reference } = useApp();
   const { lead } = detail;
   const [type, setType] = useState<LoggableActivityType | null>(null);
@@ -398,7 +422,7 @@ function TimelineTab({ detail, onLogged }: { detail: LeadDetail; onLogged: (mess
       await logActivity(lead.id, { type, summary, body, occurredAt: fromLocalInput(occurredAt), followUpTask });
       setType(null);
       setTaskDraft(null);
-      await onLogged(followUpTask ? "Activity recorded and follow-up task created" : undefined);
+      await onLogged(followUpTask ? "Activity recorded and follow-up task created" : undefined, { type, taskCreated: Boolean(followUpTask) });
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {

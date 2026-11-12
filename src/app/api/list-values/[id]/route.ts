@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError, jsonError, readJsonBody, requireSameOrigin } from "@/lib/http";
+import { asOptionalId, handleRouteError, jsonError, readJsonBody, requireSameOrigin } from "@/lib/http";
 import { updateListValue } from "@/features/list-values/repository";
 import { requirePrivilege, requireUser } from "@/features/users/session";
 
@@ -15,10 +15,16 @@ export async function PATCH(request: Request, context: RouteContext) {
     const id = Number(rawId);
     if (!Number.isSafeInteger(id) || id < 1) return jsonError(400, "Invalid value ID.");
     const body = await readJsonBody(request);
-    const changes: { value?: string; active?: boolean; sortOrder?: number } = {};
+    const changes: { value?: string; active?: boolean; sortOrder?: number; stageId?: number | null } = {};
     if (typeof body?.value === "string") changes.value = body.value;
     if (typeof body?.active === "boolean") changes.active = body.active;
     if (Number.isInteger(body?.sortOrder)) changes.sortOrder = Number(body?.sortOrder);
+    if (body && Object.prototype.hasOwnProperty.call(body, "stageId")) {
+      // The stage a BD action lands in (PIPE-03); null clears the mapping.
+      const stageId = asOptionalId(body.stageId);
+      if (stageId === null && body.stageId !== null && body.stageId !== "") return jsonError(400, "Invalid stage ID.");
+      changes.stageId = stageId;
+    }
     const value = await updateListValue(id, changes, user.id);
     return NextResponse.json({ value });
   } catch (error) {

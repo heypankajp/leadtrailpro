@@ -44,6 +44,9 @@ describe("Leads", () => {
     const select = await page.wait(By.css('select[aria-label="BD action"]'));
     await page.setValue(select, "First Call");
     await page.toast("BD action updated");
+    // PIPE-09: the next-step prompt follows a BD action; this suite skips it.
+    await page.dialogTitle(`What's next for ${lead.name}?`);
+    await page.clickButton("Skip");
     assert.equal(await page.selectedText(await page.wait(By.css('select[aria-label="BD action"]'))), "First Call");
   });
 
@@ -54,6 +57,9 @@ describe("Leads", () => {
     await page.fill("Notes (optional)", "Discussed the Q1 hiring plan.");
     await page.clickButton("Save call");
     await page.toast("Activity recorded");
+    // PIPE-09: a logged call offers the next step; skipped here, the note below carries its own follow-up suggestion.
+    await page.dialogTitle(`What's next for ${lead.name}?`);
+    await page.clickButton("Skip");
     await page.wait(By.xpath('//article[contains(@class,"timeline-entry")]//strong[normalize-space()="Intro call with Priya"]'));
     await page.clickButton("Add note");
     const note = await page.fill("Interaction note", "Client wants profiles for two welders. ");

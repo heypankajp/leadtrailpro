@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { AlertTriangle, ArrowRight, Clock3, ChevronRight, ListTodo, Mail, MailOpen, MapPin, Phone, Plus, Target } from "lucide-react";
+import { AlertTriangle, CircleDashed, ArrowRight, Clock3, ChevronRight, ListTodo, Mail, MailOpen, MapPin, Phone, Plus, Target } from "lucide-react";
 import { formatDate, formatDateTime, percentChange, relativeTime } from "@/lib/format";
 import { useAsyncData } from "@/lib/useAsyncData";
 import type { LeadSummary } from "@/features/leads/model";
@@ -146,7 +146,7 @@ export default function ActionCenter() {
             </section>
             <section className="panel reminder-panel">
               <div className="panel-heading">
-                <div><h2>Needs attention</h2><p>Active leads quiet for longer than their limit · default {data.inactivityDays} days{data.inactivityRuleCount ? ` · ${data.inactivityRuleCount} status/action ${data.inactivityRuleCount === 1 ? "rule" : "rules"}` : ""}</p></div>
+                <div><h2>Needs attention</h2><p>Active leads quiet for longer than their limit · default {data.inactivityDays} days{data.inactivityRuleCount ? ` · ${data.inactivityRuleCount} ${data.inactivityRuleCount === 1 ? "rule" : "rules"} by status, BD action, or stage` : ""}</p></div>
               </div>
               {data.inactiveLeads.length === 0 ? <EmptyState title="Every lead has recent activity" /> : (
                 <div className="followup-list">
@@ -154,6 +154,23 @@ export default function ActionCenter() {
                     <button className="followup-row" key={lead.id} onClick={() => openLead(lead.id)}>
                       <span className="reminder-icon"><AlertTriangle size={14} /></span>
                       <span className="followup-info"><strong>{lead.clientName}</strong><small>Last activity {relativeTime(lead.lastActivityAt)} · limit {data.inactiveLimits[lead.id] ?? data.inactivityDays} days · {lead.ownerName}</small></span>
+                      <StatusPill status={lead.statusLabel} code={lead.statusCode} />
+                      <ChevronRight className="followup-chevron" size={16} />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+            <section className="panel reminder-panel">
+              <div className="panel-heading">
+                <div><h2>No next step</h2><p>Active leads with no open task and no upcoming follow-up date{data.noNextStepCount > 6 ? ` · ${data.noNextStepCount} in all` : ""}</p></div>
+              </div>
+              {data.noNextStep.length === 0 ? <EmptyState title="Every lead has a next step" /> : (
+                <div className="followup-list">
+                  {data.noNextStep.slice(0, 6).map((lead) => (
+                    <button className="followup-row" key={lead.id} onClick={() => openLead(lead.id)}>
+                      <span className="reminder-icon"><CircleDashed size={14} /></span>
+                      <span className="followup-info"><strong>{lead.clientName}</strong><small>{lead.stage ?? "No stage"} · last activity {relativeTime(lead.lastActivityAt)} · {lead.ownerName}</small></span>
                       <StatusPill status={lead.statusLabel} code={lead.statusCode} />
                       <ChevronRight className="followup-chevron" size={16} />
                     </button>

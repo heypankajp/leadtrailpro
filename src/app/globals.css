@@ -1228,7 +1228,7 @@ h1 { margin: 9px 0 5px; color: #242941; font-size: 25px; font-weight: 690; lette
 .opp-table th { height: 35px; padding: 0 12px; background: #fafbfe; color: #62697b; font-size: 8px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; white-space: nowrap; }
 .opp-table td { padding: 10px 12px; border-top: 1px solid #f1f2f6; color: #61677c; font-size: 11px; vertical-align: top; }
 .opp-table td strong { color: #2d3246; font-size: 12px; }
-.opp-table td small.muted-cell { display: block; margin-top: 2px; color: #8a90a6; }
+.opp-table td small.muted-cell { display: block; margin-top: 2px; } /* the standard muted colour: #8a90a6 failed the contrast audit on the Team board (NFR-07) */
 .opp-table tr.opp-inactive td { color: #a0a5b8; }
 .opp-table .opp-details { max-width: 360px; white-space: normal; font-size: 10px; color: #8a90a6; }
 .opp-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #f1f2f6; }
@@ -1345,3 +1345,61 @@ h1 { margin: 9px 0 5px; color: #242941; font-size: 25px; font-weight: 690; lette
 /* KPI report switches under Settings → Email delivery (SPEC §7.18) */
 .kpi-reports { display: grid; gap: 6px; margin-top: 12px; padding-top: 10px; border-top: 1px solid #eef0f5; }
 .kpi-reports .field-label { font-weight: 650; color: #2d3246; }
+
+/* Pipeline board (PIPE-04..07, SPEC §10.11) */
+.pipeline-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; padding: 14px 16px 12px; border-bottom: 1px solid #eff0f5; }
+.pipeline-toolbar .lead-search { flex: 1 1 220px; }
+.pipeline-panel .filters-panel { margin-top: 12px; }
+.pipeline-undo { display: flex; align-items: center; gap: 10px; margin: 12px 16px 0; padding: 8px 12px; border: 1px solid #e3e6f3; border-radius: 7px; color: #4d5268; background: #f4f5fb; font-size: 9.5px; }
+.pipeline-undo .text-button { margin-left: auto; }
+.pipeline-empty { padding: 24px 16px 30px; }
+.pipeline-board { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px 18px; overflow-x: auto; }
+.pipeline-column { flex: 0 0 238px; min-width: 238px; max-width: 238px; border: 1px solid #eceef4; border-radius: 9px; background: #f8f9fc; transition: border-color .15s ease, background .15s ease; }
+.pipeline-column.is-over { border-color: #7180e1; background: #f1f3ff; }
+.pipeline-column.is-inactive .pipeline-column-head h2 { color: #8a90a3; }
+.pipeline-column-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 11px 12px 9px; }
+.pipeline-column-head h2 { margin: 0; color: #4a5066; font-size: 11px; font-weight: 650; }
+.pipeline-column-head span { min-width: 21px; padding: 3px 6px; border-radius: 5px; color: #62697c; background: #e9ebf2; font-size: 9px; font-weight: 600; text-align: center; }
+.pipeline-column-body { display: grid; gap: 8px; min-height: 64px; padding: 0 8px 10px; }
+.pipeline-column-empty { margin: 4px 0 8px; color: #9096a8; font-size: 9px; text-align: center; }
+.pipeline-more { justify-self: center; padding: 6px 0; }
+.pipeline-card { display: grid; gap: 7px; padding: 10px 10px 9px; border: 1px solid #e6e8f0; border-radius: 8px; background: #fff; box-shadow: 0 1px 2px #1f24400a; }
+.pipeline-card[draggable="true"] { cursor: grab; }
+.pipeline-card.is-dragging { opacity: .45; }
+.pipeline-card.is-quiet { border-color: #f1cfc8; background: #fff8f6; }
+.pipeline-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
+.pipeline-card-title { display: grid; gap: 2px; min-width: 0; padding: 0; border: 0; background: none; text-align: left; cursor: pointer; }
+.pipeline-card-title strong { color: #3f4459; font-size: 10.5px; font-weight: 650; line-height: 1.35; overflow-wrap: anywhere; }
+.pipeline-card-title small { overflow: hidden; color: #62697b; font-size: 8.5px; text-overflow: ellipsis; white-space: nowrap; }
+.pipeline-card-title:hover strong { color: #4c5ed9; }
+.pipeline-move { position: relative; display: inline-grid; place-items: center; width: 24px; height: 24px; flex: 0 0 auto; border: 1px solid #eceef4; border-radius: 6px; color: #62697c; background: #fff; }
+.pipeline-move:hover { border-color: #7180e1; color: #4c5ed9; }
+.pipeline-move select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.pipeline-card-meta { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.pipeline-owner { display: inline-flex; align-items: center; gap: 5px; min-width: 0; color: #62697b; font-size: 8.5px; white-space: nowrap; }
+.pipeline-action { color: #62697b; font-size: 8.5px; }
+.pipeline-card-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.pipeline-next { display: inline-flex; align-items: center; gap: 4px; color: #4d5268; font-size: 8.5px; font-weight: 600; }
+.pipeline-next.pipeline-none { color: #8a90a3; font-weight: 500; }
+.pipeline-next.overdue { color: #bf3c31; }
+.pipeline-reply { display: inline-flex; color: #b14630; }
+.pipeline-quiet { margin-left: auto; padding: 2px 6px; border-radius: 4px; color: #ba4235; background: #fff0ee; font-size: 8px; font-weight: 650; white-space: nowrap; }
+.stage-cell { white-space: nowrap; }
+.values-stage-note { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.values-stage-note .field-hint { flex: 1 1 320px; margin: 0; }
+@media (max-width: 640px) {
+  .pipeline-column { flex-basis: 82vw; min-width: 82vw; max-width: 82vw; }
+}
+
+/* Pipeline Phase 2 (PIPE-08..10): rule rows with a stage, the per-stage next-step rows, the next-step dialog */
+.rule-row.rule-row-stage { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto auto; }
+.stage-step-row { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1fr) auto; gap: 8px; align-items: center; margin-bottom: 6px; }
+.stage-step-row .rule-label { color: #4a5066; font-size: 10.5px; font-weight: 600; }
+.stage-step-row .rule-days { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 11px; }
+.stage-step-row .rule-days input { width: 64px; }
+.stage-step-row .rule-days input:disabled { color: #a0a5b6; background: #f7f8fb; }
+.pipeline-editor .checklist-item { margin-top: 6px; }
+.next-step-form .checklist-item { margin-top: 2px; }
+@media (max-width: 640px) {
+  .rule-row.rule-row-stage, .stage-step-row { grid-template-columns: 1fr; }
+}

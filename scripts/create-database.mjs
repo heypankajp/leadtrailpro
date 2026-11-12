@@ -822,6 +822,68 @@ const migrations = [
       await client.query("ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS draft JSONB NULL");
     },
   },
+  {
+    version: 18,
+    name: "Pipeline stages (PIPE-01..03, SPEC §10.11): the stage list, leads.stage_id, the BD action to stage mapping, and the one-time placement of existing leads",
+    async run(client) {
+      const stages = [
+        ["new_deal", "New Deal"], ["contact_made", "Contact Made"], ["qualified", "Qualified"], ["profile_shared", "Profile Shared"],
+        ["meeting_completed", "Meeting Completed"], ["negotiations_started", "Negotiations started"], ["contract_signed", "Contract Signed"],
+      ];
+      for (const [index, [code, value]] of stages.entries()) {
+        await client.query("INSERT INTO list_values (list_key, code, value, sort_order) VALUES ('stage', $1, $2, $3) ON CONFLICT DO NOTHING", [code, value, index + 1]);
+      }
+      await addColumnIfMissing(client, "list_values", "stage_id", "INTEGER NULL REFERENCES list_values(id) ON DELETE SET NULL");
+      await addColumnIfMissing(client, "leads", "stage_id", "INTEGER NULL REFERENCES list_values(id) ON DELETE SET NULL");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_stage ON leads (stage_id)");
+      // The default mapping of BD actions to stages (SPEC §10.11); administrators change it under List of values → BD action.
+      const mapping = {
+        new_deal: ["plan_a_visit", "new_position"],
+        contact_made: ["first_call", "first_email", "first_meeting", "left_brochure", "hr_contact_information_received", "introduction_email_sent", "email_followups", "followup_call"],
+        qualified: ["engagement_ans_questions", "waiting_for_profiles_from_recruitment"],
+        profile_shared: ["shared_profiles", "followup_on_profiles"],
+        meeting_completed: ["in_person_meeting_scheduled", "virtual_phone_meeting_scheduled"],
+        negotiations_started: ["contract_sent", "contract_clarification", "contract_followup"],
+        contract_signed: ["contract_signed"],
+      };
+      for (const [stageCode, actionCodes] of Object.entries(mapping)) {
+        await client.query(
+          "UPDATE list_values SET stage_id = (SELECT id FROM list_values WHERE list_key = 'stage' AND code = $1) WHERE list_key = 'bd_action' AND code = ANY($2::text[]) AND stage_id IS NULL",
+          [stageCode, actionCodes],
+        );
+      }
+      // Existing leads take the stage of their BD action; an action with no mapping counts as Contact Made, no action as New Deal.
+      // The same placement can be run again from List of values → BD action (recompute) after the mapping is changed.
+      await client.query(`
+        UPDATE leads l SET stage_id = COALESCE(
+          (SELECT ba.stage_id FROM list_values ba WHERE ba.id = l.bd_action_id),
+          (SELECT s.id FROM list_values s WHERE s.list_key = 'stage' AND s.code = CASE WHEN l.bd_action_id IS NULL THEN 'new_deal' ELSE 'contact_made' END)
+        ) WHERE l.stage_id IS NULL
+      `);
+    },
+  },
+  {
+    version: 19,
+    name: "Pipeline Phase 2 (PIPE-08, SPEC §10.11): the proposed needs-attention days per stage, added once while no stage rule exists",
+    async run(client) {
+      const { rows } = await client.query("SELECT value_json FROM app_settings WHERE setting_key = 'reminders'");
+      let current = rows[0]?.value_json ?? {};
+      if (typeof current === "string") { try { current = JSON.parse(current); } catch { current = {}; } }
+      if (!current || typeof current !== "object") current = {};
+      const rules = Array.isArray(current.rules) ? current.rules : [];
+      if (rules.some((rule) => rule && rule.stageId)) return;
+      const { rows: stages } = await client.query("SELECT id, code FROM list_values WHERE list_key = 'stage' ORDER BY sort_order, id");
+      // New Deal and Contact Made: 3 quiet days; Qualified through Negotiations started: 5; Contract Signed: none.
+      const days = { new_deal: 3, contact_made: 3, qualified: 5, profile_shared: 5, meeting_completed: 5, negotiations_started: 5 };
+      const added = stages.filter((stage) => days[stage.code]).map((stage) => ({ statusId: null, bdActionId: null, stageId: Number(stage.id), days: days[stage.code] }));
+      if (!added.length) return;
+      const inactivityDays = Number.isInteger(current.inactivityDays) && current.inactivityDays > 0 ? current.inactivityDays : 7;
+      await client.query(
+        "INSERT INTO app_settings (setting_key, value_json) VALUES ('reminders', $1) ON CONFLICT (setting_key) DO UPDATE SET value_json = EXCLUDED.value_json",
+        [JSON.stringify({ inactivityDays, rules: [...rules, ...added] })],
+      );
+    },
+  },
 ];
 
 if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port > 65535 || !/^[a-z_][a-z0-9_]*$/.test(databaseName)) {

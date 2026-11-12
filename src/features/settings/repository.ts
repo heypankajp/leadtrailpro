@@ -10,9 +10,9 @@ import { assertListValue } from "@/features/list-values/repository";
 import { defaultRoleLabels, systemRoles } from "@/features/users/model";
 import type { SystemRole } from "@/features/users/model";
 
-import { defaultDigests, defaultEmailSettings, maxHolidayNameLength, maxHolidays, normalizeDigests, normalizeEmailSettings, normalizeInactivityRules, type AppSettings, type Holiday, type InactivityRule } from "./model";
+import { defaultDigests, defaultEmailSettings, defaultPipelineSettings, maxHolidayNameLength, maxHolidays, normalizeDigests, normalizeEmailSettings, normalizeInactivityRules, normalizePipelineSettings, type AppSettings, type Holiday, type InactivityRule } from "./model";
 
-const defaults: AppSettings = { roleLabels: { ...defaultRoleLabels }, reminders: { inactivityDays: 7, rules: [] }, digests: { ...defaultDigests }, jobSources: defaultJobSources, opportunities: { ...defaultOpportunitySettings }, email: { ...defaultEmailSettings }, maps: defaultMapsSettings, holidays: [] };
+const defaults: AppSettings = { roleLabels: { ...defaultRoleLabels }, reminders: { inactivityDays: 7, rules: [] }, digests: { ...defaultDigests }, pipeline: { ...defaultPipelineSettings }, jobSources: defaultJobSources, opportunities: { ...defaultOpportunitySettings }, email: { ...defaultEmailSettings }, maps: defaultMapsSettings, holidays: [] };
 
 /** Keeps well-formed, unique holidays sorted by date; returns the first problem found (for input validation). */
 function normalizeHolidays(value: unknown): { holidays: Holiday[]; error: string | null } {
@@ -49,6 +49,7 @@ export async function getSettings(db: Queryable = getDatabasePool()): Promise<Ap
   const opportunities = normalizeOpportunitySettings(await readSetting<unknown>(db, "opportunities", {}));
   const email = normalizeEmailSettings(await readSetting<unknown>(db, "email", {}));
   const maps = normalizeMapsSettings(await readSetting<unknown>(db, "maps", {}));
+  const pipeline = normalizePipelineSettings(await readSetting<unknown>(db, "pipeline", {}));
   noteSenderChosen(!email.error && email.email.senderUserId !== null);
   const { holidays, error } = normalizeHolidays(calendar.holidays ?? []);
   return {
@@ -59,6 +60,7 @@ export async function getSettings(db: Queryable = getDatabasePool()): Promise<Ap
     opportunities: opportunities.error ? { ...defaultOpportunitySettings } : opportunities.settings,
     email: email.error ? { ...defaultEmailSettings } : email.email,
     maps: maps.error ? defaultMapsSettings : maps.maps,
+    pipeline: pipeline.error ? { ...defaultPipelineSettings } : pipeline.pipeline,
     holidays: error ? [] : holidays,
   };
 }
@@ -68,7 +70,7 @@ export async function listHolidayDates(db: Queryable = getDatabasePool()): Promi
   return (await getSettings(db)).holidays.map((holiday) => holiday.date);
 }
 
-export async function updateSettings(changes: { roleLabels?: Partial<Record<SystemRole, string>>; reminders?: { inactivityDays?: number; rules?: unknown }; digests?: unknown; jobSources?: unknown; opportunities?: unknown; email?: unknown; maps?: unknown; holidays?: unknown }, actorId: number): Promise<AppSettings> {
+export async function updateSettings(changes: { roleLabels?: Partial<Record<SystemRole, string>>; reminders?: { inactivityDays?: number; rules?: unknown }; digests?: unknown; pipeline?: unknown; jobSources?: unknown; opportunities?: unknown; email?: unknown; maps?: unknown; holidays?: unknown }, actorId: number): Promise<AppSettings> {
   return withTransaction(async (connection) => {
     const current = await getSettings(connection);
     if (changes.roleLabels) {
@@ -95,6 +97,7 @@ export async function updateSettings(changes: { roleLabels?: Partial<Record<Syst
         for (const rule of parsed.rules) {
           await assertListValue(connection, "status", rule.statusId, { allowInactive: true, label: "Reminder rule status" });
           await assertListValue(connection, "bd_action", rule.bdActionId, { allowInactive: true, label: "Reminder rule BD action" });
+          await assertListValue(connection, "stage", rule.stageId ?? null, { allowInactive: true, label: "Reminder rule stage" });
         }
         rules = parsed.rules;
       }
@@ -114,6 +117,17 @@ export async function updateSettings(changes: { roleLabels?: Partial<Record<Syst
       );
       if (JSON.stringify(current.digests) !== JSON.stringify(digests)) {
         await recordAudit(connection, { actorId, action: "setting.updated", entityType: "setting", before: { ...current.digests }, after: { ...digests }, details: "Updated the digest schedule" });
+      }
+    }
+    if (changes.pipeline !== undefined) {
+      const { pipeline, error } = normalizePipelineSettings(changes.pipeline);
+      if (error) throw new HttpError(400, error);
+      await connection.query(
+        "INSERT INTO app_settings (setting_key, value_json) VALUES ('pipeline', ?) ON CONFLICT (setting_key) DO UPDATE SET value_json = EXCLUDED.value_json",
+        [JSON.stringify(pipeline)],
+      );
+      if (JSON.stringify(current.pipeline) !== JSON.stringify(pipeline)) {
+        await recordAudit(connection, { actorId, action: "setting.updated", entityType: "setting", before: { ...current.pipeline }, after: { ...pipeline }, details: "Updated the pipeline next-step defaults" });
       }
     }
     if (changes.jobSources !== undefined) {

@@ -42,6 +42,7 @@ async function dailyDigest(user: UserAccount, today: string): Promise<{ title: s
     `Follow-ups tomorrow (${dashboard.followUps.tomorrow.length})${dashboard.followUps.tomorrow.length ? ":\n" + list(dashboard.followUps.tomorrow.map((lead) => lead.clientName)) : ""}`,
     `Tasks: ${dashboard.openTasks.length} open, ${overdueTasks.length} overdue, ${dueTodayTasks.length} due today${overdueTasks.length || dueTodayTasks.length ? ":\n" + list([...overdueTasks, ...dueTodayTasks].map((task) => `${task.title}${task.leadName ? ` (${task.leadName})` : ""}, due ${task.dueAt ? task.dueAt.slice(0, 16).replace("T", " ") : "—"}`)) : ""}`,
     `Needs attention (${dashboard.inactiveLeads.length})${dashboard.inactiveLeads.length ? ":\n" + list(dashboard.inactiveLeads.map((lead) => `${lead.clientName}, quiet for more than ${dashboard.inactiveLimits[lead.id] ?? dashboard.inactivityDays} days`)) : ""}`,
+    `No next step (${dashboard.noNextStepCount})${dashboard.noNextStep.length ? ":\n" + list(dashboard.noNextStep.map((lead) => `${lead.clientName} (${lead.statusLabel}, ${lead.stage ?? "no stage"}, last activity ${lead.lastActivityAt.slice(0, 10)})`)) : ""}`,
     `Client replies waiting (${dashboard.clientReplies.length})${dashboard.clientReplies.length ? ":\n" + list(dashboard.clientReplies.map((lead) => `${lead.clientName}, wrote ${(lead.lastClientEmailAt ?? "").slice(0, 16).replace("T", " ")} UTC`)) : ""}`,
     row ? `Yesterday: ${row.calls} calls, ${row.emails} emails, ${row.visits} visits, ${row.leadsCreated} leads created, ${row.conversions} conversions.` : "",
     appLink("home") ? `Open your Action Center: ${appLink("home")}` : "",
@@ -59,7 +60,7 @@ async function weeklyDigest(user: UserAccount, today: string): Promise<{ title: 
   const sections = [
     `Hi ${user.firstName}, here is your LeadTrailPro week (week of ${startOfWeekYmd(today)}).`,
     row ? `Last week (${own.range.startYmd} to ${own.range.endExclusiveYmd}, exclusive): ${row.calls} calls, ${row.emails} emails, ${row.visits} visits, ${row.notes} notes, ${row.leadsCreated} leads created, ${row.leadsUpdated} leads updated, ${row.conversions} conversions, ${row.tasksCompleted} tasks completed${row.targetPercent === null ? "" : `, ${row.targetPercent}% of target`}.` : "No activity was recorded for you last week.",
-    `This week: ${dashboard.followUps.overdue.length} overdue follow-ups, ${dashboard.followUps.today.length} due today, ${dashboard.openTasks.length} open tasks, ${dashboard.inactiveLeads.length} leads needing attention.`,
+    `This week: ${dashboard.followUps.overdue.length} overdue follow-ups, ${dashboard.followUps.today.length} due today, ${dashboard.openTasks.length} open tasks, ${dashboard.inactiveLeads.length} leads needing attention, ${dashboard.noNextStepCount} with no next step.`,
     dashboard.targets.template ? `Targets (${dashboard.targets.template.name}): ${dashboard.targets.leads.achieved}/${dashboard.targets.leads.target} leads, ${dashboard.targets.visits.achieved}/${dashboard.targets.visits.target} visits, ${dashboard.targets.conversions.achieved}/${dashboard.targets.conversions.target} conversions.` : "",
   ].filter(Boolean);
   if (hasPrivilege(user, "view_team_reports")) {

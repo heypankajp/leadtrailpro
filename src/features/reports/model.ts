@@ -46,6 +46,9 @@ export type Dashboard = {
   /** TASK-05: the number of quiet days that flagged each lead in inactiveLeads, keyed by lead id. */
   inactiveLimits: Record<string, number>;
   inactivityRuleCount: number;
+  /** PIPE-10: active leads (not Client or closed) with no open task and no upcoming follow-up date, newest activity first (up to 20), and how many there are in all. */
+  noNextStep: LeadSummary[];
+  noNextStepCount: number;
   openTasks: Task[];
   overdueTaskCount: number;
   recentLeads: LeadSummary[];

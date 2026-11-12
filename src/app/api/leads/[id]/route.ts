@@ -4,6 +4,7 @@ import { listAttachments } from "@/features/attachments/repository";
 import { listAudit } from "@/features/audit/repository";
 import { parseLeadPatch } from "@/features/leads/model";
 import { canEditLead, getLead, listActivities, updateLead } from "@/features/leads/repository";
+import { createStageFollowUp } from "@/features/pipeline/follow-up";
 import { countMessages } from "@/features/messages/repository";
 import { listTasks } from "@/features/tasks/repository";
 import { hasPrivilege, requirePrivilege, requireUser } from "@/features/users/session";
@@ -50,7 +51,11 @@ export async function PATCH(request: Request, context: RouteContext) {
     const { changes, errors } = parseLeadPatch(await readJsonBody(request));
     if (errors.length) return jsonError(400, errors.join(" "));
     const lead = await updateLead(id, changes, user);
-    return NextResponse.json({ lead });
+    // PIPE-09: a BD action or an explicit stage that moved the lead to a new stage may create the stage's suggested task (Settings → Pipeline).
+    const task = lead.stageId !== existing.stageId
+      ? await createStageFollowUp(lead, user).catch((error: unknown) => { console.error("Stage follow-up failed.", error instanceof Error ? error.message : error); return null; })
+      : null;
+    return NextResponse.json({ lead, task });
   } catch (error) {
     return handleRouteError(error, "Update lead");
   }

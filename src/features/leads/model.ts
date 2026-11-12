@@ -31,6 +31,8 @@ export type LeadInput = {
   firstContactDate: string;
   followUpDate: string | null;
   contractSignedDate: string | null;
+  /** PIPE-02: the pipeline stage; left out on creation, the lead takes the stage of its BD action, else New Deal. */
+  stageId?: number | null;
 };
 
 export type LeadSummary = LeadInput & {
@@ -46,6 +48,10 @@ export type LeadSummary = LeadInput & {
   /** "Status – Reason" for closed statuses, otherwise the status (LEAD-06). */
   statusLabel: string;
   bdAction: string | null;
+  /** PIPE-02: the stage on the Pipeline board (null only for a lead saved before migration 18 and not yet placed). */
+  stageId: number | null;
+  stage: string | null;
+  stageCode: string | null;
   clientResponse: string | null;
   leadCategory: string | null;
   companySize: string | null;
@@ -64,7 +70,7 @@ export type LeadPage = { leads: LeadSummary[]; total: number; page: number; page
 
 export const activityTypes = [
   "created", "call", "email", "visit", "note", "status_change", "bd_action", "client_response", "follow_up",
-  "transfer", "state_change", "task", "file", "edit", "listing",
+  "transfer", "state_change", "task", "file", "edit", "listing", "stage_change",
 ] as const;
 export type ActivityType = (typeof activityTypes)[number];
 
@@ -81,6 +87,7 @@ export const activityLabels: Record<ActivityType, string> = {
   note: "Note",
   status_change: "Status changed",
   bd_action: "BD action",
+  stage_change: "Stage changed",
   client_response: "Client response",
   follow_up: "Follow-up date",
   transfer: "Ownership transfer",
@@ -121,6 +128,7 @@ export type LeadFilters = {
   ownerId: number | null;
   clientResponseId: number | null;
   bdActionId: number | null;
+  stageId: number | null;
   firstContactFrom: string | null;
   firstContactTo: string | null;
   followUpFrom: string | null;
@@ -211,6 +219,7 @@ export function parseLeadInput(value: unknown): ParsedLeadInput {
     firstContactDate: optionalDate(body.firstContactDate, "First contact date", errors) ?? "",
     followUpDate: optionalDate(body.followUpDate, "Follow-up date", errors),
     contractSignedDate: optionalDate(body.contractSignedDate, "Contract signed date", errors),
+    stageId: optionalId(body.stageId, "Stage", errors),
   };
   if (!input.firstContactDate) errors.push("First contact date is required.");
   return { input, errors };
@@ -251,6 +260,7 @@ export function parseLeadPatch(value: unknown): { changes: Partial<LeadInput>; e
   }
   if (has("followUpDate")) changes.followUpDate = optionalDate(body.followUpDate, "Follow-up date", errors);
   if (has("contractSignedDate")) changes.contractSignedDate = optionalDate(body.contractSignedDate, "Contract signed date", errors);
+  if (has("stageId")) changes.stageId = optionalId(body.stageId, "Stage", errors);
   return { changes, errors };
 }
 
@@ -281,6 +291,7 @@ export function parseLeadFilters(params: URLSearchParams): LeadFilters {
     ownerId: id("ownerId"),
     clientResponseId: id("clientResponseId"),
     bdActionId: id("bdActionId"),
+    stageId: id("stageId"),
     firstContactFrom: date("firstContactFrom"),
     firstContactTo: date("firstContactTo"),
     followUpFrom: date("followUpFrom"),

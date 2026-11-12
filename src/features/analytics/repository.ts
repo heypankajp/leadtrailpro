@@ -16,7 +16,7 @@ import {
 /** The Analytics screen's data (SPEC §7.16): one call builds every section for a period and a filter set. */
 
 type LeadRow = {
-  id: number; ownerId: number; ownerName: string; statusId: number; statusCode: string; status: string; statusReason: string | null; bdActionId: number | null;
+  id: number; ownerId: number; ownerName: string; statusId: number; statusCode: string; status: string; statusReason: string | null; bdActionId: number | null; stageId: number | null;
   createdAt: string; lastActivityAt: string; followUpDate: string | null; recordState: string; industry: string; city: string | null; leadType: string | null; clientName: string;
 };
 
@@ -64,7 +64,7 @@ export async function buildAnalytics(viewer: UserAccount, period: ReportPeriod, 
     db.query("SELECT code, value FROM list_values WHERE list_key = 'status' AND is_active = TRUE ORDER BY sort_order, id"),
     db.query(
       `SELECT l.id, l.owner_id AS "ownerId", CONCAT(o.first_name, ' ', o.last_name) AS "ownerName", l.status_id AS "statusId", st.code AS "statusCode", st.value AS status, sr.value AS "statusReason",
-         l.bd_action_id AS "bdActionId", l.created_at AS "createdAt", l.last_activity_at AS "lastActivityAt", l.follow_up_date AS "followUpDate", l.record_state AS "recordState",
+         l.bd_action_id AS "bdActionId", l.stage_id AS "stageId", l.created_at AS "createdAt", l.last_activity_at AS "lastActivityAt", l.follow_up_date AS "followUpDate", l.record_state AS "recordState",
          l.industry, ci.value AS city, lt.value AS "leadType", l.client_name AS "clientName"
        FROM leads l JOIN list_values st ON st.id = l.status_id JOIN users o ON o.id = l.owner_id
        LEFT JOIN list_values sr ON sr.id = l.status_reason_id LEFT JOIN list_values ci ON ci.id = l.city_id LEFT JOIN list_values lt ON lt.id = l.lead_type_id
@@ -76,7 +76,7 @@ export async function buildAnalytics(viewer: UserAccount, period: ReportPeriod, 
   const codes = statuses.map((status) => status.code);
   const labelOf = (code: string) => statuses.find((status) => status.code === code)?.label ?? code;
   const leads = (leadRows as LeadRow[]).map((row) => ({
-    ...row, id: Number(row.id), ownerId: Number(row.ownerId), statusId: Number(row.statusId), bdActionId: row.bdActionId === null ? null : Number(row.bdActionId),
+    ...row, id: Number(row.id), ownerId: Number(row.ownerId), statusId: Number(row.statusId), bdActionId: row.bdActionId === null ? null : Number(row.bdActionId), stageId: row.stageId === null || row.stageId === undefined ? null : Number(row.stageId),
     createdAt: fromSqlDateTime(row.createdAt) ?? row.createdAt, lastActivityAt: fromSqlDateTime(row.lastActivityAt) ?? row.lastActivityAt,
     followUpDate: row.followUpDate ? String(row.followUpDate).slice(0, 10) : null,
   }));
@@ -165,7 +165,7 @@ export async function buildAnalytics(viewer: UserAccount, period: ReportPeriod, 
     if (lead.recordState !== "active" || closedCodes.includes(lead.statusCode) || lead.statusCode === "client") continue;
     const history = perLead.get(lead.id) ?? [];
     const sinceIso = history.length ? history[history.length - 1].at : lead.createdAt;
-    const allowedDays = resolveInactivityDays({ statusId: lead.statusId, bdActionId: lead.bdActionId }, settings.reminders);
+    const allowedDays = resolveInactivityDays({ statusId: lead.statusId, bdActionId: lead.bdActionId, stageId: lead.stageId }, settings.reminders);
     const overdueDays = lead.followUpDate && lead.followUpDate < today ? Math.round((new Date(`${today}T00:00:00Z`).getTime() - new Date(`${lead.followUpDate}T00:00:00Z`).getTime()) / 86_400_000) : null;
     const input = { statusCode: lead.statusCode, daysInStatus: daysSince(sinceIso, nowMs), daysSinceActivity: daysSince(lead.lastActivityAt, nowMs), overdueDays };
     const assessment = stalledAssessment(input, allowedDays);
@@ -274,19 +274,19 @@ export async function listAnalyticsLeads(viewer: UserAccount, requested: Analyti
 const quietClause = "l.record_state = 'active' AND st.code NOT IN ('lost', 'disqualified')";
 const repliesClause = "l.record_state = 'active' AND l.last_client_email_at IS NOT NULL AND l.last_client_email_at > COALESCE(l.last_team_email_at, '1970-01-01'::timestamp) AND l.last_client_email_at > l.last_activity_at";
 
-type QuietRow = { id: number; ownerId: number; statusId: number; bdActionId: number | null; lastActivityAt: string };
+type QuietRow = { id: number; ownerId: number; statusId: number; bdActionId: number | null; stageId: number | null; lastActivityAt: string };
 
 async function quietCandidates(db: Queryable, ownerIds: number[], shortestDays: number, nowMs: number): Promise<QuietRow[]> {
   if (!ownerIds.length) return [];
   const { rows } = await db.query(
-    `SELECT l.id, l.owner_id AS "ownerId", l.status_id AS "statusId", l.bd_action_id AS "bdActionId", l.last_activity_at AS "lastActivityAt"
+    `SELECT l.id, l.owner_id AS "ownerId", l.status_id AS "statusId", l.bd_action_id AS "bdActionId", l.stage_id AS "stageId", l.last_activity_at AS "lastActivityAt"
      FROM leads l JOIN list_values st ON st.id = l.status_id WHERE ${quietClause} AND l.last_activity_at < ? AND l.owner_id = ANY(?)`,
     [toSqlDateTime(new Date(nowMs - shortestDays * 86_400_000)), ownerIds],
   );
-  return (rows as QuietRow[]).map((row) => ({ ...row, id: Number(row.id), ownerId: Number(row.ownerId), statusId: Number(row.statusId), bdActionId: row.bdActionId === null ? null : Number(row.bdActionId), lastActivityAt: fromSqlDateTime(row.lastActivityAt) ?? row.lastActivityAt }));
+  return (rows as QuietRow[]).map((row) => ({ ...row, id: Number(row.id), ownerId: Number(row.ownerId), statusId: Number(row.statusId), bdActionId: row.bdActionId === null ? null : Number(row.bdActionId), stageId: row.stageId === null || row.stageId === undefined ? null : Number(row.stageId), lastActivityAt: fromSqlDateTime(row.lastActivityAt) ?? row.lastActivityAt }));
 }
 
-const isStalled = (lead: { statusId: number; bdActionId: number | null; lastActivityAt: string }, reminders: Parameters<typeof resolveInactivityDays>[1], nowMs: number) =>
+const isStalled = (lead: { statusId: number; bdActionId: number | null; stageId?: number | null; lastActivityAt: string }, reminders: Parameters<typeof resolveInactivityDays>[1], nowMs: number) =>
   new Date(lead.lastActivityAt).getTime() < nowMs - resolveInactivityDays(lead, reminders) * 86_400_000;
 
 /** Who the board shows: every active non-recruiter for team-report viewers, only the viewer otherwise. */

@@ -3,6 +3,7 @@ import { addDaysYmd, todayYmd } from "@/lib/dates";
 import { HttpError } from "@/lib/http";
 import { recordAudit, diffRecords } from "@/features/audit/repository";
 import { reasonListFor, statusLabel } from "@/features/list-values/model";
+import { resolveStageForAction, stageAdvances, type StageValue } from "@/features/pipeline/model";
 import { assertListValue, getListValue } from "@/features/list-values/repository";
 import { notifyUsers } from "@/features/notifications/repository";
 import { getUser, listUsersWithPrivilege } from "@/features/users/repository";
@@ -31,6 +32,7 @@ export const leadSelect = `
     l.status_id AS "statusId", st.value AS status, st.code AS "statusCode",
     l.status_reason_id AS "statusReasonId", sr.value AS "statusReason",
     l.bd_action_id AS "bdActionId", ba.value AS "bdAction",
+    l.stage_id AS "stageId", sg.value AS stage, sg.code AS "stageCode",
     l.client_response_id AS "clientResponseId", cr.value AS "clientResponse",
     l.lead_category_id AS "leadCategoryId", lc.value AS "leadCategory",
     l.company_size_id AS "companySizeId", cs.value AS "companySize",
@@ -53,6 +55,7 @@ export const leadSelect = `
   LEFT JOIN list_values lc ON lc.id = l.lead_category_id
   LEFT JOIN list_values cs ON cs.id = l.company_size_id
   LEFT JOIN list_values ci ON ci.id = l.city_id
+  LEFT JOIN list_values sg ON sg.id = l.stage_id
 `;
 
 const parseEmails = (value: string | string[]): string[] => {
@@ -76,6 +79,7 @@ export function toLead(row: LeadRow): LeadSummary {
     statusReasonId: row.statusReasonId === null ? null : Number(row.statusReasonId),
     statusLabel: statusLabel(row.status, row.statusReason),
     bdActionId: row.bdActionId === null ? null : Number(row.bdActionId),
+    stageId: row.stageId === null ? null : Number(row.stageId),
     clientResponseId: row.clientResponseId === null ? null : Number(row.clientResponseId),
     leadCategoryId: row.leadCategoryId === null ? null : Number(row.leadCategoryId),
     companySizeId: row.companySizeId === null ? null : Number(row.companySizeId),
@@ -95,7 +99,7 @@ export function leadAuditView(lead: LeadSummary): Record<string, unknown> {
     clientName: lead.clientName, companyUrl: lead.companyUrl, address: lead.address, comments: lead.comments,
     clientExecutive: lead.clientExecutive, contactPhone: lead.contactPhone, contactAltPhone: lead.contactAltPhone,
     contactRemark: lead.contactRemark, clientEmails: lead.clientEmails, industry: lead.industry, positions: lead.positions,
-    leadType: lead.leadType, status: lead.status, statusReason: lead.statusReason, bdAction: lead.bdAction, clientResponse: lead.clientResponse,
+    leadType: lead.leadType, status: lead.status, statusReason: lead.statusReason, bdAction: lead.bdAction, stage: lead.stage, clientResponse: lead.clientResponse,
     leadCategory: lead.leadCategory, companySize: lead.companySize, city: lead.city,
     firstContactDate: lead.firstContactDate, followUpDate: lead.followUpDate, contractSignedDate: lead.contractSignedDate,
     owner: lead.ownerName, recordState: lead.recordState, stateReason: lead.stateReason,
@@ -146,7 +150,7 @@ export async function listLeads(filters: LeadFilters, viewer: UserAccount): Prom
   const idFilters: [number | null, string][] = [
     [filters.statusId, "l.status_id"], [filters.statusReasonId, "l.status_reason_id"], [filters.leadTypeId, "l.lead_type_id"], [filters.leadCategoryId, "l.lead_category_id"],
     [filters.companySizeId, "l.company_size_id"], [filters.cityId, "l.city_id"], [filters.clientResponseId, "l.client_response_id"],
-    [filters.bdActionId, "l.bd_action_id"],
+    [filters.bdActionId, "l.bd_action_id"], [filters.stageId, "l.stage_id"],
   ];
   for (const [value, column] of idFilters) {
     if (value) { clauses.push(`${column} = ?`); params.push(value); }
@@ -274,6 +278,7 @@ async function validateListReferences(db: Queryable, input: Partial<LeadInput>) 
   if (input.leadTypeId !== undefined) await assertListValue(db, "lead_type", input.leadTypeId, { required: true, label: "Lead type" });
   if (input.statusId !== undefined) await assertListValue(db, "status", input.statusId, { required: true, label: "Status" });
   if (input.bdActionId !== undefined) await assertListValue(db, "bd_action", input.bdActionId, { label: "BD action" });
+  if (input.stageId !== undefined) await assertListValue(db, "stage", input.stageId, { label: "Stage" });
   if (input.clientResponseId !== undefined) await assertListValue(db, "client_response", input.clientResponseId, { label: "Client response" });
   if (input.leadCategoryId !== undefined) await assertListValue(db, "lead_category", input.leadCategoryId, { label: "Lead category" });
   if (input.companySizeId !== undefined) await assertListValue(db, "company_size", input.companySizeId, { label: "Company size" });
@@ -291,6 +296,74 @@ async function enforceStatusReason(db: Queryable, statusId: number, statusReason
   if (!statusReasonId) throw new HttpError(400, `Choose a reason for the ${status.value} status.`);
   await assertListValue(db, listKey, statusReasonId, { required: true, label: "Status reason" });
   return statusReasonId;
+}
+
+// ---- Pipeline stages (PIPE-02/03, SPEC §10.11) ----
+
+type StageRow = { id: number; code: string; value: string; sortOrder: number; active: boolean };
+
+/** Every stage in board order, active or not (a lead keeps an inactive stage until it moves). */
+export async function listStages(db: Queryable = getDatabasePool()): Promise<StageValue[]> {
+  const { rows } = await db.query(`SELECT id, code, value, sort_order AS "sortOrder", is_active AS active FROM list_values WHERE list_key = 'stage' ORDER BY sort_order, value`);
+  return (rows as StageRow[]).map((row) => ({ id: Number(row.id), code: row.code, value: row.value, sortOrder: Number(row.sortOrder), active: Boolean(row.active) }));
+}
+
+/** The stage a BD action lands a lead in (List of values → BD action): its mapped stage, Contact Made when unmapped, New Deal without an action. */
+export async function stageForAction(db: Queryable, bdActionId: number | null | undefined): Promise<StageValue | null> {
+  const stages = await listStages(db);
+  let actionStageId: number | null = null;
+  if (bdActionId) {
+    const { rows } = await db.query(`SELECT stage_id AS "stageId" FROM list_values WHERE id = ?`, [bdActionId]);
+    const raw = (rows as { stageId: number | null }[])[0]?.stageId;
+    actionStageId = raw === null || raw === undefined ? null : Number(raw);
+  }
+  return resolveStageForAction(bdActionId ?? null, actionStageId, stages);
+}
+
+/** Moves a lead to a stage from the board or the lead page (PIPE-05): a timeline entry and an audit row; whoever may edit the lead may move it. */
+export async function setLeadStage(id: number, stageId: number, actor: UserAccount, via: "board" | "detail" = "board"): Promise<LeadSummary> {
+  return withTransaction(async (connection) => {
+    const lead = await getLead(id, connection);
+    if (!lead) throw new HttpError(404, "Lead not found.");
+    if (!canEditLead(actor, lead)) throw new HttpError(403, "You can only move leads you own.");
+    if (lead.recordState !== "active") throw new HttpError(400, "Only active leads move through the pipeline.");
+    await assertListValue(connection, "stage", stageId, { required: true, label: "Stage" });
+    if (lead.stageId === stageId) return lead;
+    const now = new Date();
+    await connection.query("UPDATE leads SET stage_id = ? WHERE id = ?", [stageId, id]);
+    const updated = (await getLead(id, connection))!;
+    await addActivity(connection, {
+      leadId: id, userId: actor.id, type: "stage_change", summary: `Stage changed from ${lead.stage ?? "no stage"} to ${updated.stage}`, valueCode: updated.stageCode,
+      meta: { fromStageId: lead.stageId, toStageId: stageId, fromCode: lead.stageCode, toCode: updated.stageCode, via }, occurredAt: now,
+    });
+    await recordAudit(connection, {
+      actorId: actor.id, action: "lead.stage", entityType: "lead", entityId: id, before: { stage: lead.stage }, after: { stage: updated.stage },
+      details: `${actor.name} moved ${lead.clientName} from ${lead.stage ?? "no stage"} to ${updated.stage}`,
+    }, now);
+    return updated;
+  });
+}
+
+/**
+ * Places every lead again from its BD action through the current mapping (the migration's one-time placement, repeatable from
+ * List of values → BD action after the mapping changed). Writes no timeline entries; returns how many leads changed stage.
+ */
+export async function recomputeLeadStages(actor: UserAccount): Promise<number> {
+  return withTransaction(async (connection) => {
+    const result = await connection.query(
+      `WITH target AS (
+         SELECT l.id, COALESCE(ba.stage_id, s.id) AS stage_id
+         FROM leads l
+         LEFT JOIN list_values ba ON ba.id = l.bd_action_id
+         JOIN list_values s ON s.list_key = 'stage' AND s.code = CASE WHEN l.bd_action_id IS NULL THEN ? ELSE ? END
+       )
+       UPDATE leads l SET stage_id = target.stage_id FROM target WHERE target.id = l.id AND l.stage_id IS DISTINCT FROM target.stage_id`,
+      ["new_deal", "contact_made"],
+    );
+    const count = affectedRows(result);
+    await recordAudit(connection, { actorId: actor.id, action: "lead.stages_recomputed", entityType: "lead", after: { count }, details: `${actor.name} placed ${count} lead${count === 1 ? "" : "s"} again from their BD actions` });
+    return count;
+  });
 }
 
 // ---- Company matching (TRIP-07, duplicate check on creation) ----
@@ -385,15 +458,17 @@ export async function createLead(input: LeadInput, actor: UserAccount, ownerId: 
     // A card from the sales tracker carries the company's real first-contact date (§10.9), so the approval queue for historical dates does not apply.
     const fromTracker = options.opportunityId ? await opportunityHasDraft(connection, options.opportunityId) : false;
     const queued = isHistoricalFirstContact(input.firstContactDate) && !hasPrivilege(actor, "review_queued") && !fromTracker;
+    // PIPE-02: a chosen stage, else the stage of the BD action, else New Deal.
+    const stageId = input.stageId ?? (await stageForAction(connection, input.bdActionId))?.id ?? null;
     const now = new Date();
     const nowSql = toSqlDateTime(now);
     const result = await connection.query(
-      `INSERT INTO leads (owner_id, created_by, lead_type_id, status_id, status_reason_id, bd_action_id, client_response_id, lead_category_id, company_size_id, city_id,
+      `INSERT INTO leads (owner_id, created_by, lead_type_id, status_id, status_reason_id, bd_action_id, client_response_id, lead_category_id, company_size_id, city_id, stage_id,
          client_name, company_url, address, comments, client_executive, contact_phone, contact_alt_phone, contact_remark, client_emails, industry, positions,
          first_contact_date, follow_up_date, contract_signed_date, record_state, state_reason, state_changed_at, last_activity_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
       [
-        owner.id, actor.id, input.leadTypeId, input.statusId, statusReasonId, input.bdActionId, input.clientResponseId, input.leadCategoryId, input.companySizeId, input.cityId,
+        owner.id, actor.id, input.leadTypeId, input.statusId, statusReasonId, input.bdActionId, input.clientResponseId, input.leadCategoryId, input.companySizeId, input.cityId, stageId,
         input.clientName, input.companyUrl, input.address, input.comments || null, input.clientExecutive, input.contactPhone, input.contactAltPhone, input.contactRemark,
         JSON.stringify(input.clientEmails), input.industry, input.positions || null,
         input.firstContactDate, input.followUpDate, input.contractSignedDate,
@@ -405,7 +480,7 @@ export async function createLead(input: LeadInput, actor: UserAccount, ownerId: 
     await addActivity(connection, {
       leadId: id, userId: actor.id, type: "created", occurredAt: now,
       summary: queued ? `Lead created and queued for approval (first contact ${input.firstContactDate})` : `Lead created as ${lead.status}`,
-      valueCode: lead.statusCode, meta: { statusId: lead.statusId, queued },
+      valueCode: lead.statusCode, meta: { statusId: lead.statusId, stageId: lead.stageId, queued },
     });
     if (options.opportunityId) {
       const claimed = await claimOpportunityForLead(connection, options.opportunityId, { id, clientName: lead.clientName, ownerId: owner.id }, actor, now);
@@ -437,6 +512,13 @@ export async function updateLead(id: number, changes: Partial<LeadInput>, actor:
     const existing = await getLead(id, connection);
     if (!existing) throw new HttpError(404, "Lead not found.");
     await validateListReferences(connection, changes);
+    // PIPE-03: a BD action that belongs to a later stage moves the lead forward, never back; a stage chosen outright wins.
+    let stageVia: "detail" | "bd_action" = "detail";
+    if (changes.stageId === undefined && changes.bdActionId && changes.bdActionId !== existing.bdActionId) {
+      const mapped = await stageForAction(connection, changes.bdActionId);
+      const current = existing.stageId ? (await listStages(connection)).find((stage) => stage.id === existing.stageId) ?? null : null;
+      if (mapped && stageAdvances(current, mapped)) { changes = { ...changes, stageId: mapped.id }; stageVia = "bd_action"; }
+    }
     if (changes.statusId !== undefined || changes.statusReasonId !== undefined) {
       const statusId = changes.statusId ?? existing.statusId;
       const statusChanged = statusId !== existing.statusId;
@@ -448,7 +530,7 @@ export async function updateLead(id: number, changes: Partial<LeadInput>, actor:
       contactPhone: "contact_phone", contactAltPhone: "contact_alt_phone", contactRemark: "contact_remark", clientEmails: "client_emails",
       industry: "industry", positions: "positions", leadTypeId: "lead_type_id", statusId: "status_id", statusReasonId: "status_reason_id", bdActionId: "bd_action_id",
       clientResponseId: "client_response_id", leadCategoryId: "lead_category_id", companySizeId: "company_size_id", cityId: "city_id",
-      firstContactDate: "first_contact_date", followUpDate: "follow_up_date", contractSignedDate: "contract_signed_date",
+      firstContactDate: "first_contact_date", followUpDate: "follow_up_date", contractSignedDate: "contract_signed_date", stageId: "stage_id",
     };
     const assignments: string[] = [];
     const params: unknown[] = [];
@@ -485,6 +567,12 @@ export async function updateLead(id: number, changes: Partial<LeadInput>, actor:
       const action = await getListValue(updated.bdActionId, connection);
       await addActivity(connection, { leadId: id, userId: actor.id, type: "bd_action", summary: updated.bdAction ?? "BD action updated", valueCode: action?.code ?? null, occurredAt: now });
     }
+    if (updated.stageId !== existing.stageId) {
+      await addActivity(connection, {
+        leadId: id, userId: actor.id, type: "stage_change", summary: `Stage changed from ${existing.stage ?? "no stage"} to ${updated.stage ?? "no stage"}`, valueCode: updated.stageCode,
+        meta: { fromStageId: existing.stageId, toStageId: updated.stageId, fromCode: existing.stageCode, toCode: updated.stageCode, via: stageVia }, occurredAt: now,
+      });
+    }
     if (updated.clientResponseId !== existing.clientResponseId && updated.clientResponseId) {
       const response = await getListValue(updated.clientResponseId, connection);
       await addActivity(connection, { leadId: id, userId: actor.id, type: "client_response", summary: `Client response: ${updated.clientResponse}`, valueCode: response?.code ?? null, occurredAt: now });
@@ -492,7 +580,7 @@ export async function updateLead(id: number, changes: Partial<LeadInput>, actor:
     if (updated.followUpDate !== existing.followUpDate) {
       await addActivity(connection, { leadId: id, userId: actor.id, type: "follow_up", summary: updated.followUpDate ? `Follow-up scheduled for ${updated.followUpDate}` : "Follow-up date cleared", occurredAt: now });
     }
-    const otherChanges = diff.changed.filter((key) => !["status", "statusReason", "bdAction", "clientResponse", "followUpDate"].includes(key));
+    const otherChanges = diff.changed.filter((key) => !["status", "statusReason", "bdAction", "stage", "clientResponse", "followUpDate"].includes(key));
     if (otherChanges.length) {
       await addActivity(connection, { leadId: id, userId: actor.id, type: "edit", summary: `Updated ${otherChanges.join(", ")}`, occurredAt: now });
     }

@@ -18,6 +18,7 @@ export async function GET() {
       users,
       roleLabels: settings.roleLabels,
       inactivityDays: settings.reminders.inactivityDays,
+      pipeline: settings.pipeline,
       holidays: settings.holidays.map((holiday) => holiday.date),
       targetTemplates,
       mailerConfigured: isMailerConfigured(),

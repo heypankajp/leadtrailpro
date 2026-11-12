@@ -1,5 +1,6 @@
 import { api } from "@/lib/api";
 import type { ListValuesByKey } from "@/features/list-values/model";
+import type { PipelineSettings } from "@/features/settings/model";
 import type { TargetTemplate } from "@/features/targets/model";
 import type { SystemRole, UserSummary } from "@/features/users/model";
 
@@ -8,6 +9,8 @@ export type ReferenceData = {
   users: UserSummary[];
   roleLabels: Record<SystemRole, string>;
   inactivityDays: number;
+  /** PIPE-09: the next step each stage suggests and whether the app asks for one. */
+  pipeline: PipelineSettings;
   /** Holiday dates (`YYYY-MM-DD`) from the business calendar; weekends are always non-working. */
   holidays: string[];
   targetTemplates: TargetTemplate[];

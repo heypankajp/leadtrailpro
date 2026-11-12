@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { AlertTriangle, Plus, Save, ShieldCheck } from "lucide-react";
 import { ApiError, errorMessage } from "@/lib/api";
-import { reasonListFor } from "@/features/list-values/model";
+import { entryStageCode, reasonListFor } from "@/features/list-values/model";
 import { useApp } from "@/features/shell/AppContext";
 import { Dialog, ErrorText, Field } from "@/features/shell/components";
 import { createLead, updateLead } from "./client";
@@ -26,7 +26,7 @@ type DuplicateNotice = { leadId: number; clientName: string; ownerName: string; 
 type FormState = {
   clientName: string; companyUrl: string; address: string; comments: string; clientExecutive: string; contactPhone: string; contactAltPhone: string; contactRemark: string;
   clientEmails: string; industry: string; positions: string; leadTypeId: string; statusId: string; statusReasonId: string; bdActionId: string; clientResponseId: string; leadCategoryId: string;
-  companySizeId: string; cityId: string; firstContactDate: string; followUpDate: string; contractSignedDate: string; ownerId: string;
+  companySizeId: string; cityId: string; firstContactDate: string; followUpDate: string; contractSignedDate: string; ownerId: string; stageId: string;
 };
 
 /** Add or edit a lead with every field from BRD section 6 except files and notes (those live on the lead itself). */
@@ -34,19 +34,21 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, importedH
   const { reference, can, user, openLead } = useApp();
   const values = reference.listValues;
   const defaultStatus = values.status.find((item) => item.code === "cold") ?? values.status[0];
+  // PIPE-02: a new lead starts in the entry stage unless the form says otherwise.
+  const entryStage = values.stage.find((item) => item.code === entryStageCode) ?? values.stage[0];
   const [form, setForm] = useState<FormState>(() => lead ? {
     clientName: lead.clientName, companyUrl: lead.companyUrl, address: lead.address, comments: lead.comments, clientExecutive: lead.clientExecutive, contactPhone: lead.contactPhone,
     contactAltPhone: lead.contactAltPhone, contactRemark: lead.contactRemark, clientEmails: lead.clientEmails.join(", "), industry: lead.industry, positions: lead.positions,
     leadTypeId: String(lead.leadTypeId), statusId: String(lead.statusId), statusReasonId: lead.statusReasonId ? String(lead.statusReasonId) : "", bdActionId: lead.bdActionId ? String(lead.bdActionId) : "", clientResponseId: lead.clientResponseId ? String(lead.clientResponseId) : "",
     leadCategoryId: lead.leadCategoryId ? String(lead.leadCategoryId) : "", companySizeId: lead.companySizeId ? String(lead.companySizeId) : "", cityId: lead.cityId ? String(lead.cityId) : "",
-    firstContactDate: lead.firstContactDate, followUpDate: lead.followUpDate ?? "", contractSignedDate: lead.contractSignedDate ?? "", ownerId: String(lead.ownerId),
+    firstContactDate: lead.firstContactDate, followUpDate: lead.followUpDate ?? "", contractSignedDate: lead.contractSignedDate ?? "", ownerId: String(lead.ownerId), stageId: lead.stageId ? String(lead.stageId) : "",
   } : {
     clientName: prefill?.clientName ?? "", companyUrl: prefill?.companyUrl ?? "", address: prefill?.address ?? "", comments: prefill?.comments ?? "", clientExecutive: prefill?.clientExecutive ?? "",
     contactPhone: prefill?.contactPhone ?? "", contactAltPhone: prefill?.contactAltPhone ?? "", contactRemark: prefill?.contactRemark ?? "", clientEmails: (prefill?.clientEmails ?? []).join(", "),
     industry: prefill?.industry ?? "", positions: prefill?.positions ?? "",
     leadTypeId: prefill?.leadTypeId ? String(prefill.leadTypeId) : values.lead_type[0] ? String(values.lead_type[0].id) : "", statusId: prefill?.statusId ? String(prefill.statusId) : defaultStatus ? String(defaultStatus.id) : "",
     statusReasonId: "", bdActionId: prefill?.bdActionId ? String(prefill.bdActionId) : "", clientResponseId: prefill?.clientResponseId ? String(prefill.clientResponseId) : "", leadCategoryId: "",
-    companySizeId: "", cityId: prefill?.cityId ? String(prefill.cityId) : "", firstContactDate: prefill?.firstContactDate || reference.today, followUpDate: prefill?.followUpDate ?? "", contractSignedDate: prefill?.contractSignedDate ?? "", ownerId: String(user.id),
+    companySizeId: "", cityId: prefill?.cityId ? String(prefill.cityId) : "", firstContactDate: prefill?.firstContactDate || reference.today, followUpDate: prefill?.followUpDate ?? "", contractSignedDate: prefill?.contractSignedDate ?? "", ownerId: String(user.id), stageId: prefill?.stageId ? String(prefill.stageId) : entryStage ? String(entryStage.id) : "",
   });
   const [duplicate, setDuplicate] = useState<DuplicateNotice | null>(null);
   const [error, setError] = useState("");
@@ -72,6 +74,7 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, importedH
       leadTypeId: Number(form.leadTypeId), statusId: Number(form.statusId), statusReasonId: reasonKey ? idOrNull(form.statusReasonId) : null, bdActionId: idOrNull(form.bdActionId), clientResponseId: idOrNull(form.clientResponseId),
       leadCategoryId: idOrNull(form.leadCategoryId), companySizeId: idOrNull(form.companySizeId), cityId: idOrNull(form.cityId),
       firstContactDate: form.firstContactDate, followUpDate: form.followUpDate || null, contractSignedDate: form.contractSignedDate || null,
+      stageId: idOrNull(form.stageId),
     };
     try {
       const result = lead ? await updateLead(lead.id, input) : await createLead({ ...input, ownerId: can("reassign_leads") ? Number(form.ownerId) : null, opportunityId: opportunityId ?? null, allowSimilar });
@@ -114,6 +117,7 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, importedH
           <input type="date" value={form.firstContactDate} onChange={set("firstContactDate")} required />
         </Field>
         <Field label="Follow-up date"><input type="date" value={form.followUpDate} onChange={set("followUpDate")} /></Field>
+        <Field label="Pipeline stage" hint={lead ? undefined : "Where the lead starts on the Pipeline board."}>{select("stageId", values.stage, lead && !lead.stageId ? "Not set" : "")}</Field>
         {!lead && can("reassign_leads") && (
           <Field label="Owner" hint={opportunityId ? "Who will follow up this company; the lead is created in their name." : "The creator becomes the owner unless you choose someone else."}><select value={form.ownerId} onChange={set("ownerId")}>{owners.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
         )}
