@@ -55,7 +55,7 @@ Ports: the app listens on 3000; the Docker database is published on 127.0.0.1:54
 
 5. Open [http://localhost:3000](http://localhost:3000) and click **Sign in with Google** with one of the accounts in `seed/accounts.csv`. Two things must be true in the Google Cloud console: the OAuth client lists `http://localhost:3000/api/auth/google/callback` as a redirect URI, and the consent screen is published (it has been since November 6, 2026; while it is in Testing the account must be a test user). Before signing in, `curl http://localhost:3000/api/auth/session` answers `{"user":null,"needsSetup":false,"googleSignIn":true}`. Only if the accounts file were empty would the screen offer **First time setup** with the `USER_MANAGEMENT_KEY` from `.env.local` instead.
 
-6. Optional sample data (demo accounts, leads, activities, tasks):
+6. Optional sample data (demo accounts, deals, activities, tasks):
 
    ```bash
    docker compose run --rm setup node scripts/seed-sample-data.mjs
@@ -149,7 +149,7 @@ Later on the server:
 
 - Backup: `docker compose -f compose.yaml -f compose.prod.yaml exec db pg_dump -U postgres leadtrailpro > leadtrailpro-$(date +%F).sql`, plus the `leadtrailpro_attachments` volume for uploads.
 - New people: add them to `seed/accounts.csv`, commit, `git pull` on the server, then `docker compose -f compose.yaml -f compose.prod.yaml run --rm setup node scripts/seed-users.mjs` (only missing emails are created; existing ones are never changed). Or add them under User management in the app, which needs no redeploy.
-- The Indeed search on a schedule (for example every Monday at 06:00): the `jobs` container does it; set the day, time, source, and cap under Settings → Opportunity searches, enable Indeed with a budget under Job sources (the panel shows the calls, the credits they cost, and HasData's live balance; `npm run jobs:test -- --balance` reads the balance from the shell), put `HASDATA_API_KEY` and `BUSINESS_TIMEZONE` in `.env.local`, and add the searches under Opportunities → Searches & runs. Full steps in the README under “Scheduling the Indeed run”, including the curl line for Windows Task Scheduler if you prefer it to the container.
+- The Indeed search on a schedule (for example every Monday at 06:00): the `jobs` container does it; set the day, time, source, and cap under Settings → Lead searches, enable Indeed with a budget under Job sources (the panel shows the calls, the credits they cost, and HasData's live balance; `npm run jobs:test -- --balance` reads the balance from the shell), put `HASDATA_API_KEY` and `BUSINESS_TIMEZONE` in `.env.local`, and add the searches under Leads → Searches & runs. Full steps in the README under “Scheduling the Indeed run”, including the curl line for Windows Task Scheduler if you prefer it to the container.
 - Logs: `docker compose -f compose.yaml -f compose.prod.yaml logs --since 1h app jobs`.
 
 ### Pushing without releasing
@@ -196,7 +196,7 @@ npm run test:unit     # 185 tests, no database needed
 npm run build
 ```
 
-Browser suite (Selenium in Docker, about ten minutes, 93 tests in 12 files as of November 13, 2026): `scripts/e2e.sh`, or one file with `scripts/e2e.sh tests/e2e/02-leads.test.mjs`. Watch it live at [http://localhost:7900](http://localhost:7900); failed tests leave screenshots and page sources in `tests/e2e/output/`. It uses its own throwaway database and never touches your data.
+Browser suite (Selenium in Docker, about ten minutes, 93 tests in 12 files as of November 13, 2026): `scripts/e2e.sh`, or one file with `scripts/e2e.sh tests/e2e/02-leads.test.mjs`. Watch it live at [http://localhost:7900](http://localhost:7900); failed tests leave screenshots and page sources in `tests/e2e/output/`. It uses its own throwaway database and never touches your data. Stop the development `app` and `jobs` containers first (`docker compose stop app jobs`): on a busy machine the suite produces timeouts that are not failures of the app.
 
 GitHub Actions runs the same checks on every push and pull request. As of October 31, 2026 the typecheck, lint, and unit-test job passes and the browser job fails on the GitHub runner on every run, while the same suite passes locally; the job's log on the Actions tab of the repository is the next thing to read.
 

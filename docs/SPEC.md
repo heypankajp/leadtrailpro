@@ -196,6 +196,10 @@ id · list_key VARCHAR(40) (`lead_type`, `status`, `bd_action`, `client_response
 | stage_id | FK list_values NULL (SET NULL), indexed (migration 18) | PIPE-02: the pipeline stage (§10.11); placed from the BD action by the migration or Recompute stages, chosen on the form, moved on the board; NULL only for a lead never placed |
 | todo_list_id | FK list_values NULL (SET NULL), partial index (migration 21) | TODO-01: the To Do list the lead is on (§10.12); set and cleared by hand only |
 | todo_since | TIMESTAMP(0) NULL | When the lead was put on that list; the To Do page sorts by it |
+| organization_id | FK organizations NULL (SET NULL), indexed (migration 23) | The organization the deal belongs to (§10.14); the deal's client columns are kept equal to it |
+| person_id | FK persons NULL (SET NULL), indexed (migration 23) | The contact person, when the deal names one |
+| deal_value | NUMERIC(12,2) NULL, ≥ 0 (migration 24) | PD-11: optional value in CA$ (§10.15) |
+| expected_close_date | DATE NULL (migration 24) | PD-11: optional |
 | client_name | VARCHAR(200) | 4 |
 | company_url | VARCHAR(2048) | LEAD-02 |
 | address | VARCHAR(500) | 8 |
@@ -715,6 +719,8 @@ Asked for by the client on November 9, 2026: a daily, weekly, and monthly Sales 
 
 ## 8. Client application design
 
+> **Since November 13, 2026** the shell, the navigation and the way a deal opens are those of §10.13 (Pipedrive layout: dark menu, Deals page with its view switch, the deal as a page, quick add), and Contacts are §10.14, §10.16 and §10.17. The description below is the earlier design; where the two differ, §10.13 and later hold. Component names in the code: `AppShell` (routes and aliases), `DealsPage`, `PipelinePage` (the board), `LeadListPage` (the lists), `DealPage` (replaces the lead dialog), `ContactsPage`, `ContactPage`, `ContactsTimeline`, `ReleasesCard`.
+
 ### 8.1 Shell
 
 - `src/app/page.tsx` renders `App`: checks `/api/auth/session`; shows `AuthScreen` (login with a password or Sign in with Google, 2FA code, forgot, reset, first-time setup) or `AppShell`.
@@ -752,6 +758,8 @@ Hand-written CSS in `globals.css` (existing design system: 10–13 px type, `#58
 ---
 
 ## 9. Screen designs (BRD Appendix A) and as-built mapping
+
+> **Since November 13, 2026** the screens follow Pipedrive's layout and names (§10.13 onward): what this section calls a lead is a **deal**, an opportunity is a **lead**, the lead detail dialog is the **deal page**, Tasks & reminders is **Activities**, Analytics is **Insights**, and the sidebar entries My / All / Cold / Warm / Hot leads, Clients, Queued and Archive are views of the **Deals** page. The mapping below is kept for the BRD references and the rules behind each screen, which did not change.
 
 ### A1. Login / Authentication — implemented (Google and device policy planned)
 
@@ -1241,6 +1249,9 @@ Not built: probabilities per stage, moving all deals of a pipeline at once, per-
 ---
 
 ## 12. Verification
+
+- State on November 13, 2026 (night): 185 unit tests; 93 browser tests in 12 files (`01-auth` … `12-pipelines`); type check, lint and the production build clean. New that day: `tests/unit/contacts.test.mjs` and `deal-value.test.mjs`, the several-pipelines and pause cases in `pipeline.test.mjs` and `deploy.test.mjs`; `11-contacts.test.mjs` (contacts first, notes, move, merge, timeline), `12-pipelines.test.mjs`, the deal-value test in `09-pipeline`, the Releases test in `05-admin-reports`. The pause switch was also exercised on the server itself: with deploys paused a pushed commit waited, `deploy` released it, and the pause stayed on (§2.4).
+- The browser suite is sensitive to a loaded machine (timeouts and elements redrawn between two steps); stop the development `app` and `jobs` containers before `scripts/e2e.sh`. The helper `wait()` looks an element up again when the page redraws it.
 
 - `npm run typecheck`, `npm run lint`, `npm run build` must pass. GitHub Actions (`.github/workflows/ci.yml`) runs typecheck, lint, and the unit tests on every push to master and every pull request, then the browser suite through `scripts/e2e.sh` in Docker; screenshots of failed browser tests are kept as a workflow artifact.
 - `docs/TESTING.md` is the step-by-step guide for testers: Docker on a laptop, without Docker, and on a server with `compose.prod.yaml`, with `npm run db:check` as the first thing to run when the database does not connect; the table of connection errors and their fixes lives in the README (Troubleshooting), which the guide links to.
