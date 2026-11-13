@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import ReleasesCard from "@/features/deploy/ReleasesCard";
 import { stageChoices } from "@/features/pipeline/model";
 import { AlertTriangle, ArrowDown, ArrowUp, Briefcase, BriefcaseBusiness, CalendarDays, Kanban, Mail, MapPinned, Plus, RefreshCw, Save, Send, X } from "lucide-react";
 import { errorMessage } from "@/lib/api";
@@ -338,6 +339,7 @@ export default function SettingsPanel() {
               <div className="modal-actions"><button className="button button-primary" type="submit" disabled={busy}><Save size={15} /> {busy ? "Saving..." : "Save settings"}</button></div>
             </div>
           </form>
+          <ReleasesCard />
           <section className="panel settings-panel">
             <div className="panel-heading"><div><h2>Email log</h2><p>What the app sent, or recorded in stub mode.</p></div><button type="button" className="text-button" onClick={load}><RefreshCw size={13} /> Refresh</button></div>
             <div className={`form-note ${meta.mailerConfigured ? "" : "note-warning"}`}><Mail size={14} /> {

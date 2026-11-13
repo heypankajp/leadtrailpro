@@ -25,6 +25,7 @@ import { defaultSheetName } from "./lib/tracker-import.mjs";
  *                                             and is rolled back, so the row count shows what would change; every call is audited
  *   deploy-status [--log]                     what the server runs (commit, schema version), its deployer, the last deploys;
  *                                             --log adds the end of the output of the most recent failed deploy
+ *   deploy-pause | deploy-resume              hold pushes back (they wait until `deploy`), or let a push go live by itself again
  *   deploy [--no-wait]                        ask the server's deployer to rebuild and restart now, then wait for the result
  *                                             (a push to the followed branch deploys by itself; this is for a change of .env.local or a retry)
  *
@@ -39,7 +40,7 @@ import { defaultSheetName } from "./lib/tracker-import.mjs";
  *   npm run remote -- deploy-status
  */
 
-const usage = `Usage: node scripts/ltp.mjs <whoami | get <path> [k=v]... | post|patch|put|delete <path> [json|@file] | tokens | import-status | import <file> [options] | sql <statement|@file.sql> [--apply] | deploy-status [--log] | deploy [--no-wait]>
+const usage = `Usage: node scripts/ltp.mjs <whoami | get <path> [k=v]... | post|patch|put|delete <path> [json|@file] | tokens | import-status | import <file> [options] | sql <statement|@file.sql> [--apply] | deploy-status [--log] | deploy-pause | deploy-resume | deploy [--no-wait]>
 Set LTP_URL (https://host) and LTP_TOKEN (ltp_…) in the environment or in .env.remote.local (npm run remote -- …).`;
 
 const args = process.argv.slice(2);
@@ -81,6 +82,7 @@ function printDeployStatus(status) {
   console.log(`Running: commit ${status.commit ?? "unknown (image built by hand)"} · schema version ${status.schemaVersion ?? "?"}`);
   if (!status.agent) console.log("Deployer: none has checked in (it starts with the next manual deploy).");
   else console.log(`Deployer: ${status.agentOnline ? "online" : "NOT RUNNING"}, last seen ${status.agent.seenAt}; follows ${status.agent.branch} of ${status.agent.repo} (now at ${status.agent.remoteCommit?.slice(0, 12) ?? "?"}); automatic deploys ${status.agent.auto ? "on" : "off"}${status.behind ? "; the server is BEHIND the branch" : ""}`);
+  if (status.paused) console.log(`Deploys are PAUSED since ${status.paused.pausedAt} by ${status.paused.pausedByName}: pushes wait until "deploy".${status.waiting ? " A newer version is waiting now." : ""}`);
   if (status.request) console.log(`Deploy requested by ${status.request.requestedByName} at ${status.request.requestedAt}, not picked up yet.`);
   if (status.runs.length) { console.log("Last deploys:"); for (const run of status.runs) console.log(`  ${run.startedAt}  ${run.status.padEnd(7)}  ${run.commit}  ${run.details ?? ""}`); }
   else console.log("No deploys recorded yet.");
@@ -178,6 +180,12 @@ switch (command) {
     if (result.applied) console.log(`${counted}. APPLIED on the server.`);
     else if (/^(SELECT|EXPLAIN)$/i.test(result.command)) console.log(`${counted} (nothing is kept without --apply).`);
     else console.log(`${counted}. PREVIEW: rolled back, nothing changed. Run again with --apply to keep it.`);
+    break;
+  }
+  case "deploy-pause":
+  case "deploy-resume": {
+    const { status } = await call("PATCH", "/api/deploy", { json: { paused: command === "deploy-pause" } });
+    console.log(status.paused ? `Deploys are paused on ${baseUrl}: a push waits until you run "deploy".` : `Automatic deploys are on again on ${baseUrl}${status.behind ? "; the deployer will pick up the waiting version on its next check" : ""}.`);
     break;
   }
   case "deploy-status": {

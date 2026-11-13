@@ -123,4 +123,16 @@ describe("Deploys from a push (SPEC §2.4)", () => {
     assert.equal(summary.split("Parsing ecmascript source code failed").length, 2, "a repeated line is kept once");
     assert.equal(failureSummary("all good\nnothing to see"), "all good | nothing to see");
   });
+
+  test("while deploys are paused a moved branch waits; a request still deploys, and the pause does not hide other reasons", () => {
+    const remote = "a".repeat(40);
+    const running = "b".repeat(40);
+    const base = { remote, running, reachable: true, attempted: null, failed: null, requested: false, auto: true };
+    assert.deepEqual(decideDeploy({ ...base, paused: true }), { deploy: false, reason: "deploys are paused in the app; a pushed version waits until a deploy is asked for" });
+    assert.equal(decideDeploy({ ...base, paused: true, requested: true }).deploy, true);
+    assert.equal(decideDeploy({ ...base, paused: false }).deploy, true);
+    assert.equal(decideDeploy(base).deploy, true, "not paused unless said so");
+    assert.equal(decideDeploy({ ...base, paused: true, auto: false }).reason, "automatic deploys are off");
+    assert.equal(decideDeploy({ ...base, paused: true, remote: null }).reason, "the repository could not be read");
+  });
 });

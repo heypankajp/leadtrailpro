@@ -12,6 +12,8 @@ export const shortCommit = (commit: string | null | undefined) => (commit ? comm
 /** What the deployer last told the app about itself. */
 export type DeployAgent = { seenAt: string; repo: string; branch: string; remoteCommit: string | null; auto: boolean };
 export type DeployRequest = { requestedById: number; requestedByName: string; requestedAt: string };
+/** Deploys paused by an administrator: pushes wait until someone asks for a deploy (SPEC §2.4). */
+export type DeployPause = { pausedById: number; pausedByName: string; pausedAt: string };
 export type DeployRun = { id: number; commit: string; status: "running" | "success" | "failed"; details: string | null; startedAt: string; finishedAt: string | null };
 export type DeployStatus = {
   /** The commit the running app was built from; null when the image was built by hand without GIT_COMMIT. */
@@ -24,6 +26,10 @@ export type DeployStatus = {
   /** Whether the branch has moved past the running commit (the deployer will pick it up on its next check). */
   behind: boolean;
   request: DeployRequest | null;
+  /** Set while deploys are paused: a moved branch is not deployed until a deploy is asked for. */
+  paused: DeployPause | null;
+  /** Paused, and the branch is ahead of what runs: a version is waiting. */
+  waiting: boolean;
   runs: DeployRun[];
   /** The end of the output of the most recent failed deploy, so a failure can be diagnosed without access to the server. */
   failureLog: DeployFailureLog | null;

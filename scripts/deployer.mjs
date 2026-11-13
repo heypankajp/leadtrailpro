@@ -4,7 +4,8 @@
  * running; when they differ, or an administrator asked for a deploy (`POST /api/deploy`), it updates its own clone,
  * rebuilds the images through the host's Docker socket, and brings the stack up: the `migrate` service upgrades the
  * database, then the app and the scheduler restart. It reports the start and the result to the app and never retries
- * a commit that failed until the branch moves again or a deploy is asked for.
+ * a commit that failed until the branch moves again or a deploy is asked for. While an administrator has paused
+ * deploys in the app (Settings → Releases, or `deploy-pause` from the remote client), a moved branch waits for a request.
  *
  * It works in a clone of its own (the /work volume), not in the server's folder: that folder is mounted read-only at
  * /host and only supplies `.env`, `.env.local`, and the repository address. After a deploy the process exits and the
@@ -133,7 +134,9 @@ async function check() {
   if (state.unreported && (await tell({ event: "finish", ...state.unreported }))) { delete state.unreported; await writeState(state); }
 
   const answer = await tell({ event: "poll", repo: publicRepoUrl(address), branch, remoteCommit: remote, auto });
-  const decision = decideDeploy({ remote, running: answer?.commit ?? null, reachable: answer !== null, attempted: state.attempted ?? null, failed: state.failed ?? null, requested: answer?.requested === true, auto });
+  // The pause switch lives in the app (Settings → Releases). While the app does not answer, what it said last holds.
+  if (answer && (answer.paused === true) !== (state.paused === true)) { state.paused = answer.paused === true; await writeState(state); }
+  const decision = decideDeploy({ remote, running: answer?.commit ?? null, reachable: answer !== null, attempted: state.attempted ?? null, failed: state.failed ?? null, requested: answer?.requested === true, auto, paused: state.paused === true });
   if (!decision.deploy) {
     if (decision.reason !== state.lastReason) { log(decision.reason); state.lastReason = decision.reason; await writeState(state); }
     return;

@@ -14,12 +14,14 @@ export const sameCommit = (a, b) => Boolean(a && b && a.length >= 7 && b.length 
  *   attempted  the commit of the deployer's last attempt, kept across restarts
  *   failed     the commit whose last attempt failed (not retried by itself)
  *   requested  an administrator asked for a deploy now
- *   auto       whether a moved branch deploys by itself
+ *   auto       whether a moved branch deploys by itself (DEPLOY_AUTO on the server)
+ *   paused     an administrator paused deploys in the app: a moved branch waits until a deploy is asked for
  */
-export function decideDeploy({ remote, running, reachable, attempted, failed, requested, auto }) {
+export function decideDeploy({ remote, running, reachable, attempted, failed, requested, auto, paused = false }) {
   if (!remote) return { deploy: false, reason: "the repository could not be read" };
   if (requested) return { deploy: true, reason: "asked for by an administrator" };
   if (!auto) return { deploy: false, reason: "automatic deploys are off" };
+  if (paused) return { deploy: false, reason: "deploys are paused in the app; a pushed version waits until a deploy is asked for" };
   if (sameCommit(failed, remote)) return { deploy: false, reason: "the last deploy of this commit failed; push a fix or ask for a deploy" };
   // An app that does not answer is judged by what was last attempted, so a push can still repair a broken deploy.
   const current = reachable ? running : attempted;

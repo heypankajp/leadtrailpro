@@ -177,6 +177,7 @@ Each line is a short path a tester can follow after the first administrator exis
 - **Insights** (the analytics): as an administrator the Team board heads the page (click a salesperson's number for the deals behind it); then pick Last 30 days, then a custom range; filter by status or industry; click a status tile for the deals behind it; under By stage click a stage tile for the deals in that stage, then read Stage over time and Time in stage (they fill as deals are moved); read the stalled-deals reasons and open one; export the stalled list as CSV. Change the period and filters of the reports and export CSV, Excel, and PDF.
 - **Send email** (needs the Google client and a connected mailbox): open a deal with a client email, History → Emails, Send email; the message appears in the trail and on the timeline, and Reply keeps the thread.
 - **Email delivery** (administrator): Settings → Email delivery, choose the sending mailbox and save; the Email log below shows what was sent.
+- **Releases** (administrator): Settings → Releases shows the version the server runs. **Pause deploys** holds pushed changes back until someone presses **Deploy now**; **Resume automatic deploys** lets a push go live by itself again. On a laptop no deployer runs, so Deploy now is greyed out.
 - **Digest**: Settings → "Send me today's digest" puts a digest in the outbox and the bell.
 - **Old addresses**: `#/pipeline`, `#/all-leads`, `#/lead/<number>`, `#/opportunities`, `#/tasks` and `#/reports` from bookmarks or old emails still open the matching new page.
 
@@ -187,11 +188,11 @@ Inside the dev container (`docker compose exec app …` while the stack runs, or
 ```bash
 npm run typecheck
 npm run lint
-npm run test:unit     # 184 tests, no database needed
+npm run test:unit     # 185 tests, no database needed
 npm run build
 ```
 
-Browser suite (Selenium in Docker, about ten minutes, 92 tests in 12 files as of November 13, 2026): `scripts/e2e.sh`, or one file with `scripts/e2e.sh tests/e2e/02-leads.test.mjs`. Watch it live at [http://localhost:7900](http://localhost:7900); failed tests leave screenshots and page sources in `tests/e2e/output/`. It uses its own throwaway database and never touches your data.
+Browser suite (Selenium in Docker, about ten minutes, 93 tests in 12 files as of November 13, 2026): `scripts/e2e.sh`, or one file with `scripts/e2e.sh tests/e2e/02-leads.test.mjs`. Watch it live at [http://localhost:7900](http://localhost:7900); failed tests leave screenshots and page sources in `tests/e2e/output/`. It uses its own throwaway database and never touches your data.
 
 GitHub Actions runs the same checks on every push and pull request. As of October 31, 2026 the typecheck, lint, and unit-test job passes and the browser job fails on the GitHub runner on every run, while the same suite passes locally; the job's log on the Actions tab of the repository is the next thing to read.
 

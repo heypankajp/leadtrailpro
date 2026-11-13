@@ -249,4 +249,20 @@ describe("Administration and reports", () => {
     await page.wait(By.xpath("//h2[normalize-space()='Sales Managers in the sheet']"));
     await page.wait(By.xpath("//button[normalize-space()='Preview']"));
   });
+
+  // SPEC §2.4: the pause switch holds pushes back until someone deploys.
+  uiTest("Settings → Releases pauses and resumes automatic deploys", async () => {
+    await page.nav("Settings");
+    await page.heading("Settings");
+    const card = '//section[@aria-label="Releases"]';
+    await page.wait(By.xpath(`${card}//strong[normalize-space()="Automatic deploys are on."]`));
+    await page.clickButton("Pause deploys", { global: true });
+    await page.toast("Deploys paused: pushes wait until you deploy");
+    assert.match(await (await page.wait(By.xpath(`${card}//p[contains(@class,"releases-paused")]`))).getText(), /Deploys are paused since .* by Ada Admin\. Pushed changes wait until someone deploys\./);
+    // No deployer runs in the test stack, so there is nothing to ask.
+    assert.equal(await (await page.wait(By.xpath(`${card}//button[normalize-space()="Deploy now"]`))).isEnabled(), false);
+    await page.clickButton("Resume automatic deploys", { global: true });
+    await page.toast("Automatic deploys resumed");
+    await page.wait(By.xpath(`${card}//strong[normalize-space()="Automatic deploys are on."]`));
+  });
 });

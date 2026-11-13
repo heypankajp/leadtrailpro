@@ -1699,3 +1699,13 @@ h1 { margin: 9px 0 5px; color: #242941; font-size: 25px; font-weight: 690; lette
 .pipeline-card-head .pipeline-move { margin-left: auto; }
 .pipeline-card-head .deal-activity { margin-left: 2px; }
 .pipeline-card-title { flex: 1 1 auto; }
+
+/* Settings → Releases: what the server runs and the pause switch. */
+.releases-facts { display: grid; gap: 6px; margin: 12px 0; }
+.releases-facts > div { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; }
+.releases-facts dt { color: #5a6177; font-size: 11.5px; }
+.releases-facts dd { margin: 0; color: #343a52; font-size: 12px; overflow-wrap: anywhere; }
+.releases-note { align-items: center; font-size: 11.5px; }
+.releases-note.releases-paused { color: #7a4a00; background: #fff6e5; }
+.releases-note.releases-paused svg { color: #b87a06; }
+.releases-actions { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 6px; }

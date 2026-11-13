@@ -1,7 +1,7 @@
 import { fromSqlDateTime, getDatabasePool, insertId, toSqlDateTime, type Queryable } from "@/lib/db";
 import { recordAudit } from "@/features/audit/repository";
 import type { UserAccount } from "@/features/users/model";
-import { deployAgentOnlineMs, isCommit, sameCommit, shortCommit, type DeployAgent, type DeployEvent, type DeployFailureLog, type DeployRequest, type DeployRun, type DeployStatus } from "./model";
+import { deployAgentOnlineMs, isCommit, sameCommit, shortCommit, type DeployAgent, type DeployEvent, type DeployFailureLog, type DeployPause, type DeployRequest, type DeployRun, type DeployStatus } from "./model";
 
 /**
  * What the app knows about deploys (SPEC §2.4). The deployer's heartbeat and an administrator's "deploy now" live in
@@ -13,6 +13,7 @@ import { deployAgentOnlineMs, isCommit, sameCommit, shortCommit, type DeployAgen
 const agentKey = "deploy_agent";
 const requestKey = "deploy_request";
 const failureLogKey = "deploy_failure_log";
+const pauseKey = "deploy_pause";
 
 /** The commit this image was built from, when the build was given one. */
 export const runningCommit = (): string | null => { const value = process.env.APP_COMMIT?.trim().toLowerCase(); return isCommit(value) ? value : null; };
@@ -29,9 +30,10 @@ const writeSetting = (db: Queryable, key: string, value: unknown) =>
   db.query("INSERT INTO app_settings (setting_key, value_json) VALUES (?, ?) ON CONFLICT (setting_key) DO UPDATE SET value_json = EXCLUDED.value_json", [key, JSON.stringify(value)]);
 
 export async function getDeployStatus(db: Queryable = getDatabasePool(), now = new Date()): Promise<DeployStatus> {
-  const [agent, request, failureLog, runs, schema] = await Promise.all([
+  const [agent, request, pause, failureLog, runs, schema] = await Promise.all([
     readSetting<DeployAgent>(db, agentKey),
     readSetting<DeployRequest>(db, requestKey),
+    readSetting<DeployPause>(db, pauseKey),
     readSetting<DeployFailureLog>(db, failureLogKey),
     db.query("SELECT id, period_key AS \"periodKey\", status, details, started_at AS \"startedAt\", finished_at AS \"finishedAt\" FROM job_runs WHERE job = 'deploy' ORDER BY id DESC LIMIT 10"),
     db.query("SELECT MAX(version)::int AS version FROM schema_migrations").catch(() => ({ rows: [] })),
@@ -41,7 +43,7 @@ export async function getDeployStatus(db: Queryable = getDatabasePool(), now = n
     commit, schemaVersion: (schema.rows as { version: number | null }[])[0]?.version ?? null,
     agent, agentOnline: Boolean(agent && now.getTime() - new Date(agent.seenAt).getTime() < deployAgentOnlineMs),
     behind: Boolean(agent?.remoteCommit && !sameCommit(agent.remoteCommit, commit)),
-    request, failureLog,
+    request, failureLog, paused: pause, waiting: Boolean(pause && agent?.remoteCommit && !sameCommit(agent.remoteCommit, commit)),
     runs: (runs.rows as { id: number; periodKey: string; status: string; details: string | null; startedAt: string; finishedAt: string | null }[]).map((run): DeployRun => ({
       id: Number(run.id), commit: run.periodKey.split("-")[0], status: run.status === "success" ? "success" : run.status === "running" ? "running" : "failed", details: run.details,
       startedAt: fromSqlDateTime(run.startedAt) ?? run.startedAt, finishedAt: fromSqlDateTime(run.finishedAt),
@@ -57,12 +59,30 @@ export async function requestDeploy(user: UserAccount, db: Queryable = getDataba
   return request;
 }
 
+/**
+ * The pause switch: while paused, a push to the followed branch is not deployed by itself; "deploy now" still works,
+ * and the pause stays on afterwards. Resuming lets the deployer catch up with the branch on its next check.
+ */
+export async function setDeployPaused(paused: boolean, user: UserAccount, db: Queryable = getDatabasePool(), now = new Date()): Promise<DeployPause | null> {
+  const before = await readSetting<DeployPause>(db, pauseKey);
+  if (paused === (before !== null)) return before;
+  if (!paused) {
+    await db.query("DELETE FROM app_settings WHERE setting_key = ?", [pauseKey]);
+    await recordAudit(db, { actorId: user.id, action: "deploy.resumed", entityType: "job", before, details: `${user.name} resumed automatic deploys` }, now);
+    return null;
+  }
+  const pause: DeployPause = { pausedById: user.id, pausedByName: user.name, pausedAt: now.toISOString() };
+  await writeSetting(db, pauseKey, pause);
+  await recordAudit(db, { actorId: user.id, action: "deploy.paused", entityType: "job", after: pause, details: `${user.name} paused deploys: pushes wait until a deploy is asked for` }, now);
+  return pause;
+}
+
 /** One message from the deployer; the answer to `poll` tells it what is running and whether a deploy was asked for. */
 export async function recordDeployEvent(event: DeployEvent, db: Queryable = getDatabasePool(), now = new Date()): Promise<Record<string, unknown>> {
   if (event.event === "poll") {
     const agent: DeployAgent = { seenAt: now.toISOString(), repo: event.repo, branch: event.branch, remoteCommit: event.remoteCommit, auto: event.auto };
     await writeSetting(db, agentKey, agent);
-    return { commit: runningCommit(), requested: (await readSetting<DeployRequest>(db, requestKey)) !== null };
+    return { commit: runningCommit(), requested: (await readSetting<DeployRequest>(db, requestKey)) !== null, paused: (await readSetting<DeployPause>(db, pauseKey)) !== null };
   }
   if (event.event === "start") {
     // A run cut short (the deployer was stopped mid-deploy) must not stay "running" for ever.
