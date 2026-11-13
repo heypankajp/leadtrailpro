@@ -152,6 +152,10 @@ Later on the server:
 - The Indeed search on a schedule (for example every Monday at 06:00): the `jobs` container does it; set the day, time, source, and cap under Settings → Opportunity searches, enable Indeed with a budget under Job sources (the panel shows the calls, the credits they cost, and HasData's live balance; `npm run jobs:test -- --balance` reads the balance from the shell), put `HASDATA_API_KEY` and `BUSINESS_TIMEZONE` in `.env.local`, and add the searches under Opportunities → Searches & runs. Full steps in the README under “Scheduling the Indeed run”, including the curl line for Windows Task Scheduler if you prefer it to the container.
 - Logs: `docker compose -f compose.yaml -f compose.prod.yaml logs --since 1h app jobs`.
 
+### Pushing without releasing
+
+On the server a push to the followed branch goes live by itself. To push work that should not be shown yet, pause deploys first: **Settings → Releases → Pause deploys**, or `npm run remote -- deploy-pause` from another machine. The pushed version then waits (`npm run remote -- deploy-status` says "PAUSED" and "A newer version is waiting"). Release it with **Deploy now** or `npm run remote -- deploy`; the pause stays on for the next push until **Resume automatic deploys** or `npm run remote -- deploy-resume`.
+
 ## What to test in the app
 
 Since November 13, 2026 the app uses Pipedrive's layout and names: the records the team works on are **Deals** (formerly leads) and the companies waiting to be picked up are **Leads** (formerly opportunities). The menu on the left reads Action center, Deals, Leads, Contacts, Activities, Insights, then To Do and the planners, then the administration pages. The "+" next to the search box adds a deal or an activity from any page.
