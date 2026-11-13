@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { stageChoices } from "@/features/pipeline/model";
 import { AlertTriangle, ArrowDown, ArrowUp, Briefcase, BriefcaseBusiness, CalendarDays, Kanban, Mail, MapPinned, Plus, RefreshCw, Save, Send, X } from "lucide-react";
 import { errorMessage } from "@/lib/api";
 import { formatDate, formatDateTime } from "@/lib/format";
@@ -122,11 +123,11 @@ export default function SettingsPanel() {
               {systemRoles.map((role) => (
                 <Field key={role} label={`${defaultRoleLabels[role]} is shown as`}><input value={settings.roleLabels[role]} onChange={(event) => setSettings({ ...settings, roleLabels: { ...settings.roleLabels, [role]: event.target.value } })} maxLength={40} required /></Field>
               ))}
-              <Field label="Inactivity reminder after (days)" hint="Default: leads with no recorded activity for this long appear under Needs attention."><input type="number" min={1} max={90} value={settings.reminders.inactivityDays} onChange={(event) => setSettings({ ...settings, reminders: { ...settings.reminders, inactivityDays: Number(event.target.value) } })} required /></Field>
+              <Field label="Inactivity reminder after (days)" hint="Default: deals with no recorded activity for this long appear under Needs attention."><input type="number" min={1} max={90} value={settings.reminders.inactivityDays} onChange={(event) => setSettings({ ...settings, reminders: { ...settings.reminders, inactivityDays: Number(event.target.value) } })} required /></Field>
               <fieldset className="user-privileges rules-editor">
                 <legend><AlertTriangle size={12} /> Needs-attention rules by status, BD action, or stage</legend>
                 <p className="field-hint">Override the default for particular statuses, BD actions, or pipeline stages. The most specific rule wins: status and BD action together, then BD action, then status and stage, then stage, then status.</p>
-                {settings.reminders.rules.length === 0 && <p className="field-hint">No rules yet: every lead uses the default above.</p>}
+                {settings.reminders.rules.length === 0 && <p className="field-hint">No rules yet: every deal uses the default above.</p>}
                 {settings.reminders.rules.map((rule, index) => (
                   <div className="rule-row rule-row-stage" key={index}>
                     <select aria-label={`Rule ${index + 1} status`} value={rule.statusId ?? ""} onChange={(event) => updateRule(index, { statusId: event.target.value ? Number(event.target.value) : null })}>
@@ -139,7 +140,7 @@ export default function SettingsPanel() {
                     </select>
                     <select aria-label={`Rule ${index + 1} stage`} value={rule.stageId ?? ""} onChange={(event) => updateRule(index, { stageId: event.target.value ? Number(event.target.value) : null })}>
                       <option value="">Any stage</option>
-                      {reference.listValues.stage.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
+                      {stageChoices(reference.listValues.stage, reference.pipelines).map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
                     </select>
                     <span className="rule-days"><input aria-label={`Rule ${index + 1} days`} type="number" min={1} max={maxInactivityDays} value={rule.days} onChange={(event) => updateRule(index, { days: Number(event.target.value) })} required /> days</span>
                     <button type="button" className="icon-button" aria-label={`Remove rule ${index + 1}`} onClick={() => setRules(settings.reminders.rules.filter((_, position) => position !== index))}><X size={12} /></button>
@@ -152,8 +153,8 @@ export default function SettingsPanel() {
               </fieldset>
               <fieldset className="user-privileges pipeline-editor">
                 <legend><Kanban size={12} /> Pipeline next steps</legend>
-                <p className="field-hint">The next step each stage suggests when a lead reaches it. The prompt after a logged call, email, or visit, a BD action, or a move on the board is pre-filled with it; due dates count business days from the business calendar.</p>
-                {reference.listValues.stage.map((stage) => {
+                <p className="field-hint">The next step each stage suggests when a deal reaches it. The prompt after a logged call, email, or visit, a BD action, or a move on the board is pre-filled with it; due dates count business days from the business calendar.</p>
+                {stageChoices(reference.listValues.stage, reference.pipelines).map((stage) => {
                   const item = settings.pipeline.followUps[stage.code];
                   return (
                     <div className="stage-step-row" key={stage.id}>
@@ -167,7 +168,7 @@ export default function SettingsPanel() {
                   );
                 })}
                 <label className="checklist-item"><input type="checkbox" checked={settings.pipeline.promptNextStep} onChange={(event) => setSettings({ ...settings, pipeline: { ...settings.pipeline, promptNextStep: event.target.checked } })} /><span>Ask for the next step after a logged call, email, or visit, a BD action, or a stage move</span></label>
-                <label className="checklist-item"><input type="checkbox" checked={settings.pipeline.autoFollowUp} onChange={(event) => setSettings({ ...settings, pipeline: { ...settings.pipeline, autoFollowUp: event.target.checked } })} /><span>Create the stage&apos;s suggested task automatically when a lead reaches the stage, assigned to the owner, without asking</span></label>
+                <label className="checklist-item"><input type="checkbox" checked={settings.pipeline.autoFollowUp} onChange={(event) => setSettings({ ...settings, pipeline: { ...settings.pipeline, autoFollowUp: event.target.checked } })} /><span>Create the stage&apos;s suggested task automatically when a deal reaches the stage, assigned to the owner, without asking</span></label>
               </fieldset>
               <fieldset className="user-privileges digest-editor">
                 <legend><Send size={12} /> Summary emails</legend>
@@ -198,7 +199,7 @@ export default function SettingsPanel() {
                 <label className="checklist-item"><input type="checkbox" checked={settings.email.reportEmails} onChange={(event) => setSettings({ ...settings, email: { ...settings.email, reportEmails: event.target.checked } })} /> Send report emails (the weekly stalled-leads report to administrators)</label>
                 <div className="kpi-reports">
                   <span className="field-label">KPI reports to administrators</span>
-                  <small className="field-hint">Where every Sales Manager&apos;s leads stand when the email is sent: how many, split by status, and what is waiting on the person (overdue follow-ups, stalled leads, client replies), with the totals and the pipeline by stage. Daily on business days at the daily digest time. The weekly report (on the digest day) and the monthly one (on the first of the month) add what was recorded last week or last month.</small>
+                  <small className="field-hint">Where every Sales Manager&apos;s deals stand when the email is sent: how many, split by status, and what is waiting on the person (overdue follow-ups, stalled deals, client replies), with the totals and the pipeline by stage. Daily on business days at the daily digest time. The weekly report (on the digest day) and the monthly one (on the first of the month) add what was recorded last week or last month.</small>
                   {kpiReportKinds.map((kind) => (
                     <label key={kind} className="checklist-item"><input type="checkbox" checked={settings.email.kpiReports[kind]} onChange={(event) => setSettings({ ...settings, email: { ...settings.email, kpiReports: { ...settings.email.kpiReports, [kind]: event.target.checked } } })} /> {kpiReportLabels[kind]} KPI report</label>
                   ))}
@@ -208,7 +209,7 @@ export default function SettingsPanel() {
                     ))}
                   </div>
                 </div>
-                <label className="checklist-item"><input type="checkbox" checked={settings.email.watchMailboxes} onChange={(event) => setSettings({ ...settings, email: { ...settings.email, watchMailboxes: event.target.checked } })} /> Watch connected mailboxes for client emails (every 5 minutes; stamps each lead with the last email from the client and tells the owner about new replies)</label>
+                <label className="checklist-item"><input type="checkbox" checked={settings.email.watchMailboxes} onChange={(event) => setSettings({ ...settings, email: { ...settings.email, watchMailboxes: event.target.checked } })} /> Watch connected mailboxes for client emails (every 5 minutes; stamps each deal with the last email from the client and tells the owner about new replies)</label>
               </fieldset>
               <fieldset className="user-privileges job-sources-editor">
                 <legend><BriefcaseBusiness size={12} /> Job listing sources</legend>
@@ -283,8 +284,8 @@ export default function SettingsPanel() {
                 <small className="field-hint">The surest guard is on Google&apos;s side: cap each API&apos;s requests per day in the Cloud console (APIs &amp; Services → Quotas &amp; System Limits) and set a Cloud Billing budget alert. The app&apos;s counters are a second line and can trail Google&apos;s by a little.</small>
               </fieldset>
               <fieldset className="user-privileges digest-editor opportunity-editor">
-                <legend><Briefcase size={12} /> Opportunity searches</legend>
-                <p className="field-hint">The keyword searches under Opportunities → Searches &amp; runs run on these days at this time (business time zone) and fill the opportunity pool. Every enabled job source answers each search up to the listings cap, within the budgets above. Two or three runs a week keep the Indeed calls low.</p>
+                <legend><Briefcase size={12} /> Lead searches</legend>
+                <p className="field-hint">The keyword searches under Leads → Searches &amp; runs run on these days at this time (business time zone) and fill the leads inbox. Every enabled job source answers each search up to the listings cap, within the budgets above. Two or three runs a week keep the Indeed calls low.</p>
                 <label className="checklist-item"><input type="checkbox" checked={settings.opportunities.enabled} onChange={(event) => setSettings({ ...settings, opportunities: { ...settings.opportunities, enabled: event.target.checked } })} /> Run the searches on a schedule</label>
                 <div className="weekday-picks">
                   {weekdayNames.map((name, day) => (

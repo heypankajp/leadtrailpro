@@ -3,7 +3,7 @@ import { describe, test } from "node:test";
 import { summarizeTodoCounts, todoMoveSummary, todoTabs } from "../../src/features/leads/todo-model.ts";
 
 describe("To Do lists (SPEC §10.12)", () => {
-  test("the timeline says whether the lead was added, moved, or taken off", () => {
+  test("the timeline says whether the deal was added, moved, or taken off", () => {
     assert.equal(todoMoveSummary(null, "To be visited"), "To Do: added to To be visited");
     assert.equal(todoMoveSummary("To be visited", "Call back"), "To Do: moved from To be visited to Call back");
     assert.equal(todoMoveSummary("To be visited", null), "To Do: removed from To be visited");
@@ -17,7 +17,7 @@ describe("To Do lists (SPEC §10.12)", () => {
     assert.deepEqual(summarizeTodoCounts([]), { lists: [], mine: 0, everyone: 0 });
   });
 
-  test("the tabs are All lists, then each active list in order; a switched-off list stays while leads are on it", () => {
+  test("the tabs are All lists, then each active list in order; a switched-off list stays while deals are on it", () => {
     const lists = [{ id: 5, value: "To be visited", active: true }, { id: 6, value: "Call back", active: true }, { id: 7, value: "Old list", active: false }, { id: 8, value: "Retired", active: false }];
     const counts = summarizeTodoCounts([{ listId: 5, mine: 2, everyone: 7 }, { listId: 7, mine: 0, everyone: 1 }]);
     assert.deepEqual(todoTabs(lists, counts, "mine"), [

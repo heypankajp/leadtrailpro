@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     const kpiKind = isKpiReportKind(kpiJob) ? kpiJob : null;
     if (hasJobsKey(request)) {
       const digests = await runDigestJobs({ force: body.force === true ? job : null });
-      const opportunities = await runScheduledOpportunities().catch((error: unknown) => { console.error("Scheduled opportunity search failed.", error instanceof Error ? error.message : error); return null; });
+      const opportunities = await runScheduledOpportunities().catch((error: unknown) => { console.error("Scheduled lead search failed.", error instanceof Error ? error.message : error); return null; });
       const stalledReport = await runStalledReport().catch((error: unknown) => { console.error("Stalled-leads report failed.", error instanceof Error ? error.message : error); return null; });
       const kpiReports = await runKpiReports().catch((error: unknown) => { console.error("KPI report failed.", error instanceof Error ? error.message : error); return []; });
       const mailboxWatch = await runMailboxWatch().catch((error: unknown) => { console.error("Mailbox watch failed.", error instanceof Error ? error.message : error); return null; });

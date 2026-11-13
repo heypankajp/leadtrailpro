@@ -96,15 +96,15 @@ async function notifyAbout(db: Queryable, message: LeadMessage, lead: { ownerId:
 export async function postMessage(leadId: number, input: MessageInput, actor: UserAccount): Promise<LeadMessage> {
   return withTransaction(async (connection) => {
     const lead = await getLead(leadId, connection);
-    if (!lead) throw new HttpError(404, "Lead not found.");
+    if (!lead) throw new HttpError(404, "Deal not found.");
     if (input.parentId !== null) {
       const parent = await getMessage(input.parentId, connection);
-      if (!parent || parent.leadId !== leadId) throw new HttpError(400, "The thread does not belong to this lead.");
+      if (!parent || parent.leadId !== leadId) throw new HttpError(400, "The thread does not belong to this deal.");
       if (parent.parentId !== null) input = { ...input, parentId: parent.parentId }; // replies stay one level deep
     }
     if (input.quotedMessageId !== null) {
       const quoted = await getMessage(input.quotedMessageId, connection);
-      if (!quoted || quoted.leadId !== leadId) throw new HttpError(400, "The quoted message does not belong to this lead.");
+      if (!quoted || quoted.leadId !== leadId) throw new HttpError(400, "The quoted message does not belong to this deal.");
     }
     const files = await listAttachmentRefs(leadId, connection);
     const attachmentIds = input.attachmentIds.filter((id) => files.has(id));

@@ -22,12 +22,11 @@ describe("Pipeline board (PIPE-*)", () => {
   });
   after(async () => { await driver?.quit(); });
 
-  uiTest("a new lead starts in New Deal and moves with the stage menu", async () => {
+  uiTest("a new deal starts in New Deal and moves with the stage menu", async () => {
     await addLead(page, { name, executive: "Adam Reid" });
     await page.toast(`${name} added to the pipeline`);
     await page.closeDialog();
-    await page.nav("Pipeline");
-    await page.heading("Pipeline");
+    await page.deals("board");
     await page.wait(cardIn("New Deal", name));
     const select = await page.wait(By.css(`select[aria-label="Move ${name} to stage"]`), { visible: false });
     await driver.executeScript(SET_SELECT, select, "Contact Made");
@@ -38,13 +37,13 @@ describe("Pipeline board (PIPE-*)", () => {
     await page.clickButton("Skip");
   });
 
-  uiTest("undo returns the lead to its previous stage", async () => {
+  uiTest("undo returns the deal to its previous stage", async () => {
     await page.clickButton("Undo", { global: true });
     await page.toast(`${name} moved to New Deal`);
     await page.wait(cardIn("New Deal", name));
   });
 
-  uiTest("a BD action from a later stage moves the lead forward and the timeline records it", async () => {
+  uiTest("a BD action from a later stage moves the deal forward and the timeline records it", async () => {
     await page.click(By.xpath(`${column("New Deal")}//button[contains(@class,"pipeline-card-title")][.//strong[normalize-space()=${xq(name)}]]`), { global: true });
     await page.dialogTitle(name);
     await page.setValue(await page.wait(By.css('select[aria-label="BD action"]')), "Shared Profiles");
@@ -65,12 +64,12 @@ describe("Pipeline board (PIPE-*)", () => {
 
   uiTest("the status filter narrows the board", async () => {
     await page.setValue(await page.wait(By.css('select[aria-label="All statuses"]')), "Warm");
-    await driver.wait(async () => (await driver.findElements(cardIn("Profile Shared", name))).length === 0, 10000, "the cold lead leaves the board when only warm leads are shown");
+    await driver.wait(async () => (await driver.findElements(cardIn("Profile Shared", name))).length === 0, 10000, "the cold deal leaves the board when only warm deals are shown");
     await page.setValue(await page.wait(By.css('select[aria-label="All statuses"]')), "All statuses");
     await page.wait(cardIn("Profile Shared", name));
   });
 
-  uiTest("the stage bar on the lead page moves the lead after a confirmation", async () => {
+  uiTest("the stage bar on the deal page moves the deal after a confirmation", async () => {
     await page.click(By.xpath(`${column("Profile Shared")}//button[contains(@class,"pipeline-card-title")][.//strong[normalize-space()=${xq(name)}]]`), { global: true });
     await page.dialogTitle(name);
     assert.equal(await (await page.wait(By.css('.stage-bar button[aria-current="step"]'))).getAttribute("aria-label"), "Profile Shared (current stage)");
@@ -85,7 +84,7 @@ describe("Pipeline board (PIPE-*)", () => {
     await page.wait(cardIn("Qualified", name));
   });
 
-  uiTest("the Action Center lists leads with no next step", async () => {
+  uiTest("the Action Center lists deals with no next step", async () => {
     const quiet = `Harbour Bakery ${runId}`;
     await addLead(page, { name: quiet });
     await page.toast(`${quiet} added to the pipeline`);
@@ -93,22 +92,38 @@ describe("Pipeline board (PIPE-*)", () => {
     await page.nav("Action center");
     const panel = '//section[contains(@class,"reminder-panel")][.//h2[normalize-space()="No next step"]]';
     await page.wait(By.xpath(`${panel}//strong[normalize-space()=${xq(quiet)}]`));
-    assert.equal((await driver.findElements(By.xpath(`${panel}//strong[normalize-space()=${xq(name)}]`))).length, 0, "a lead with an open task is not listed");
+    assert.equal((await driver.findElements(By.xpath(`${panel}//strong[normalize-space()=${xq(name)}]`))).length, 0, "a deal with an open task is not listed");
   });
 
-  uiTest("moves several leads to a stage from the lead list", async () => {
+  uiTest("moves several deals to a stage from the deal list", async () => {
     const quiet = `Harbour Bakery ${runId}`;
-    await page.nav("All leads");
-    await page.heading("All leads");
+    await page.deals("all");
     await page.click(By.css(`input[aria-label="Select ${name}"]`), { global: true });
     await page.click(By.css(`input[aria-label="Select ${quiet}"]`), { global: true });
     await page.clickButton("Move to stage", { global: true });
-    await page.dialogTitle("Move 2 leads to a stage");
+    await page.dialogTitle("Move 2 deals to a stage");
     await page.fill("Target stage", "Contact Made");
-    await page.clickButton("Move leads");
-    await page.toast("2 leads moved to Contact Made");
+    await page.clickButton("Move deals");
+    await page.toast("2 deals moved to Contact Made");
     for (const client of [name, quiet]) {
       await page.wait(By.xpath(`//table[contains(@class,"lead-table")]//tr[.//strong[normalize-space()=${xq(client)}]]//span[contains(@class,"stage-cell") and normalize-space()="Contact Made"]`));
     }
+  });
+
+  // PD-11, SPEC §10.15: the value is optional; once a deal has one, its card and its stage show it.
+  uiTest("a deal value shows on the card and in the stage total", async () => {
+    const valued = `Cedar Foods ${runId}`;
+    await page.openAddDeal();
+    await page.fill("Client name", valued);
+    await page.fill("Value (CA$)", "25,000");
+    await page.fill("Expected close date", "2026-12-15");
+    await page.clickButton("Save deal");
+    await page.toast(`${valued} added to the pipeline`);
+    await page.wait(By.xpath('//div[contains(@class,"deal-page")]//div[contains(@class,"side-row")][small[normalize-space()="Value"]]//strong[normalize-space()="CA$25,000"]'));
+    await page.closeDialog();
+    await page.deals("board");
+    const card = await page.wait(cardIn("New Deal", valued));
+    assert.match(await card.getText(), /CA\$25,000/);
+    assert.match(await (await page.wait(By.xpath(`${column("New Deal")}//header`))).getText(), /CA\$25,000 · \d+ deals?/);
   });
 });

@@ -17,7 +17,7 @@ export async function POST(request: Request, context: RouteContext) {
     if (!Number.isSafeInteger(id) || id < 1) return jsonError(400, "Invalid user ID.");
     const body = await readJsonBody(request);
     const reassignToUserId = Number(body?.reassignToUserId);
-    if (!Number.isSafeInteger(reassignToUserId) || reassignToUserId < 1) return jsonError(400, "Choose who receives the leads.");
+    if (!Number.isSafeInteger(reassignToUserId) || reassignToUserId < 1) return jsonError(400, "Choose who receives the deals.");
     const target = await getUser(id);
     if (!target) return jsonError(404, "User not found.");
     if (target.role === "admin") {

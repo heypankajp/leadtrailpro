@@ -6,8 +6,9 @@ import { ApiError, errorMessage } from "@/lib/api";
 import { entryStageCode, reasonListFor } from "@/features/list-values/model";
 import { useApp } from "@/features/shell/AppContext";
 import { Dialog, ErrorText, Field } from "@/features/shell/components";
+import { stageChoices } from "@/features/pipeline/model";
 import { createLead, updateLead } from "./client";
-import type { LeadInput, LeadSummary } from "./model";
+import { dealCurrency, parseDealValue, type LeadInput, type LeadSummary } from "./model";
 
 type Props = {
   lead?: LeadSummary;
@@ -15,6 +16,8 @@ type Props = {
   prefill?: Partial<LeadInput>;
   /** The opportunity card this lead is created from; it becomes "assigned" together with the lead. */
   opportunityId?: number;
+  /** The contact the deal is added from (SPEC §10.14): another deal of that organization is not a duplicate, and a person without an organization joins the deal's. */
+  contact?: { organizationId?: number | null; personId?: number | null };
   /** The card carries the sales tracker's history (SPEC §10.9): its first-contact date is real, so no approval queue applies. */
   importedHistory?: boolean;
   onClose: () => void;
@@ -27,10 +30,11 @@ type FormState = {
   clientName: string; companyUrl: string; address: string; comments: string; clientExecutive: string; contactPhone: string; contactAltPhone: string; contactRemark: string;
   clientEmails: string; industry: string; positions: string; leadTypeId: string; statusId: string; statusReasonId: string; bdActionId: string; clientResponseId: string; leadCategoryId: string;
   companySizeId: string; cityId: string; firstContactDate: string; followUpDate: string; contractSignedDate: string; ownerId: string; stageId: string;
+  dealValue: string; expectedCloseDate: string;
 };
 
 /** Add or edit a lead with every field from BRD section 6 except files and notes (those live on the lead itself). */
-export default function LeadFormDialog({ lead, prefill, opportunityId, importedHistory, onClose, onSaved }: Props) {
+export default function LeadFormDialog({ lead, prefill, opportunityId, contact, importedHistory, onClose, onSaved }: Props) {
   const { reference, can, user, openLead } = useApp();
   const values = reference.listValues;
   const defaultStatus = values.status.find((item) => item.code === "cold") ?? values.status[0];
@@ -42,13 +46,15 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, importedH
     leadTypeId: String(lead.leadTypeId), statusId: String(lead.statusId), statusReasonId: lead.statusReasonId ? String(lead.statusReasonId) : "", bdActionId: lead.bdActionId ? String(lead.bdActionId) : "", clientResponseId: lead.clientResponseId ? String(lead.clientResponseId) : "",
     leadCategoryId: lead.leadCategoryId ? String(lead.leadCategoryId) : "", companySizeId: lead.companySizeId ? String(lead.companySizeId) : "", cityId: lead.cityId ? String(lead.cityId) : "",
     firstContactDate: lead.firstContactDate, followUpDate: lead.followUpDate ?? "", contractSignedDate: lead.contractSignedDate ?? "", ownerId: String(lead.ownerId), stageId: lead.stageId ? String(lead.stageId) : "",
+    dealValue: lead.dealValue === null || lead.dealValue === undefined ? "" : String(lead.dealValue), expectedCloseDate: lead.expectedCloseDate ?? "",
   } : {
     clientName: prefill?.clientName ?? "", companyUrl: prefill?.companyUrl ?? "", address: prefill?.address ?? "", comments: prefill?.comments ?? "", clientExecutive: prefill?.clientExecutive ?? "",
     contactPhone: prefill?.contactPhone ?? "", contactAltPhone: prefill?.contactAltPhone ?? "", contactRemark: prefill?.contactRemark ?? "", clientEmails: (prefill?.clientEmails ?? []).join(", "),
     industry: prefill?.industry ?? "", positions: prefill?.positions ?? "",
     leadTypeId: prefill?.leadTypeId ? String(prefill.leadTypeId) : values.lead_type[0] ? String(values.lead_type[0].id) : "", statusId: prefill?.statusId ? String(prefill.statusId) : defaultStatus ? String(defaultStatus.id) : "",
     statusReasonId: "", bdActionId: prefill?.bdActionId ? String(prefill.bdActionId) : "", clientResponseId: prefill?.clientResponseId ? String(prefill.clientResponseId) : "", leadCategoryId: "",
-    companySizeId: "", cityId: prefill?.cityId ? String(prefill.cityId) : "", firstContactDate: prefill?.firstContactDate || reference.today, followUpDate: prefill?.followUpDate ?? "", contractSignedDate: prefill?.contractSignedDate ?? "", ownerId: String(user.id), stageId: prefill?.stageId ? String(prefill.stageId) : entryStage ? String(entryStage.id) : "",
+    companySizeId: prefill?.companySizeId ? String(prefill.companySizeId) : "", cityId: prefill?.cityId ? String(prefill.cityId) : "", firstContactDate: prefill?.firstContactDate || reference.today, followUpDate: prefill?.followUpDate ?? "", contractSignedDate: prefill?.contractSignedDate ?? "", ownerId: String(user.id), stageId: prefill?.stageId ? String(prefill.stageId) : entryStage ? String(entryStage.id) : "",
+    dealValue: "", expectedCloseDate: "",
   });
   const [duplicate, setDuplicate] = useState<DuplicateNotice | null>(null);
   const [error, setError] = useState("");
@@ -65,6 +71,9 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, importedH
   const submit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); void save(false); };
 
   const save = async (allowSimilar: boolean) => {
+    // PD-11: the value is optional; what is typed must be an amount.
+    const typedValue = parseDealValue(form.dealValue);
+    if (typedValue.error) { setError(typedValue.error); return; }
     setSaving(true);
     setError("");
     setDuplicate(null);
@@ -75,15 +84,16 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, importedH
       leadCategoryId: idOrNull(form.leadCategoryId), companySizeId: idOrNull(form.companySizeId), cityId: idOrNull(form.cityId),
       firstContactDate: form.firstContactDate, followUpDate: form.followUpDate || null, contractSignedDate: form.contractSignedDate || null,
       stageId: idOrNull(form.stageId),
+      dealValue: typedValue.value, expectedCloseDate: form.expectedCloseDate || null,
     };
     try {
-      const result = lead ? await updateLead(lead.id, input) : await createLead({ ...input, ownerId: can("reassign_leads") ? Number(form.ownerId) : null, opportunityId: opportunityId ?? null, allowSimilar });
+      const result = lead ? await updateLead(lead.id, input) : await createLead({ ...input, ownerId: can("reassign_leads") ? Number(form.ownerId) : null, opportunityId: opportunityId ?? null, organizationId: contact?.organizationId ?? null, personId: contact?.personId ?? null, allowSimilar });
       onSaved(result.lead);
     } catch (caught) {
       const apiError = caught instanceof ApiError ? caught : null;
       const found = apiError?.status === 409 && apiError.data.duplicate ? (apiError.data.duplicate as Omit<DuplicateNotice, "canOverride" | "message">) : null;
       if (apiError && found) setDuplicate({ ...found, canOverride: apiError.data.canOverride === true, message: apiError.message });
-      else setError(errorMessage(caught, "Could not save the lead."));
+      else setError(errorMessage(caught, "Could not save the deal."));
       setSaving(false);
     }
   };
@@ -96,48 +106,57 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, importedH
   );
 
   return (
-    <Dialog title={lead ? `Edit ${lead.clientName}` : "Add a new lead"} eyebrow={lead ? "LEAD DETAILS" : "YOUR PIPELINE"} onClose={onClose} size="wide">
-      <form className="lead-form" onSubmit={submit}>
-        <Field label="Client name" required wide><input value={form.clientName} onChange={(event) => { set("clientName")(event); setDuplicate(null); }} required maxLength={200} placeholder="Company or client name" autoFocus /></Field>
-        <Field label="Lead type" required>{select("leadTypeId", values.lead_type, "")}</Field>
-        <Field label="Status" required>
-          <select value={form.statusId} onChange={(event) => setForm((current) => ({ ...current, statusId: event.target.value, statusReasonId: "" }))}>
-            {values.status.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
-          </select>
-        </Field>
-        {reasonKey && (
-          <Field label="Status reason" required hint="Shown with the status everywhere as \u201cStatus \u2013 Reason\u201d.">
-            <select value={form.statusReasonId} onChange={set("statusReasonId")} required>
-              <option value="">Choose a reason</option>
-              {values[reasonKey].map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
+    <Dialog title={lead ? `Edit ${lead.clientName}` : "Add deal"} eyebrow={lead ? "DEAL DETAILS" : undefined} onClose={onClose} size="wide">
+      {/* Pipedrive's add-deal layout: the deal on the left, the person and the organization on the right. */}
+      <form className="lead-form deal-form" onSubmit={submit}>
+        <div className="deal-form-col">
+          <Field label="Client name" required wide><input value={form.clientName} onChange={(event) => { set("clientName")(event); setDuplicate(null); }} required maxLength={200} placeholder="Company or client name" autoFocus /></Field>
+          <Field label="Client executive" wide><input value={form.clientExecutive} onChange={set("clientExecutive")} maxLength={160} placeholder="Contact person" /></Field>
+          <Field label="Pipeline stage" wide hint={lead ? undefined : "Where the deal starts on the board."}>{select("stageId", stageChoices(values.stage, reference.pipelines), lead && !lead.stageId ? "Not set" : "")}</Field>
+          <Field label="Deal type" required>{select("leadTypeId", values.lead_type, "")}</Field>
+          <Field label="Status" required>
+            <select value={form.statusId} onChange={(event) => setForm((current) => ({ ...current, statusId: event.target.value, statusReasonId: "" }))}>
+              {values.status.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
             </select>
           </Field>
-        )}
-        <Field label="First contact date" required hint={historical ? (can("review_queued") ? "Historical date: saved directly because you can approve queued leads." : "Earlier than yesterday: the lead will be queued for Admin approval.") : undefined}>
-          <input type="date" value={form.firstContactDate} onChange={set("firstContactDate")} required />
-        </Field>
-        <Field label="Follow-up date"><input type="date" value={form.followUpDate} onChange={set("followUpDate")} /></Field>
-        <Field label="Pipeline stage" hint={lead ? undefined : "Where the lead starts on the Pipeline board."}>{select("stageId", values.stage, lead && !lead.stageId ? "Not set" : "")}</Field>
-        {!lead && can("reassign_leads") && (
-          <Field label="Owner" hint={opportunityId ? "Who will follow up this company; the lead is created in their name." : "The creator becomes the owner unless you choose someone else."}><select value={form.ownerId} onChange={set("ownerId")}>{owners.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
-        )}
-        <Field label="BD action">{select("bdActionId", values.bd_action)}</Field>
-        <Field label="Client response">{select("clientResponseId", values.client_response)}</Field>
-        <Field label="Lead category">{select("leadCategoryId", values.lead_category)}</Field>
-        <Field label="Company size">{select("companySizeId", values.company_size)}</Field>
-        <Field label="City">{select("cityId", values.city)}</Field>
-        <Field label="Client industry"><input value={form.industry} onChange={set("industry")} maxLength={120} placeholder="e.g. Healthcare" /></Field>
-        <Field label="Address" wide><input value={form.address} onChange={set("address")} maxLength={500} placeholder="Street and location" /></Field>
-        <Field label="Client executive"><input value={form.clientExecutive} onChange={set("clientExecutive")} maxLength={160} placeholder="Contact person" /></Field>
-        <Field label="Client email(s)" hint="Separate several addresses with commas."><input value={form.clientEmails} onChange={set("clientEmails")} placeholder="name@company.com" /></Field>
-        <Field label="Contact number"><input type="tel" value={form.contactPhone} onChange={set("contactPhone")} maxLength={40} placeholder="+1 (555) 123-4567" /></Field>
-        <Field label="Extension or alternate number"><input type="tel" value={form.contactAltPhone} onChange={set("contactAltPhone")} maxLength={40} /></Field>
-        <Field label="Contact remark" wide><input value={form.contactRemark} onChange={set("contactRemark")} maxLength={500} placeholder="Best time to call, preferences..." /></Field>
-        <Field label="Company website" wide><input type="url" value={form.companyUrl} onChange={set("companyUrl")} pattern="https?://.+" title="Enter a URL beginning with http:// or https://" placeholder="https://company.com" /></Field>
-        <Field label="Position(s)" wide><textarea value={form.positions} onChange={set("positions")} rows={2} maxLength={5000} placeholder="Open or target positions" /></Field>
-        <Field label="Contract signed date"><input type="date" value={form.contractSignedDate} onChange={set("contractSignedDate")} /></Field>
-        <Field label="Comments" wide><textarea value={form.comments} onChange={set("comments")} rows={3} maxLength={5000} placeholder="General comments" /></Field>
-        {!lead && <div className="form-note"><ShieldCheck size={14} /> Interaction notes, documents, and candidate profiles are added from the lead page after saving.</div>}
+          {reasonKey && (
+            <Field label="Status reason" required wide hint="Shown with the status everywhere as \u201cStatus \u2013 Reason\u201d.">
+              <select value={form.statusReasonId} onChange={set("statusReasonId")} required>
+                <option value="">Choose a reason</option>
+                {values[reasonKey].map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
+              </select>
+            </Field>
+          )}
+          <Field label="First contact date" required hint={historical ? (can("review_queued") ? "Historical date: saved directly because you can approve queued deals." : "Earlier than yesterday: the deal will be queued for Admin approval.") : undefined}>
+            <input type="date" value={form.firstContactDate} onChange={set("firstContactDate")} required />
+          </Field>
+          <Field label="Follow-up date"><input type="date" value={form.followUpDate} onChange={set("followUpDate")} /></Field>
+          <Field label={`Value (${dealCurrency})`} hint="Optional."><input inputMode="decimal" value={form.dealValue} onChange={set("dealValue")} maxLength={16} placeholder="e.g. 25,000" /></Field>
+          <Field label="Expected close date" hint="Optional."><input type="date" value={form.expectedCloseDate} onChange={set("expectedCloseDate")} /></Field>
+          {!lead && can("reassign_leads") && (
+            <Field label="Owner" wide hint={opportunityId ? "Who will follow up this company; the deal is created in their name." : "The creator becomes the owner unless you choose someone else."}><select value={form.ownerId} onChange={set("ownerId")}>{owners.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
+          )}
+          <Field label="BD action">{select("bdActionId", values.bd_action)}</Field>
+          <Field label="Client response">{select("clientResponseId", values.client_response)}</Field>
+          <Field label="Deal category">{select("leadCategoryId", values.lead_category)}</Field>
+          <Field label="Contract signed date"><input type="date" value={form.contractSignedDate} onChange={set("contractSignedDate")} /></Field>
+          <Field label="Position(s)" wide><textarea value={form.positions} onChange={set("positions")} rows={2} maxLength={5000} placeholder="Open or target positions" /></Field>
+          <Field label="Comments" wide><textarea value={form.comments} onChange={set("comments")} rows={3} maxLength={5000} placeholder="General comments" /></Field>
+        </div>
+        <div className="deal-form-col deal-form-side">
+          <h3 className="deal-form-heading">PERSON</h3>
+          <Field label="Client email(s)" wide hint="Separate several addresses with commas."><input value={form.clientEmails} onChange={set("clientEmails")} placeholder="name@company.com" /></Field>
+          <Field label="Contact number"><input type="tel" value={form.contactPhone} onChange={set("contactPhone")} maxLength={40} placeholder="+1 (555) 123-4567" /></Field>
+          <Field label="Extension or alternate number"><input type="tel" value={form.contactAltPhone} onChange={set("contactAltPhone")} maxLength={40} /></Field>
+          <Field label="Contact remark" wide><input value={form.contactRemark} onChange={set("contactRemark")} maxLength={500} placeholder="Best time to call, preferences..." /></Field>
+          <h3 className="deal-form-heading">ORGANIZATION</h3>
+          <Field label="Client industry"><input value={form.industry} onChange={set("industry")} maxLength={120} placeholder="e.g. Healthcare" /></Field>
+          <Field label="Company size">{select("companySizeId", values.company_size)}</Field>
+          <Field label="City" wide>{select("cityId", values.city)}</Field>
+          <Field label="Address" wide><input value={form.address} onChange={set("address")} maxLength={500} placeholder="Street and location" /></Field>
+          <Field label="Company website" wide><input type="url" value={form.companyUrl} onChange={set("companyUrl")} pattern="https?://.+" title="Enter a URL beginning with http:// or https://" placeholder="https://company.com" /></Field>
+        </div>
+        {!lead && <div className="form-note"><ShieldCheck size={14} /> Notes, documents, and candidate profiles are added on the deal page after saving.</div>}
         {duplicate && (
           <div className="form-note duplicate-note" role="alert">
             <AlertTriangle size={14} />
@@ -150,10 +169,10 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, importedH
             </div>
           </div>
         )}
-        <ErrorText message={error} />
+        <div className="field-wide"><ErrorText message={error} /></div>
         <div className="modal-actions">
           <button type="button" className="button button-outline" onClick={onClose}>Cancel</button>
-          <button type="submit" className="button button-primary" disabled={saving}>{lead ? <Save size={15} /> : <Plus size={15} />} {saving ? "Saving..." : lead ? "Save changes" : "Save lead"}</button>
+          <button type="submit" className="button button-primary" disabled={saving}>{lead ? <Save size={15} /> : <Plus size={15} />} {saving ? "Saving..." : lead ? "Save changes" : "Save deal"}</button>
         </div>
       </form>
     </Dialog>

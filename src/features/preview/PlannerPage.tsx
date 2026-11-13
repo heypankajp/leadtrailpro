@@ -14,7 +14,7 @@ export default function PlannerPage() {
   ];
   return (
     <>
-      <div className="page-heading"><div><div className="eyebrow">PLAN YOUR DAY <span className="eyebrow-dot">·</span> PREVIEW</div><h1>Road visit planner</h1><p>Make the most of every mile with a thoughtful route. Visits you log on leads already count toward your targets.</p></div></div>
+      <div className="page-heading"><div><div className="eyebrow">PLAN YOUR DAY <span className="eyebrow-dot">·</span> PREVIEW</div><h1>Road visit planner</h1><p>Make the most of every mile with a thoughtful route. Visits you log on deals already count toward your targets.</p></div></div>
       <div className="planner-toolbar panel"><div className="planner-date"><CalendarDays size={17} /><strong>{formatDate(localToday())}</strong></div><span className="planner-route-note"><MapPin size={14} /> 4 stops <span>·</span> 26 km total</span><button className="button button-outline" disabled><Sparkles size={15} /> Optimize route</button></div>
       <div className="planner-layout">
         <div className="panel route-panel">

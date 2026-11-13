@@ -28,7 +28,7 @@ export async function GET(request: Request) {
     if (params.get("format") === "pdf") {
       const columns = [
         { header: "Name", width: 150 }, { header: "Role", width: 80 }, { header: "Stage", width: 80 }, { header: "Template", width: 90 },
-        { header: "Leads", width: 44, align: "right" as const }, { header: "Updated", width: 50, align: "right" as const }, { header: "Calls", width: 44, align: "right" as const }, { header: "Emails", width: 48, align: "right" as const },
+        { header: "Deals", width: 44, align: "right" as const }, { header: "Updated", width: 50, align: "right" as const }, { header: "Calls", width: 44, align: "right" as const }, { header: "Emails", width: 48, align: "right" as const },
         { header: "Visits", width: 44, align: "right" as const }, { header: "Notes", width: 44, align: "right" as const }, { header: "Conv.", width: 44, align: "right" as const }, { header: "Tasks", width: 44, align: "right" as const },
         { header: "Done", width: 44, align: "right" as const }, { header: "Files", width: 44, align: "right" as const }, { header: "Logins", width: 48, align: "right" as const }, { header: "Target %", width: 56, align: "right" as const },
       ];
@@ -39,7 +39,7 @@ export async function GET(request: Request) {
       const totals = report.rows.reduce((sum, row) => ({ leads: sum.leads + row.leadsCreated, calls: sum.calls + row.calls, emails: sum.emails + row.emails, visits: sum.visits + row.visits, conversions: sum.conversions + row.conversions }), { leads: 0, calls: 0, emails: 0, visits: 0, conversions: 0 });
       const buffer = await renderTablePdf({
         title: "Performance report", subtitle: `${reportPeriodLabels[period as ReportPeriod]} · ${report.range.startYmd} to ${report.range.endExclusiveYmd} (exclusive)`,
-        meta: [["Scope", filterText], ["Totals", `${totals.leads} leads · ${totals.calls} calls · ${totals.emails} emails · ${totals.visits} visits · ${totals.conversions} conversions`], ["Exported", new Date().toISOString()]],
+        meta: [["Scope", filterText], ["Totals", `${totals.leads} deals · ${totals.calls} calls · ${totals.emails} emails · ${totals.visits} visits · ${totals.conversions} conversions`], ["Exported", new Date().toISOString()]],
         columns, rows, landscape: true, emptyText: "No people to report on.",
       });
       return pdfResponse(buffer, `leadtrailpro-${period}-${report.range.startYmd}.pdf`);
@@ -50,7 +50,7 @@ export async function GET(request: Request) {
     const sheet = workbook.addWorksheet("Performance");
     sheet.columns = [
       { header: "Name", key: "name", width: 26 }, { header: "Role", key: "role", width: 16 }, { header: "Stage", key: "stage", width: 16 }, { header: "Template", key: "template", width: 18 },
-      { header: "Leads", key: "leadsCreated", width: 8 }, { header: "Updated", key: "leadsUpdated", width: 9 }, { header: "Calls", key: "calls", width: 8 }, { header: "Emails", key: "emails", width: 8 },
+      { header: "Deals", key: "leadsCreated", width: 8 }, { header: "Updated", key: "leadsUpdated", width: 9 }, { header: "Calls", key: "calls", width: 8 }, { header: "Emails", key: "emails", width: 8 },
       { header: "Visits", key: "visits", width: 8 }, { header: "Notes", key: "notes", width: 8 }, { header: "Conversions", key: "conversions", width: 12 }, { header: "Tasks", key: "tasksCreated", width: 8 },
       { header: "Done", key: "tasksCompleted", width: 8 }, { header: "Files", key: "filesUploaded", width: 8 }, { header: "Logins", key: "logins", width: 8 }, { header: "Target %", key: "targetPercent", width: 10 },
     ];
@@ -60,7 +60,7 @@ export async function GET(request: Request) {
       sheet.addRow({ ...row, role: roleLabels[row.role as keyof typeof roleLabels] ?? row.role, template: row.template ?? "", targetPercent: row.targetPercent ?? "" });
     }
     const daily = workbook.addWorksheet("Daily");
-    daily.columns = [{ header: "Date", key: "date", width: 12 }, { header: "Calls", key: "calls", width: 8 }, { header: "Emails", key: "emails", width: 8 }, { header: "Visits", key: "visits", width: 8 }, { header: "Leads", key: "leads", width: 8 }];
+    daily.columns = [{ header: "Date", key: "date", width: 12 }, { header: "Calls", key: "calls", width: 8 }, { header: "Emails", key: "emails", width: 8 }, { header: "Visits", key: "visits", width: 8 }, { header: "Deals", key: "leads", width: 8 }];
     daily.getRow(1).font = { bold: true };
     for (const point of report.series) daily.addRow(point);
     const info = workbook.addWorksheet("Report");

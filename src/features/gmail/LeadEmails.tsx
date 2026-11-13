@@ -76,7 +76,7 @@ export default function LeadEmails({ leadId, addresses, attachments }: { leadId:
           {status.allMailboxes && <small className="field-hint">You see messages from every connected mailbox.</small>}
         </div>
       )}
-      {status?.configured && addresses.length === 0 && <p className="no-attachments">Add a client email address to the lead to see messages.</p>}
+      {status?.configured && addresses.length === 0 && <p className="no-attachments">Add a client email address to the deal to see messages.</p>}
       {status?.configured && addresses.length > 0 && !connected && !status.allMailboxes && <p className="no-attachments">Connect your Gmail to see and answer emails from your own mailbox. Emails that colleagues&apos; connected mailboxes exchanged with this client are listed below.</p>}
       {canLoad && loading && <Loading text="Loading emails..." />}
       <ErrorText message={emailsError} />
@@ -84,7 +84,7 @@ export default function LeadEmails({ leadId, addresses, attachments }: { leadId:
         <>
           {result.failures > 0 && <div className="form-note note-warning"><Mail size={14} /> Some mailboxes could not be read. Those users may need to reconnect Gmail.</div>}
           {threads.length === 0
-            ? <EmptyState icon={<Mail size={22} />} title="No recent emails found" text="Messages to or from the lead's email addresses appear here." />
+            ? <EmptyState icon={<Mail size={22} />} title="No recent emails found" text="Messages to or from the deal's email addresses appear here." />
             : (
               <div className="email-list">
                 {threads.map((thread) => (
@@ -148,7 +148,7 @@ function ComposeDialog({ leadId, initial, attachments, onClose, onSent }: { lead
         <Field label="Message" required wide><textarea value={form.body} onChange={set("body")} rows={10} maxLength={20000} required /></Field>
         {attachments.length > 0 && (
           <fieldset className="user-privileges email-attachments">
-            <legend>Attach documents of this lead</legend>
+            <legend>Attach documents of this deal</legend>
             {attachments.map((item) => (
               <label key={item.id} className="checklist-item">
                 <input type="checkbox" checked={attached.includes(item.id)} onChange={(event) => setAttached((current) => event.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id))} />

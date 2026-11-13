@@ -9,12 +9,12 @@ import { requirePrivilege, requireUser } from "@/features/users/session";
 export async function GET() {
   try {
     const user = await requireUser();
-    requirePrivilege(user, "view_leads", "You do not have permission to view opportunities.");
+    requirePrivilege(user, "view_leads", "You do not have permission to view leads.");
     const [searches, settings] = await Promise.all([listSearches(), getSettings()]);
     // The defaults pre-fill a new search (Settings → Opportunity searches).
     return NextResponse.json({ searches, defaults: { titles: settings.opportunities.defaultTitles, location: settings.opportunities.defaultLocation, postedWithinDays: settings.opportunities.postedWithinDays } });
   } catch (error) {
-    return handleRouteError(error, "List opportunity searches");
+    return handleRouteError(error, "List lead searches");
   }
 }
 
@@ -27,6 +27,6 @@ export async function POST(request: Request) {
     if (errors.length) return jsonError(400, errors.join(" "));
     return NextResponse.json({ search: await createSearch(input, user) }, { status: 201 });
   } catch (error) {
-    return handleRouteError(error, "Create opportunity search");
+    return handleRouteError(error, "Create lead search");
   }
 }

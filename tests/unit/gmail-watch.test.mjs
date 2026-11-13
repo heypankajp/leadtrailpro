@@ -62,7 +62,7 @@ describe("mailbox watch rules (MAIL-01)", () => {
     assert.equal(matchMessage(message(), mailbox, leads, team, { notify: false })[0].notify, false);
   });
 
-  test("a lead waits for a reply when the client's email is newer than the team's last email and last activity", () => {
+  test("a deal waits for a reply when the client's email is newer than the team's last email and last activity", () => {
     assert.equal(replyWaiting({ lastClientEmailAt: null, lastTeamEmailAt: null, lastActivityAt: "2026-11-01T00:00:00Z" }), false);
     assert.equal(replyWaiting({ lastClientEmailAt: "2026-11-07T10:00:00Z", lastTeamEmailAt: null, lastActivityAt: "2026-11-01T00:00:00Z" }), true);
     assert.equal(replyWaiting({ lastClientEmailAt: "2026-11-07T10:00:00Z", lastTeamEmailAt: "2026-11-07T11:00:00Z", lastActivityAt: "2026-11-01T00:00:00Z" }), false);

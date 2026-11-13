@@ -8,7 +8,7 @@ import { requirePrivilege, requireUser } from "@/features/users/session";
 export async function GET(request: Request) {
   try {
     const user = await requireUser();
-    requirePrivilege(user, "view_leads", "You do not have permission to view leads.");
+    requirePrivilege(user, "view_leads", "You do not have permission to view deals.");
     const filters = parsePipelineFilters(new URL(request.url).searchParams);
     return NextResponse.json(await listPipeline(filters, user));
   } catch (error) {

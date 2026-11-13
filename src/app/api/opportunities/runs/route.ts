@@ -8,10 +8,10 @@ import { requirePrivilege, requireUser } from "@/features/users/session";
 export async function GET() {
   try {
     const user = await requireUser();
-    requirePrivilege(user, "view_leads", "You do not have permission to view opportunities.");
+    requirePrivilege(user, "view_leads", "You do not have permission to view leads.");
     return NextResponse.json({ runs: await listRuns(20) });
   } catch (error) {
-    return handleRouteError(error, "List opportunity runs");
+    return handleRouteError(error, "List lead runs");
   }
 }
 
@@ -23,6 +23,6 @@ export async function POST(request: Request) {
     const run = await runOpportunitySearches({ trigger: "manual", actorId: user.id });
     return NextResponse.json({ run, runs: await listRuns(20) });
   } catch (error) {
-    return handleRouteError(error, "Run opportunity searches");
+    return handleRouteError(error, "Run lead searches");
   }
 }

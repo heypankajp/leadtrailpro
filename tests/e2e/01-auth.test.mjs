@@ -70,13 +70,17 @@ describe("Sign-in and first-time setup", () => {
     await page.fill("Password", admin.password, { global: true });
     await page.clickButton("Sign in", { global: true });
     await page.wait(By.css("nav.side-nav"));
-    const signedInAs = await (await page.wait(By.css(".sidebar-tip p"))).getText();
+    // The account menu in the top bar names the signed-in person and their email address.
+    await page.click("button.topbar-user", { global: true });
+    const signedInAs = await (await page.wait(By.css(".menu-heading .menu-email"))).getText();
     assert.equal(signedInAs, admin.email);
+    await page.click("button.topbar-user", { global: true });
   });
 
   uiTest("changes the password and signs back in with it", async () => {
     const changeTo = async (current, next) => {
-      await page.click(By.xpath('//div[contains(@class,"sidebar-tip")]//button'), { global: true });
+      await page.click("button.topbar-user", { global: true });
+      await page.click(By.xpath('.//div[@role="menu"]//button[normalize-space()="Change password"]'), { global: true });
       await page.dialogTitle("Change your password");
       await page.fill("Current password", current);
       await page.fill("New password", next);

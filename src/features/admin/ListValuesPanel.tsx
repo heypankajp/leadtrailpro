@@ -8,10 +8,16 @@ import { entryStageCode, fixedListKeys, listKeyLabels, listKeys, statusCodes, ty
 import { recomputeStages } from "@/features/pipeline/client";
 import { useApp } from "@/features/shell/AppContext";
 import { Dialog, ErrorText, Loading } from "@/features/shell/components";
-import { createListValue, fetchListValues, reorderListValues, updateListValue } from "./client";
+import { createListValue, fetchListValues, reorderListValues, updateListValue, createPipeline, updatePipeline } from "./client";
+import { stagesOfPipeline } from "@/features/pipeline/model";
 
 export default function ListValuesPanel() {
-  const { notify, refreshReference } = useApp();
+  const { notify, refreshReference, reference } = useApp();
+  // PD-09: the stage list is shown one pipeline at a time.
+  const pipelines = reference.pipelines;
+  const [pipelineId, setPipelineId] = useState<number | null>(null);
+  const pipeline = pipelines.find((item) => item.id === pipelineId) ?? pipelines.find((item) => item.isDefault) ?? null;
+  const [newPipeline, setNewPipeline] = useState("");
   const [listKey, setListKey] = useState<ListKey>("bd_action");
   const fetcher = useCallback(() => fetchListValues(true).then((result) => result.listValues), []);
   const { data: values, error, reload } = useAsyncData<ListValuesByKey>(fetcher);
@@ -29,7 +35,7 @@ export default function ListValuesPanel() {
   const add = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
-      await createListValue(listKey, newValue);
+      await createListValue(listKey, newValue, listKey === "stage" ? pipeline?.id ?? null : null);
       setNewValue("");
       await after(`Added "${newValue.trim()}" to ${listKeyLabels[listKey]}`);
     } catch (caught) {
@@ -42,7 +48,7 @@ export default function ListValuesPanel() {
     try {
       await updateListValue(editing.id, { value: editing.value });
       setEditing(null);
-      await after("Value renamed. Existing leads now show the new name.");
+      await after("Value renamed. Existing deals now show the new name.");
     } catch (caught) {
       notify(errorMessage(caught), "error");
     }
@@ -51,7 +57,7 @@ export default function ListValuesPanel() {
   const toggle = async (value: ListValue) => {
     try {
       await updateListValue(value.id, { active: !value.active });
-      await after(value.active ? `"${value.value}" deactivated (kept on existing leads)` : `"${value.value}" reactivated`);
+      await after(value.active ? `"${value.value}" deactivated (kept on existing deals)` : `"${value.value}" reactivated`);
     } catch (caught) {
       notify(errorMessage(caught), "error");
     }
@@ -59,12 +65,14 @@ export default function ListValuesPanel() {
 
   const move = async (index: number, direction: -1 | 1) => {
     if (!values) return;
-    const list = [...values[listKey]];
+    // The order is changed inside the list shown (one pipeline's stages); the other stages keep their order.
+    const list = [...current];
     const target = index + direction;
     if (target < 0 || target >= list.length) return;
     [list[index], list[target]] = [list[target], list[index]];
+    const shown = new Set(list.map((item) => item.id));
     try {
-      await reorderListValues(listKey, list.map((item) => item.id));
+      await reorderListValues(listKey, [...values[listKey].filter((item) => !shown.has(item.id)), ...list].map((item) => item.id));
       reload();
       await refreshReference();
     } catch (caught) {
@@ -77,7 +85,7 @@ export default function ListValuesPanel() {
     try {
       await updateListValue(value.id, { stageId });
       const stage = stageId ? values?.stage.find((item) => item.id === stageId) : null;
-      await after(stage ? `"${value.value}" now lands leads in ${stage.value}` : `"${value.value}" no longer maps to a stage (counts as Contact Made)`);
+      await after(stage ? `"${value.value}" now lands deals in ${stage.value}` : `"${value.value}" no longer maps to a stage (counts as Contact Made)`);
     } catch (caught) {
       notify(errorMessage(caught), "error");
     }
@@ -88,7 +96,7 @@ export default function ListValuesPanel() {
     try {
       const { count } = await recomputeStages();
       setRecomputeOpen(false);
-      notify(`${count} ${count === 1 ? "lead" : "leads"} placed again from their BD actions`);
+      notify(`${count} ${count === 1 ? "deal" : "deals"} placed again from their BD actions`);
     } catch (caught) {
       notify(errorMessage(caught), "error");
     } finally {
@@ -96,24 +104,58 @@ export default function ListValuesPanel() {
     }
   };
 
-  const current = values?.[listKey] ?? [];
-  const stages = values?.stage.filter((item) => item.active) ?? [];
+  const all = values?.[listKey] ?? [];
+  const current = listKey === "stage" ? stagesOfPipeline(all, pipeline?.id, pipelines) : all;
+  // BD actions place deals in the default pipeline.
+  const stages = stagesOfPipeline(values?.stage.filter((item) => item.active) ?? [], null, pipelines);
+
+  const addPipeline = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    try {
+      const created = await createPipeline(newPipeline);
+      setNewPipeline("");
+      setPipelineId(created.pipeline.id);
+      await after(`Pipeline "${created.pipeline.name}" added with its first stage, New`);
+    } catch (caught) {
+      notify(errorMessage(caught), "error");
+    }
+  };
+  const changePipeline = async (changes: { name?: string; active?: boolean }, message: string) => {
+    if (!pipeline) return;
+    try { await updatePipeline(pipeline.id, changes); await after(message); } catch (caught) { notify(errorMessage(caught), "error"); }
+  };
   const fixed = fixedListKeys.includes(listKey);
   const locked = (value: ListValue) => fixed || (value.listKey === "status" && statusCodes.includes(value.code as (typeof statusCodes)[number])) || (value.listKey === "stage" && value.code === entryStageCode);
 
   return (
     <>
-      <div className="page-heading"><div><div className="eyebrow">ADMINISTRATION</div><h1>List of values</h1><p>Maintain the dropdown values used across leads. Renames update every existing record; deactivate instead of deleting values that are in use.</p></div></div>
+      <div className="page-heading"><div><div className="eyebrow">ADMINISTRATION</div><h1>List of values</h1><p>Maintain the dropdown values used across deals. Renames update every existing record; deactivate instead of deleting values that are in use.</p></div></div>
       <div className="values-layout">
         <nav className="panel values-nav" aria-label="Lists">
           {listKeys.map((key) => <button key={key} className={key === listKey ? "is-active" : ""} onClick={() => { setListKey(key); setEditing(null); }}>{listKeyLabels[key]}<span>{values ? values[key].length : ""}</span></button>)}
         </nav>
         <section className="panel values-panel">
-          <div className="panel-heading"><div><h2>{listKeyLabels[listKey]}</h2><p>{current.filter((item) => item.active).length} active · {current.filter((item) => !item.active).length} inactive</p></div></div>
-          {listKey === "stage" && <p className="field-hint values-fixed-note">Leads move through these stages, in this order, on the Pipeline board. New Deal is the entry stage and cannot be deactivated.</p>}
+          <div className="panel-heading"><div><h2>{listKeyLabels[listKey]}{listKey === "stage" && pipelines.length > 1 && pipeline ? `: ${pipeline.name}` : ""}</h2><p>{current.filter((item) => item.active).length} active · {current.filter((item) => !item.active).length} inactive</p></div></div>
+          {listKey === "stage" && (
+            <div className="pipelines-bar">
+              <div className="scope-toggle" role="group" aria-label="Pipeline">
+                {pipelines.map((item) => <button key={item.id} type="button" className={item.id === pipeline?.id ? "is-active" : ""} aria-pressed={item.id === pipeline?.id} onClick={() => { setPipelineId(item.id); setEditing(null); }}>{item.name}{item.active ? "" : " (off)"}</button>)}
+              </div>
+              <form className="values-add pipeline-new" onSubmit={addPipeline}><input aria-label="New pipeline name" value={newPipeline} onChange={(event) => setNewPipeline(event.target.value)} maxLength={80} placeholder="New pipeline name" required /><button className="button button-outline button-small" type="submit"><Plus size={13} /> Pipeline</button></form>
+              {pipeline && !pipeline.isDefault && (
+                <span className="pipeline-actions">
+                  <button type="button" className="text-button" onClick={() => { const name = window.prompt("Pipeline name", pipeline.name); if (name && name.trim() && name.trim() !== pipeline.name) void changePipeline({ name }, "Pipeline renamed"); }}>Rename</button>
+                  <button type="button" className="text-button" onClick={() => void changePipeline({ active: !pipeline.active }, pipeline.active ? `"${pipeline.name}" switched off: its board is hidden, its deals keep their stage` : `"${pipeline.name}" switched on`)}>{pipeline.active ? "Switch off" : "Switch on"}</button>
+                </span>
+              )}
+            </div>
+          )}
+          {listKey === "stage" && <p className="field-hint values-fixed-note">{pipeline && !pipeline.isDefault
+            ? `Deals in the ${pipeline.name} pipeline move through these stages, in this order, on its board. BD actions and the tracker import place deals in the default pipeline only.`
+            : "Deals move through these stages, in this order, on the Deals board. New Deal is the entry stage and cannot be deactivated."}</p>}
           {listKey === "bd_action" && (
             <div className="values-stage-note">
-              <p className="field-hint">Each BD action lands a lead in a pipeline stage; recording an action from a later stage moves the lead forward. An action with no stage counts as Contact Made.</p>
+              <p className="field-hint">Each BD action lands a deal in a pipeline stage; recording an action from a later stage moves the deal forward. An action with no stage counts as Contact Made.</p>
               <button className="button button-outline button-small" onClick={() => setRecomputeOpen(true)}><RefreshCw size={13} /> Recompute stages from BD actions</button>
             </div>
           )}
@@ -157,7 +199,7 @@ export default function ListValuesPanel() {
       </div>
       {recomputeOpen && (
         <Dialog title="Recompute stages from BD actions" eyebrow="PIPELINE" size="narrow" onClose={() => setRecomputeOpen(false)}>
-          <p className="dialog-description">Every lead is placed again in the stage of its BD action through the mapping above; a lead with no BD action goes to New Deal. Moves made by hand on the board are replaced. No timeline entries are written.</p>
+          <p className="dialog-description">Every deal is placed again in the stage of its BD action through the mapping above; a deal with no BD action goes to New Deal. Moves made by hand on the board are replaced. No timeline entries are written.</p>
           <div className="modal-actions">
             <button type="button" className="button button-outline" onClick={() => setRecomputeOpen(false)}>Cancel</button>
             <button type="button" className="button button-primary" disabled={recomputing} onClick={() => void recompute()}>{recomputing ? "Working..." : "Recompute stages"}</button>

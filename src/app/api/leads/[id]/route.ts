@@ -21,11 +21,11 @@ const parseId = async (context: RouteContext) => {
 export async function GET(_request: Request, context: RouteContext) {
   try {
     const user = await requireUser();
-    requirePrivilege(user, "view_leads", "You do not have permission to view leads.");
+    requirePrivilege(user, "view_leads", "You do not have permission to view deals.");
     const id = await parseId(context);
-    if (!id) return jsonError(400, "Invalid lead ID.");
+    if (!id) return jsonError(400, "Invalid deal ID.");
     const lead = await getLead(id);
-    if (!lead) return jsonError(404, "Lead not found.");
+    if (!lead) return jsonError(404, "Deal not found.");
     const [activities, tasks, attachments, audit, messageCount] = await Promise.all([
       listActivities(id),
       listTasks({ leadId: id }),
@@ -35,7 +35,7 @@ export async function GET(_request: Request, context: RouteContext) {
     ]);
     return NextResponse.json({ lead, activities, tasks, attachments, audit, messageCount, permissions: { edit: canEditLead(user, lead) } });
   } catch (error) {
-    return handleRouteError(error, "Load lead");
+    return handleRouteError(error, "Load deal");
   }
 }
 
@@ -44,10 +44,10 @@ export async function PATCH(request: Request, context: RouteContext) {
     requireSameOrigin(request);
     const user = await requireUser();
     const id = await parseId(context);
-    if (!id) return jsonError(400, "Invalid lead ID.");
+    if (!id) return jsonError(400, "Invalid deal ID.");
     const existing = await getLead(id);
-    if (!existing) return jsonError(404, "Lead not found.");
-    if (!canEditLead(user, existing)) return jsonError(403, "You can only edit leads you own.");
+    if (!existing) return jsonError(404, "Deal not found.");
+    if (!canEditLead(user, existing)) return jsonError(403, "You can only edit deals you own.");
     const { changes, errors } = parseLeadPatch(await readJsonBody(request));
     if (errors.length) return jsonError(400, errors.join(" "));
     const lead = await updateLead(id, changes, user);
@@ -57,6 +57,6 @@ export async function PATCH(request: Request, context: RouteContext) {
       : null;
     return NextResponse.json({ lead, task });
   } catch (error) {
-    return handleRouteError(error, "Update lead");
+    return handleRouteError(error, "Update deal");
   }
 }

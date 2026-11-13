@@ -37,7 +37,7 @@ describe("KPI report emails (SPEC §7.18)", () => {
     assert.equal(kpiPeriodKey("monthly", "2026-12-01"), "month-2026-12");
   });
 
-  test("the totals sum the leads status by status and what is waiting; the period's totals average the target over people who have one", () => {
+  test("the totals sum the deals status by status and what is waiting; the period's totals average the target over people who have one", () => {
     const totals = kpiTotals([row("Ada"), row("Sam", { userId: 2, leads: 1500, byStatus: { 1: 1500 }, overdueFollowUps: 40 }), row("Kim", { userId: 3, leads: 0, byStatus: {} })]);
     assert.equal(totals.name, "All Sales Managers");
     assert.equal(totals.leads, 1520);
@@ -58,13 +58,13 @@ describe("KPI report emails (SPEC §7.18)", () => {
     assert.equal(hasKpiActivity(activityRow("Idle", { leadsCreated: 0, leadsUpdated: 0, calls: 0, emails: 0, visits: 0, notes: 0, conversions: 0, tasksCompleted: 0, targetPercent: 0 })), false);
   });
 
-  test("the daily body is the current state only: leads by status per person, the totals, the pipeline by stage; HTML is escaped", () => {
+  test("the daily body is the current state only: deals by status per person, the totals, the pipeline by stage; HTML is escaped", () => {
     const rows = [row("Daniel", { leads: 1881, byStatus: { 1: 1800, 3: 81 }, overdueFollowUps: 366, stalled: 1859 }), row("Sam <Seller>", { userId: 2 })];
     const data = { kind: "daily", asOf: "2026-11-12 07:30", timeZone: "America/Toronto", statuses, rows, totals: kpiTotals(rows), pipelineByStage: [{ label: "New Deal", count: 20 }, { label: "Contact Made", count: 10 }], activity: null, appUrl: "https://leadtrail.pro/#/reports" };
     assert.equal(kpiSubject(data), "LeadTrailPro KPI report (daily): as of 2026-11-12");
     const text = formatKpiText(data);
-    assert.match(text, /Daily KPI report as of 2026-11-12 07:30 \(America\/Toronto\): 1,901 leads with 2 Sales Managers\./);
-    assert.match(text, /Sales Manager\s+Leads\s+Cold\s+Hot\s+Overdue\s+Stalled\s+Replies/);
+    assert.match(text, /Daily KPI report as of 2026-11-12 07:30 \(America\/Toronto\): 1,901 deals with 2 Sales Managers\./);
+    assert.match(text, /Sales Manager\s+Deals\s+Cold\s+Hot\s+Overdue\s+Stalled\s+Replies/);
     assert.match(text, /Daniel\s+1,881\s+1,800\s+81\s+366\s+1,859\s+0/);
     assert.match(text, /All Sales Managers\s+1,901\s+1,815\s+86\s+369\s+1,860\s+0/);
     assert.match(text, /Pipeline by stage \(30 on the board\): New Deal 20, Contact Made 10\./);
@@ -81,9 +81,9 @@ describe("KPI report emails (SPEC §7.18)", () => {
     assert.match(html, /Pipeline by stage \(30 on the board\): New Deal <strong>20<\/strong>/);
     assert.doesNotMatch(html, /Activity recorded/);
     const empty = formatKpiText({ ...data, statuses: [], rows: [], totals: kpiTotals([]), pipelineByStage: [], appUrl: null });
-    assert.match(empty, /0 leads with 0 Sales Managers/);
+    assert.match(empty, /0 deals with 0 Sales Managers/);
     assert.match(empty, /No active Sales Manager/);
-    assert.match(empty, /no leads on the board/);
+    assert.match(empty, /no deals on the board/);
   });
 
   test("the weekly body adds the period's activity below the current state, or says that nothing was recorded", () => {

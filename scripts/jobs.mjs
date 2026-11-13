@@ -29,7 +29,7 @@ async function tick() {
     if (failures) { console.log(`jobs: ${url} reachable again`); failures = 0; }
     for (const run of data.ran ?? []) {
       console.log(run.job === "opportunities"
-        ? `${new Date().toISOString()} opportunity searches ${run.status}: ${run.listingsFound} listings, ${run.newCompanies} new companies, ${run.attached} attached to leads [${run.periodKey}]`
+        ? `${new Date().toISOString()} lead searches ${run.status}: ${run.listingsFound} listings, ${run.newCompanies} new companies, ${run.attached} attached to deals [${run.periodKey}]`
         : `${new Date().toISOString()} ${run.job} digest sent to ${run.recipients} recipient(s), ${run.failures} failure(s) [${run.periodKey}]`);
     }
   } catch (error) {

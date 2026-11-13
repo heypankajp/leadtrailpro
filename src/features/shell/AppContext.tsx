@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { SystemRole, UserAccount, UserPrivilege } from "@/features/users/model";
 import { hasPrivilege } from "@/features/users/model";
+import type { LeadInput } from "@/features/leads/model";
 import type { ReferenceData } from "./client";
 
 export type Route = { view: string; param: string | null; query: URLSearchParams };
@@ -44,8 +45,17 @@ export type AppContextValue = {
   notify: (message: string, tone?: ToastTone) => void;
   route: Route;
   navigate: Navigate;
+  /** Opens the deal page (#/deal/<id>) over the page the person is on. */
   openLead: (id: number) => void;
   openNewLead: () => void;
+  /** The add-deal dialog with the pipeline stage already chosen (the "+" under a board column). */
+  openNewLeadIn: (stageId: number) => void;
+  /** The add-deal dialog from a contact's page: the form starts with the contact's details and the deal is linked to it. */
+  openNewLeadFor: (start: { prefill: Partial<LeadInput>; organizationId?: number | null; personId?: number | null }) => void;
+  /** Opens an organization's or a person's page (#/organization/<id>, #/person/<id>) over the page the person is on. */
+  openContact: (kind: "organization" | "person", id: number) => void;
+  /** The add-activity dialog from anywhere (the quick-add menu). */
+  openNewActivity: () => void;
   signOut: () => Promise<void>;
   can: (privilege: UserPrivilege) => boolean;
   roleLabel: (role: SystemRole) => string;

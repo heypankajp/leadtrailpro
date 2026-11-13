@@ -144,7 +144,7 @@ export function matchLead(company: CompanyFacts, leads: readonly MatchableLead[]
 export function actionFor(match: LeadMatch | null): { code: string; label: string } {
   if (!match) return { code: "new", label: "New / Not in CRM" };
   const { lead } = match;
-  if (lead.statusCode === "cold" || lead.statusCode === "warm" || lead.statusCode === "hot") return { code: lead.statusCode, label: `${lead.status} Lead` };
+  if (lead.statusCode === "cold" || lead.statusCode === "warm" || lead.statusCode === "hot") return { code: lead.statusCode, label: `${lead.status} Deal` };
   return { code: lead.statusCode, label: lead.statusLabel };
 }
 

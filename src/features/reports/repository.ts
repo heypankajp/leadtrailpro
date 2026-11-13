@@ -207,7 +207,7 @@ export async function buildDashboard(viewer: UserAccount, scope: "mine" | "team"
   const weekVisits = (ownCounts ?? thisCounts).get(viewer.id)?.visits ?? 0;
   const targets: TargetProgress = {
     template,
-    leads: { achieved: weekLeads, target: template?.weeklyLeads ?? 0, label: `Leads this week (from ${weekStart})` },
+    leads: { achieved: weekLeads, target: template?.weeklyLeads ?? 0, label: `Deals this week (from ${weekStart})` },
     visits: { achieved: weekVisits, target: template?.weeklyVisits ?? 0, label: "Road visits this week" },
     conversions: { achieved: monthConversions, target: template?.monthlyConversions ?? 0, label: `Conversions since ${startOfMonthYmd(today)}` },
     percent: null,

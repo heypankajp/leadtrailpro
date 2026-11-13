@@ -19,13 +19,12 @@ describe("Sales trip planner", () => {
   });
   after(async () => { await driver?.quit(); });
 
-  uiTest("plans a trip and recognises a company that is already a lead", async () => {
+  uiTest("plans a trip and recognises a company that is already a deal", async () => {
     // A lead whose website domain matches a stub company, so the Action column can find it.
-    await page.clickButton("Add a lead", { global: true });
-    await page.dialogTitle("Add a new lead");
+    await page.openAddDeal();
     await page.fill("Client name", `${company} ${runId}`);
     await page.fill("Company website", "https://www.northgatepackaging.example/");
-    await page.clickButton("Save lead");
+    await page.clickButton("Save deal");
     await page.toast("added to the pipeline");
     await page.closeDialog();
 
@@ -41,7 +40,7 @@ describe("Sales trip planner", () => {
     await page.toast("companies found");
     await page.heading(tripTitle);
     const row = await page.wait(By.xpath(`//table[contains(@class,"trip-table")]//tr[.//strong[normalize-space()=${xq(company)}]]`));
-    assert.match(await row.getText(), /Cold Lead/);
+    assert.match(await row.getText(), /Cold Deal/);
     assert.match(await row.getText(), /3 Jobs/);
     const link = await row.findElement(By.css("a.company-link"));
     assert.equal(await link.getAttribute("target"), "_blank");

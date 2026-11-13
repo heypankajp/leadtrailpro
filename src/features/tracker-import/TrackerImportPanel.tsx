@@ -96,9 +96,9 @@ export default function TrackerImportPanel() {
                 </Field>
               )}
               <Field label="Sheet"><input value={sheet} maxLength={120} onChange={(event) => { setSheet(event.target.value); setPreviewedKey(""); }} required /></Field>
-              <Field label="Companies whose rows name no Sales Manager" hint="In the pool, salespeople assign them to themselves; the lead is created with the sheet's history at that moment.">
+              <Field label="Companies whose rows name no Sales Manager" hint="In the inbox, salespeople assign them to themselves; the deal is created with the sheet's history at that moment.">
                 <select value={defaultOwner} onChange={(event) => { setDefaultOwner(event.target.value); setPreviewedKey(""); }}>
-                  <option value="">Opportunity pool (recommended)</option>
+                  <option value="">Leads inbox (recommended)</option>
                   <option value={String(me.id)}>{me.name} (you)</option>
                   {reference.users.filter((person) => person.active && person.role !== "recruiter" && person.id !== me.id).map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
                 </select>
@@ -113,7 +113,7 @@ export default function TrackerImportPanel() {
               <details className="import-section">
                 <summary>Other sheets (optional)</summary>
                 <div className="rule-row">
-                  <Field label="Archive sheet" hint="For example ArchiveSales: one archived lead per company not already present."><input value={archiveSheet} maxLength={120} onChange={(event) => { setArchiveSheet(event.target.value); setPreviewedKey(""); }} /></Field>
+                  <Field label="Archive sheet" hint="For example ArchiveSales: one archived deal per company not already present."><input value={archiveSheet} maxLength={120} onChange={(event) => { setArchiveSheet(event.target.value); setPreviewedKey(""); }} /></Field>
                   <Field label="Clients sheet" hint="For example Clients: companies listed there are set to status Client."><input value={clientsSheet} maxLength={120} onChange={(event) => { setClientsSheet(event.target.value); setPreviewedKey(""); }} /></Field>
                 </div>
               </details>
@@ -127,8 +127,8 @@ export default function TrackerImportPanel() {
           </form>
           <section className="panel settings-panel">
             <div className="panel-heading"><div><h2>Status</h2><p>What the database already holds from the tracker.</p></div></div>
-            <div className="form-note"><FileSpreadsheet size={14} /> <span>{status.importedLeads.toLocaleString()} leads with {status.importedEntries.toLocaleString()} timeline entries from <code>{status.sheetName}</code>{status.pooledCards > 0 && <>, and {status.pooledCards.toLocaleString()} {status.pooledCards === 1 ? "company" : "companies"} without a Sales Manager waiting in the opportunity pool</>}. Last applied import: {status.lastImport ? `${formatDateTime(status.lastImport.at)} by ${status.lastImport.actorName ?? "unknown"}` : "none yet"}.</span></div>
-            <div className="panel-heading"><div><h2>Sales Managers in the sheet</h2><p>Names in the sheet and the accounts their leads go to.</p></div></div>
+            <div className="form-note"><FileSpreadsheet size={14} /> <span>{status.importedLeads.toLocaleString()} deals with {status.importedEntries.toLocaleString()} timeline entries from <code>{status.sheetName}</code>{status.pooledCards > 0 && <>, and {status.pooledCards.toLocaleString()} {status.pooledCards === 1 ? "company" : "companies"} without a Sales Manager waiting in the leads inbox</>}. Last applied import: {status.lastImport ? `${formatDateTime(status.lastImport.at)} by ${status.lastImport.actorName ?? "unknown"}` : "none yet"}.</span></div>
+            <div className="panel-heading"><div><h2>Sales Managers in the sheet</h2><p>Names in the sheet and the accounts their deals go to.</p></div></div>
             <ul className="manager-list">
               {status.managers.map((manager) => (
                 <li key={manager.name}>
@@ -158,8 +158,8 @@ export default function TrackerImportPanel() {
       {confirming && report && file && (
         <Dialog title="Apply the import?" eyebrow="TRACKER IMPORT" onClose={() => setConfirming(false)} size="narrow">
           <p className="dialog-description">
-            {file.name} will be applied as previewed: {report.counts["leads created (new companies)"] ?? 0} new leads, {report.counts["leads updated"] ?? 0} leads updated, {report.counts["companies with no Sales Manager placed in the opportunity pool"] ?? 0} companies to the opportunity pool, {(report.counts["timeline entries added (new rows)"] ?? 0) + (report.counts["timeline entries written"] ?? 0)} timeline entries added, {report.counts["timeline entries updated (edited rows)"] ?? 0} updated.
-            {report.appEdited.length > 0 && ` ${report.appEdited.length} of the leads were changed in the app since the previous import; the sheet's values will replace those fields.`}
+            {file.name} will be applied as previewed: {report.counts["deals created (new companies)"] ?? 0} new deals, {report.counts["deals updated"] ?? 0} deals updated, {report.counts["companies with no Sales Manager placed in the leads inbox"] ?? 0} companies to the leads inbox, {(report.counts["timeline entries added (new rows)"] ?? 0) + (report.counts["timeline entries written"] ?? 0)} timeline entries added, {report.counts["timeline entries updated (edited rows)"] ?? 0} updated.
+            {report.appEdited.length > 0 && ` ${report.appEdited.length} of the deals were changed in the app since the previous import; the sheet's values will replace those fields.`}
           </p>
           <div className="modal-actions">
             <button type="button" className="button button-outline" onClick={() => setConfirming(false)}>Cancel</button>
@@ -206,13 +206,13 @@ function ReportView({ report }: { report: TrackerImportReport }) {
       <div className="import-counts">
         {orderedCounts(report.counts).map(([key, value]) => <div className="import-count" key={key}><strong>{value.toLocaleString()}</strong><span>{key}</span></div>)}
       </div>
-      <ReportSection title="Leads edited in the app since the previous import (check these: the sheet's values win)" lines={report.appEdited} alert />
+      <ReportSection title="Deals edited in the app since the previous import (check these: the sheet's values win)" lines={report.appEdited} alert />
       <ReportSection title="Defaults and mappings applied" lines={countedLines(report.decisions)} />
-      <ReportSection title="Fields changed on existing leads" lines={countedLines(report.fieldChanges)} />
+      <ReportSection title="Fields changed on existing deals" lines={countedLines(report.fieldChanges)} />
       <ReportSection title="Accounts created" lines={report.createdUsers} />
       <ReportSection title="List values created" lines={report.createdValues} />
-      <ReportSection title="Leads updated" lines={report.updatedLeads} />
-      <ReportSection title="Companies placed in the opportunity pool (no Sales Manager)" lines={report.pooled ?? []} />
+      <ReportSection title="Deals updated" lines={report.updatedLeads} />
+      <ReportSection title="Companies placed in the leads inbox (no Sales Manager)" lines={report.pooled ?? []} />
       <ReportSection title="Rows removed from the sheet (timeline entries kept)" lines={report.removedRows} />
       <ReportSection title="Rejected rows" lines={report.rejects} />
       <ReportSection title="Companies skipped" lines={report.skipped} />

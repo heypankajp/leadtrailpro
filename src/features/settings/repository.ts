@@ -149,7 +149,7 @@ export async function updateSettings(changes: { roleLabels?: Partial<Record<Syst
         [JSON.stringify(opportunities)],
       );
       if (JSON.stringify(current.opportunities) !== JSON.stringify(opportunities)) {
-        await recordAudit(connection, { actorId, action: "setting.updated", entityType: "setting", before: { ...current.opportunities }, after: { ...opportunities }, details: "Updated the opportunity search schedule" });
+        await recordAudit(connection, { actorId, action: "setting.updated", entityType: "setting", before: { ...current.opportunities }, after: { ...opportunities }, details: "Updated the lead search schedule" });
       }
     }
     if (changes.email !== undefined) {

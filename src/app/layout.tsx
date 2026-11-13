@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "LeadTrailPro | Sales workspace",
-  description: "A clear, connected workspace for managing leads, follow-ups, and sales performance.",
+  description: "A clear, connected workspace for managing deals, follow-ups, and sales performance.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

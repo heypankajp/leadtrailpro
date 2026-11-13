@@ -219,13 +219,13 @@ export async function runOpportunitySearches(options: { trigger: "scheduled" | "
     "UPDATE opportunity_runs SET status = ?, finished_at = ?, listings_found = ?, new_companies = ?, new_listings = ?, attached = ?, details = ? WHERE id = ?",
     [status, toSqlDateTime(new Date()), found.length, newCompanies, newListings, attached, details, runId],
   );
-  await recordAudit(db, { actorId: options.actorId, action: "opportunities.run", entityType: "job", entityId: runId, after: { trigger: options.trigger, status, listingsFound: found.length, newCompanies, newListings, attached }, details: `Opportunity search ${status}: ${found.length} listings, ${newCompanies} new companies, ${attached} attached to leads` });
+  await recordAudit(db, { actorId: options.actorId, action: "opportunities.run", entityType: "job", entityId: runId, after: { trigger: options.trigger, status, listingsFound: found.length, newCompanies, newListings, attached }, details: `Lead search ${status}: ${found.length} listings, ${newCompanies} new companies, ${attached} attached to deals` });
   if (newCompanies > 0 && settings.opportunities.notify) {
     const people = await listUsersWithPrivilege("create_leads", db);
     await notifyUsers(db, {
       userIds: people.filter((person) => person.role !== "recruiter").map((person) => person.id), actorId: options.actorId, type: "opportunities_found",
-      title: `${newCompanies} new ${newCompanies === 1 ? "company" : "companies"} in the opportunity pool`,
-      body: `${newListings} new job listing${newListings === 1 ? "" : "s"} from ${searches.map((search) => search.name).join(", ") || "the searches"}. Open Opportunities to assign them.`,
+      title: `${newCompanies} new ${newCompanies === 1 ? "company" : "companies"} in the leads inbox`,
+      body: `${newListings} new job listing${newListings === 1 ? "" : "s"} from ${searches.map((search) => search.name).join(", ") || "the searches"}. Open Leads to assign them.`,
     });
   }
   return { runId, periodKey: options.periodKey ?? null, status, listingsFound: found.length, newCompanies, newListings, attached, details: notes };

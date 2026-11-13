@@ -139,7 +139,7 @@ export default function CollaborationTab({ leadId, attachments, canPost, onChang
       )}
       <ErrorText message={error} />
       {threads === null && !error && <Loading text="Loading messages..." />}
-      {threads && threads.length === 0 && <EmptyState icon={<MessageSquare size={22} />} title="No messages yet" text={canPost ? "Start a thread for this lead. Mention a colleague with @ to notify them." : "Nobody has posted on this lead yet."} />}
+      {threads && threads.length === 0 && <EmptyState icon={<MessageSquare size={22} />} title="No messages yet" text={canPost ? "Start a thread for this deal. Mention a colleague with @ to notify them." : "Nobody has posted on this deal yet."} />}
       <div className="message-threads">
         {threads?.map((thread) => (
           <section className="message-thread" key={thread.root.id}>

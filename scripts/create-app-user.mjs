@@ -38,7 +38,7 @@ const envTemplate = (dbLines) => [
   "SMTP_PASSWORD=",
   "SMTP_FROM=",
   "",
-  "# Google OAuth client (Sign in with Google sign-in, which also grants read-only Gmail for the lead Emails tab); leave blank until then.",
+  "# Google OAuth client (Sign in with Google sign-in, which also grants read-only Gmail for the deal Emails tab); leave blank until then.",
   "GOOGLE_CLIENT_ID=",
   "GOOGLE_CLIENT_SECRET=",
   "# Any long random string; encrypts the stored Gmail refresh tokens. Changing it invalidates existing links.",

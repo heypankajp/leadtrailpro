@@ -10,13 +10,13 @@ export async function POST(request: Request, context: RouteContext) {
   try {
     requireSameOrigin(request);
     const user = await requireUser();
-    requirePrivilege(user, "create_leads", "You do not have permission to assign opportunities.");
+    requirePrivilege(user, "create_leads", "You do not have permission to assign leads.");
     const { id } = await context.params;
-    if (!/^\d+$/.test(id)) return jsonError(404, "Opportunity not found.");
+    if (!/^\d+$/.test(id)) return jsonError(404, "Lead not found.");
     const body = (await readJsonBody(request)) ?? {};
     const ownerId = asOptionalId(body.ownerId) ?? user.id;
     return NextResponse.json({ lead: await reopenLeadFromOpportunity(Number(id), ownerId, user) });
   } catch (error) {
-    return handleRouteError(error, "Reopen lead from opportunity");
+    return handleRouteError(error, "Reopen deal from lead");
   }
 }

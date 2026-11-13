@@ -60,7 +60,7 @@ export default function NextStepDialog({ lead, reason, onClose, onSaved }: { lea
           {reason}{" "}
           {suggested.fromStage
             ? `The ${lead.stage ?? "current"} stage suggests ${suggested.activity === "task" ? "a follow-up" : `a${suggested.activity === "email" ? "n" : ""} ${suggested.activity}`} ${suggested.businessDays === 0 ? "today" : `in ${suggested.businessDays} business day${suggested.businessDays === 1 ? "" : "s"}`}.`
-            : "Every lead on the board should carry a next step; skip if nothing is due."}
+            : "Every deal on the board should carry a next step; skip if nothing is due."}
         </p>
         <Field label="Type">
           <select value={activity} onChange={(event) => changeActivity(event.target.value as StageFollowUpActivity)}>
@@ -76,7 +76,7 @@ export default function NextStepDialog({ lead, reason, onClose, onSaved }: { lea
             {people.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
         </Field>
-        <label className="checklist-item"><input type="checkbox" checked={setFollowUp} onChange={(event) => setSetFollowUp(event.target.checked)} /><span>Also set it as the lead&apos;s follow-up date</span></label>
+        <label className="checklist-item"><input type="checkbox" checked={setFollowUp} onChange={(event) => setSetFollowUp(event.target.checked)} /><span>Also set it as the deal&apos;s follow-up date</span></label>
         <ErrorText message={error} />
         <div className="modal-actions">
           <button type="button" className="button button-outline" onClick={onClose}>Skip</button>

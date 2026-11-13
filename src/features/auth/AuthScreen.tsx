@@ -108,7 +108,7 @@ export default function AuthScreen({ checking, needsSetup, googleSignIn, initial
         ) : mode === "login" && googleSignIn ? (
           <>
             <h1>Welcome back</h1>
-            <p>Sign in with your Google account to access your leads and team workspace.</p>
+            <p>Sign in with your Google account to access your deals and team workspace.</p>
             {message && <p className="login-message" role="status">{message}</p>}
             <ErrorText message={error} />
             <a className="button button-primary login-google" href="/api/auth/google">Sign in with Google</a>
@@ -121,7 +121,7 @@ export default function AuthScreen({ checking, needsSetup, googleSignIn, initial
         ) : mode === "login" ? (
           <>
             <h1>Welcome back</h1>
-            <p>Sign in to access your leads and team workspace.</p>
+            <p>Sign in to access your deals and team workspace.</p>
             <form className="login-form" onSubmit={submitLogin}>
               <label>Email address<input name="email" type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} required maxLength={254} autoFocus /></label>
               <label>Password<input name="password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required maxLength={200} /></label>

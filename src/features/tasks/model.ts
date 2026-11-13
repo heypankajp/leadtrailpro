@@ -100,7 +100,7 @@ export function parseTaskInput(value: unknown): { input: TaskInput; errors: stri
   if (!title) errors.push("Title is required.");
   if (title.length > 200) errors.push("Title must be 200 characters or fewer.");
   const description = typeof body.description === "string" ? body.description.trim().slice(0, 5000) : "";
-  if (body.leadId !== undefined && body.leadId !== null && body.leadId !== "" && optionalId(body.leadId) === null) errors.push("Lead is not valid.");
+  if (body.leadId !== undefined && body.leadId !== null && body.leadId !== "" && optionalId(body.leadId) === null) errors.push("Deal is not valid.");
   if (body.assigneeId !== undefined && body.assigneeId !== null && body.assigneeId !== "" && optionalId(body.assigneeId) === null) errors.push("Assignee is not valid.");
   const priority = isPriority(body.priority) ? body.priority : "normal";
   return {

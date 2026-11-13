@@ -25,10 +25,10 @@ export async function claimOpportunityForLead(db: Queryable, opportunityId: numb
     [opportunityId],
   );
   const row = (rows as { status: string; leadId: number | null; companyName: string; draft: unknown; ownerName: string | null }[])[0];
-  if (!row) throw new HttpError(404, "That opportunity no longer exists.");
+  if (!row) throw new HttpError(404, "That lead no longer exists.");
   if (row.status !== "new") {
     const message = row.status === "converted" ? `${row.companyName} was already assigned to ${row.ownerName ?? "someone else"}.`
-      : row.status === "attached" ? `${row.companyName} already belongs to the lead owned by ${row.ownerName ?? "someone else"}.`
+      : row.status === "attached" ? `${row.companyName} already belongs to the deal owned by ${row.ownerName ?? "someone else"}.`
       : `${row.companyName} was marked not relevant; restore it first.`;
     throw new HttpError(409, message, { opportunityStatus: row.status, leadId: row.leadId });
   }
@@ -48,7 +48,7 @@ export async function claimOpportunityForLead(db: Queryable, opportunityId: numb
   }
   await recordAudit(db, {
     actorId: actor.id, action: "opportunity.converted", entityType: "opportunity", entityId: opportunityId, after: { leadId: lead.id, status: "converted", trackerEntries },
-    details: `${actor.name} assigned ${row.companyName} as lead ${lead.clientName}${trackerEntries ? ` with ${trackerEntries} timeline entr${trackerEntries === 1 ? "y" : "ies"} from the sales tracker` : ""}`,
+    details: `${actor.name} assigned ${row.companyName} as deal ${lead.clientName}${trackerEntries ? ` with ${trackerEntries} timeline entr${trackerEntries === 1 ? "y" : "ies"} from the sales tracker` : ""}`,
   }, now);
   return {
     listings: (listings as { title: string; url: string; source: JobSourceId }[]).map((item) => ({ title: item.title, url: item.url, source: jobSourceLabels[item.source] ?? item.source })),

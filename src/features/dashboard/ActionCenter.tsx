@@ -26,7 +26,7 @@ export default function ActionCenter() {
   const tab: FollowUpTab = chosenTab ?? (data?.followUps.overdue.length ? "overdue" : "today");
 
   const metric = (label: string, icon: React.ReactNode, tone: string, current: number, previous: number) => (
-    <button className={`metric-card metric-${tone}`} onClick={() => navigate("reports")} aria-label={`View ${label} report`}>
+    <button className={`metric-card metric-${tone}`} onClick={() => navigate("insights")} aria-label={`View ${label} report`}>
       <div className="metric-top"><span className={`metric-icon icon-${tone}`}>{icon}</span><span className="metric-change">{percentChange(current, previous)}</span></div>
       <span className="metric-label">{label}</span>
       <div className="metric-value-row"><strong>{current}</strong></div>
@@ -64,7 +64,7 @@ export default function ActionCenter() {
               <button className={scope === "team" ? "is-active" : ""} onClick={() => setScope("team")}>Whole team</button>
             </div>
           )}
-          {can("create_leads") && <button className="button button-primary" onClick={openNewLead}><Plus size={17} /> Add a lead</button>}
+          {can("create_leads") && <button className="button button-primary" onClick={openNewLead}><Plus size={17} /> Add a deal</button>}
         </div>
       </div>
 
@@ -77,10 +77,10 @@ export default function ActionCenter() {
             {metric("Calls made", <Phone size={17} />, "blue", data.metrics.calls.thisWeek, data.metrics.calls.lastWeek)}
             {metric("Emails sent", <Mail size={17} />, "purple", data.metrics.emails.thisWeek, data.metrics.emails.lastWeek)}
             {metric("Visits made", <MapPin size={17} />, "orange", data.metrics.visits.thisWeek, data.metrics.visits.lastWeek)}
-            <button className="metric-card metric-green" onClick={() => navigate("reports")} aria-label="View target progress">
+            <button className="metric-card metric-green" onClick={() => navigate("insights")} aria-label="View target progress">
               <div className="metric-top"><span className="metric-icon icon-green"><Target size={17} /></span><span className="metric-change">{targets?.template?.name ?? "No template"}</span></div>
               <span className="metric-label">Target progress</span>
-              <div className="metric-value-row"><strong>{percent === null ? "—" : `${percent}%`}</strong><span className="metric-progress-label">{targets ? `${targets.leads.achieved} / ${targets.leads.target} leads this week` : ""}</span></div>
+              <div className="metric-value-row"><strong>{percent === null ? "—" : `${percent}%`}</strong><span className="metric-progress-label">{targets ? `${targets.leads.achieved} / ${targets.leads.target} deals this week` : ""}</span></div>
               <div className="progress-track"><i style={{ width: `${percent ?? 0}%` }} /></div>
             </button>
           </section>
@@ -88,8 +88,8 @@ export default function ActionCenter() {
           <div className="dashboard-grid">
             <section className="panel follow-up-panel">
               <div className="panel-heading">
-                <div><h2>Follow-ups</h2><p>{data.teamWide ? "Across the whole team" : "Leads you own"}, by follow-up date</p></div>
-                <button className="text-button" onClick={() => navigate("tasks")}>View tasks <ArrowRight size={14} /></button>
+                <div><h2>Follow-ups</h2><p>{data.teamWide ? "Across the whole team" : "Deals you own"}, by follow-up date</p></div>
+                <button className="text-button" onClick={() => navigate("activities")}>View tasks <ArrowRight size={14} /></button>
               </div>
               <Tabs
                 tabs={[
@@ -105,7 +105,7 @@ export default function ActionCenter() {
                 {data.followUps[tab].length === 0 && <p className="empty-state">{tab === "overdue" ? "No overdue follow-ups. Nice work!" : tab === "today" ? "You're all caught up for today." : "Nothing scheduled for tomorrow yet."}</p>}
               </div>
               {data.followUps[tab].length > 8 && (
-                <div className="panel-footnote"><span className="footnote-dot" /> {data.followUps[tab].length - 8} more <button onClick={() => navigate(data.teamWide ? "all-leads" : "leads", null, { sort: "follow_up", direction: "asc" })}>Open the list <ArrowRight size={13} /></button></div>
+                <div className="panel-footnote"><span className="footnote-dot" /> {data.followUps[tab].length - 8} more <button onClick={() => navigate("deals", "list", { scope: data.teamWide ? "everyone" : "mine", sort: "follow_up", direction: "asc" })}>Open the list <ArrowRight size={13} /></button></div>
               )}
             </section>
 
@@ -122,14 +122,14 @@ export default function ActionCenter() {
                 </div>
               </div>
               <div className="target-note"><Target size={14} /><span>{percent === null ? "Ask an administrator to assign a target template." : percent >= 100 ? "You have met this period's plan." : `${100 - percent}% of the plan is still open.`}</span></div>
-              <button className="panel-link" onClick={() => navigate("reports")}>View full report <ArrowRight size={14} /></button>
+              <button className="panel-link" onClick={() => navigate("insights")}>View full report <ArrowRight size={14} /></button>
             </section>
           </div>
 
           <div className="dashboard-grid reminders-grid">
             <section className="panel reminder-panel">
               <div className="panel-heading">
-                <div><h2>Client replies waiting</h2><p>Clients who emailed after {data.teamWide ? "the team's" : "your"} last email or action on the lead</p></div>
+                <div><h2>Client replies waiting</h2><p>Clients who emailed after {data.teamWide ? "the team's" : "your"} last email or action on the deal</p></div>
               </div>
               {data.clientReplies.length === 0 ? <EmptyState title="No client email is waiting for an answer" /> : (
                 <div className="followup-list">
@@ -146,9 +146,9 @@ export default function ActionCenter() {
             </section>
             <section className="panel reminder-panel">
               <div className="panel-heading">
-                <div><h2>Needs attention</h2><p>Active leads quiet for longer than their limit · default {data.inactivityDays} days{data.inactivityRuleCount ? ` · ${data.inactivityRuleCount} ${data.inactivityRuleCount === 1 ? "rule" : "rules"} by status, BD action, or stage` : ""}</p></div>
+                <div><h2>Needs attention</h2><p>Active deals quiet for longer than their limit · default {data.inactivityDays} days{data.inactivityRuleCount ? ` · ${data.inactivityRuleCount} ${data.inactivityRuleCount === 1 ? "rule" : "rules"} by status, BD action, or stage` : ""}</p></div>
               </div>
-              {data.inactiveLeads.length === 0 ? <EmptyState title="Every lead has recent activity" /> : (
+              {data.inactiveLeads.length === 0 ? <EmptyState title="Every deal has recent activity" /> : (
                 <div className="followup-list">
                   {data.inactiveLeads.slice(0, 6).map((lead) => (
                     <button className="followup-row" key={lead.id} onClick={() => openLead(lead.id)}>
@@ -163,9 +163,9 @@ export default function ActionCenter() {
             </section>
             <section className="panel reminder-panel">
               <div className="panel-heading">
-                <div><h2>No next step</h2><p>Active leads with no open task and no upcoming follow-up date{data.noNextStepCount > 6 ? ` · ${data.noNextStepCount} in all` : ""}</p></div>
+                <div><h2>No next step</h2><p>Active deals with no open task and no upcoming follow-up date{data.noNextStepCount > 6 ? ` · ${data.noNextStepCount} in all` : ""}</p></div>
               </div>
-              {data.noNextStep.length === 0 ? <EmptyState title="Every lead has a next step" /> : (
+              {data.noNextStep.length === 0 ? <EmptyState title="Every deal has a next step" /> : (
                 <div className="followup-list">
                   {data.noNextStep.slice(0, 6).map((lead) => (
                     <button className="followup-row" key={lead.id} onClick={() => openLead(lead.id)}>
@@ -181,14 +181,14 @@ export default function ActionCenter() {
             <section className="panel reminder-panel">
               <div className="panel-heading">
                 <div><h2>Open tasks</h2><p>{data.overdueTaskCount > 0 ? `${data.overdueTaskCount} overdue` : "Nothing overdue"}</p></div>
-                <button className="text-button" onClick={() => navigate("tasks")}>All tasks <ArrowRight size={14} /></button>
+                <button className="text-button" onClick={() => navigate("activities")}>All tasks <ArrowRight size={14} /></button>
               </div>
               {data.openTasks.length === 0 ? <EmptyState icon={<ListTodo size={22} />} title="No open tasks" /> : (
                 <div className="followup-list">
                   {data.openTasks.slice(0, 6).map((task) => (
-                    <button className="followup-row" key={task.id} onClick={() => navigate("tasks", task.id)}>
+                    <button className="followup-row" key={task.id} onClick={() => navigate("activities", task.id)}>
                       <span className={`priority priority-${task.priority}`}>{task.priority}</span>
-                      <span className="followup-info"><strong>{task.title}</strong><small>{task.leadName ?? "No lead"} · {task.assigneeName}</small></span>
+                      <span className="followup-info"><strong>{task.title}</strong><small>{task.leadName ?? "No deal"} · {task.assigneeName}</small></span>
                       <span className={`followup-time ${task.dueAt && task.dueAt < new Date().toISOString() ? "overdue" : ""}`}><Clock3 size={13} /> {task.dueAt ? formatDateTime(task.dueAt) : "No due date"}</span>
                       <ChevronRight className="followup-chevron" size={16} />
                     </button>
@@ -200,8 +200,8 @@ export default function ActionCenter() {
 
           <section className="panel recent-panel">
             <div className="panel-heading recent-heading">
-              <div><h2>Recent leads</h2><p>Latest activity across {data.teamWide ? "the team" : "your"} pipeline</p></div>
-              <button className="text-button" onClick={() => navigate(data.teamWide ? "all-leads" : "leads")}>View all leads <ArrowRight size={14} /></button>
+              <div><h2>Recent deals</h2><p>Latest activity across {data.teamWide ? "the team" : "your"} pipeline</p></div>
+              <button className="text-button" onClick={() => navigate("deals", "list", { scope: data.teamWide ? "everyone" : "mine" })}>View all deals <ArrowRight size={14} /></button>
             </div>
             <div className="table-scroll">
               <table className="lead-table">
@@ -217,7 +217,7 @@ export default function ActionCenter() {
                       <td><button className="row-more" aria-label={`Open ${lead.clientName}`} onClick={() => openLead(lead.id)}><ChevronRight size={16} /></button></td>
                     </tr>
                   ))}
-                  {data.recentLeads.length === 0 && <tr><td colSpan={6} className="empty-state">No active leads yet.</td></tr>}
+                  {data.recentLeads.length === 0 && <tr><td colSpan={6} className="empty-state">No active deals yet.</td></tr>}
                 </tbody>
               </table>
             </div>

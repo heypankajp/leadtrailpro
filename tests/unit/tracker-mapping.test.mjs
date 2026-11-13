@@ -33,7 +33,7 @@ describe("tracker import mapping (SPEC §10.9)", () => {
     assert.equal(canonicalBdAction("Contract Clerification", true), "Contract Clarification");
   });
 
-  test("responses, statuses, and lead types", () => {
+  test("responses, statuses, and deal types", () => {
     assert.equal(parseClientResponse("approach later"), "approach later");
     assert.equal(parseClientResponse("1 .Cold Call"), null);
     assert.equal(parseStatusCode("Client"), "client");

@@ -11,17 +11,17 @@ const safeAddress = /^[^\s"'()<>,;\\]+@[^\s"'()<>,;\\]+$/;
 export async function GET(_request: Request, context: RouteContext) {
   try {
     const user = await requireUser();
-    requirePrivilege(user, "view_leads", "You do not have permission to view leads.");
+    requirePrivilege(user, "view_leads", "You do not have permission to view deals.");
     const { id: rawId } = await context.params;
     const id = Number(rawId);
-    if (!Number.isSafeInteger(id) || id < 1) return jsonError(400, "Invalid lead ID.");
+    if (!Number.isSafeInteger(id) || id < 1) return jsonError(400, "Invalid deal ID.");
     const lead = await getLead(id);
-    if (!lead) return jsonError(404, "Lead not found.");
+    if (!lead) return jsonError(404, "Deal not found.");
     const addresses = lead.clientEmails.filter((value) => safeAddress.test(value));
     // Colleagues see the client thread from any mailbox the watch matched to this lead; team-report viewers see every mailbox.
     const scope = hasPrivilege(user, "view_team_reports") ? "all" : { userId: user.id, leadId: id };
     return NextResponse.json(await recentLeadEmails(addresses, scope));
   } catch (error) {
-    return handleRouteError(error, "Lead emails");
+    return handleRouteError(error, "Deal emails");
   }
 }

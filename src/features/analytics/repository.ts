@@ -71,7 +71,9 @@ export async function buildAnalytics(viewer: UserAccount, period: ReportPeriod, 
        WHERE ${where}`,
       params,
     ),
-    db.query("SELECT id, code, value FROM list_values WHERE list_key = 'stage' AND is_active = TRUE ORDER BY sort_order, id"),
+    db.query(`SELECT s.id, s.code, CASE WHEN s.pipeline_id IS NULL OR p.is_default THEN s.value ELSE p.name || ': ' || s.value END AS value
+       FROM list_values s LEFT JOIN pipelines p ON p.id = s.pipeline_id
+       WHERE s.list_key = 'stage' AND s.is_active = TRUE AND COALESCE(p.is_active, TRUE) ORDER BY COALESCE(p.is_default, TRUE) DESC, COALESCE(p.sort_order, 0), s.sort_order, s.id`),
   ]);
   const statuses = (statusRows as { code: string; value: string }[]).map((row) => ({ code: row.code, label: row.value }));
   // PIPE-12: the stages in board order; a lead never placed counts in the entry stage, like on the board.

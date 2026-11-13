@@ -13,13 +13,13 @@ export async function PATCH(request: Request, context: RouteContext) {
     const user = await requireUser();
     const { id: rawId } = await context.params;
     const id = Number(rawId);
-    if (!Number.isSafeInteger(id) || id < 1) return jsonError(400, "Invalid lead ID.");
+    if (!Number.isSafeInteger(id) || id < 1) return jsonError(400, "Invalid deal ID.");
     const body = await readJsonBody(request);
     const stageId = asOptionalId(body?.stageId);
     if (!stageId) return jsonError(400, "Choose a stage.");
     const via = body?.via === "detail" ? "detail" : "board";
     const before = await getLead(id);
-    if (!before) return jsonError(404, "Lead not found.");
+    if (!before) return jsonError(404, "Deal not found.");
     const lead = await setLeadStage(id, stageId, user, via);
     // PIPE-09: with Settings → Pipeline "create automatically" on, the stage's suggested task is created for the owner.
     const task = lead.stageId !== before.stageId
@@ -27,6 +27,6 @@ export async function PATCH(request: Request, context: RouteContext) {
       : null;
     return NextResponse.json({ lead, task });
   } catch (error) {
-    return handleRouteError(error, "Move lead");
+    return handleRouteError(error, "Move deal");
   }
 }

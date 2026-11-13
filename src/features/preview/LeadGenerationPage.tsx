@@ -33,7 +33,7 @@ export default function LeadGenerationPage() {
             <p>Sample content. Once job-board, careers-page, review, and company-data sources are connected, this brief will show the real overview, open positions, hiring challenges, interview and review summaries, a suggested engagement approach, and similar companies within the radius.</p>
             <div className="brief-pills"><span><BriefcaseBusiness size={13} /> Open roles</span><span><MapPin size={13} /> Within 25 km</span><span><Building2 size={13} /> Industry</span></div>
             <div className="brief-actions">
-              {can("create_leads") && <button className="button button-primary" onClick={openNewLead}>Create a lead <ArrowRight size={14} /></button>}
+              {can("create_leads") && <button className="button button-primary" onClick={openNewLead}>Create a deal <ArrowRight size={14} /></button>}
             </div>
           </div>
         )}

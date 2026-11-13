@@ -51,7 +51,7 @@ export default function TasksPage() {
   return (
     <>
       <div className="page-heading">
-        <div><div className="eyebrow">YOUR WORKDAY <span className="eyebrow-dot">·</span> {open.length} OPEN</div><h1>Tasks & reminders</h1><p>Every next step, organized so nothing slips through the cracks.</p></div>
+        <div><div className="eyebrow">YOUR WORKDAY <span className="eyebrow-dot">·</span> {open.length} OPEN</div><h1>Activities</h1><p>Every next step, organized so nothing slips through the cracks.</p></div>
         <div className="heading-actions">
           {can("view_team_reports") && (
             <div className="scope-toggle" role="group" aria-label="Task scope"><button className={scope === "mine" ? "is-active" : ""} onClick={() => setScope("mine")}>Mine</button><button className={scope === "all" ? "is-active" : ""} onClick={() => setScope("all")}>Team</button></div>
@@ -73,7 +73,7 @@ export default function TasksPage() {
                   <div className="task-card-content">
                     <strong className={task.status === "done" ? "is-done" : ""}>{task.title}</strong>
                     <small>
-                      {task.leadName ? <button type="button" className="link-button" onClick={() => task.leadId && openLead(task.leadId)}>{task.leadName}</button> : "No lead"}
+                      {task.leadName ? <button type="button" className="link-button" onClick={() => task.leadId && openLead(task.leadId)}>{task.leadName}</button> : "No deal"}
                       {" · "}{task.dueAt ? formatDateTime(task.dueAt) : "No due date"}{scope === "all" ? ` · ${task.assigneeName}` : ""}
                     </small>
                     {(task.checklist.length > 0 || task.commentCount > 0) && (

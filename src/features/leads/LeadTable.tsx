@@ -28,7 +28,7 @@ export default function LeadTable({ leads, selected, today, view, canSelect, can
       <table className="lead-table">
         <thead>
           <tr>
-            {canSelect && <th><input aria-label="Select all leads" type="checkbox" checked={allSelected} onChange={(event) => onToggleAll(event.target.checked)} /></th>}
+            {canSelect && <th><input aria-label="Select all deals" type="checkbox" checked={allSelected} onChange={(event) => onToggleAll(event.target.checked)} /></th>}
             <th>CLIENT</th>
             <th>STATUS</th>
             <th>STAGE</th>
@@ -76,7 +76,7 @@ export default function LeadTable({ leads, selected, today, view, canSelect, can
               </tr>
             );
           })}
-          {!leads.length && <tr><td colSpan={canSelect ? 9 : 8} className="empty-state">No leads match these filters.</td></tr>}
+          {!leads.length && <tr><td colSpan={canSelect ? 9 : 8} className="empty-state">No deals match these filters.</td></tr>}
         </tbody>
       </table>
     </div>

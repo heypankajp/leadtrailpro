@@ -2,18 +2,18 @@ export const listKeys = ["lead_type", "status", "bd_action", "stage", "client_re
 export type ListKey = (typeof listKeys)[number];
 
 export const listKeyLabels: Record<ListKey, string> = {
-  lead_type: "Lead type",
+  lead_type: "Deal type",
   status: "Status",
   bd_action: "BD action",
   stage: "Pipeline stage",
   client_response: "Client response",
-  lead_category: "Lead category",
+  lead_category: "Deal category",
   company_size: "Company size",
   city: "City",
-  lost_reason: "Lost lead reason",
+  lost_reason: "Lost deal reason",
   disqualified_reason: "Disqualified reason",
   business_type: "Business type (sales trips)",
-  opportunity_reason: "Not relevant reason (opportunities)",
+  opportunity_reason: "Not relevant reason (leads)",
   todo_list: "To Do list",
 };
 
@@ -29,6 +29,8 @@ export type ListValue = {
   active: boolean;
   /** `bd_action` values only (PIPE-03): the pipeline stage the action lands a lead in; null = not mapped (counts as Contact Made). */
   stageId: number | null;
+  /** `stage` values only (PD-09): the pipeline the stage belongs to. */
+  pipelineId?: number | null;
 };
 
 /** The pipeline's entry stage (PIPE-01): new leads start here, and it cannot be deactivated. */

@@ -21,7 +21,7 @@ describe("To Do lists (TODO-*)", () => {
   });
   after(async () => { await driver?.quit(); });
 
-  uiTest("a lead is put on To be visited from its page and the timeline records it", async () => {
+  uiTest("a deal is put on To be visited from its page and the timeline records it", async () => {
     await addLead(page, { name, executive: "Priya Nair" });
     await page.toast(`${name} added to the pipeline`);
     const select = await page.wait(By.css('select[aria-label="To Do list"]'));
@@ -44,15 +44,15 @@ describe("To Do lists (TODO-*)", () => {
     await page.waitLeadRow(name);
   });
 
-  uiTest("selected leads are taken off the list from the To Do page", async () => {
+  uiTest("selected deals are taken off the list from the To Do page", async () => {
     await page.click(By.css(`input[aria-label=${JSON.stringify(`Select ${name}`)}]`), { global: true });
     await page.clickButton("Take off To Do", { global: true });
-    await page.toast("1 lead taken off To Do");
+    await page.toast("1 deal taken off To Do");
     await page.wait(By.xpath('//td[contains(@class,"empty-state")]'));
-    assert.equal((await driver.findElements(page.leadRow(name))).length, 0, "the lead left the To Do page");
+    assert.equal((await driver.findElements(page.leadRow(name))).length, 0, "the deal left the To Do page");
   });
 
-  uiTest("an administrator adds another list and leads are moved to it in bulk from All leads", async () => {
+  uiTest("an administrator adds another list and deals are moved to it in bulk from All deals", async () => {
     await page.nav("List of values");
     await page.heading("List of values");
     await page.click(By.xpath('.//nav[contains(@class,"values-nav")]//button[starts-with(normalize-space(.), "To Do list")]'), { global: true });
@@ -61,16 +61,15 @@ describe("To Do lists (TODO-*)", () => {
     await page.clickButton("Add value", { global: true });
     await page.toast(`Added "${second}" to To Do list`);
 
-    await page.nav("All leads");
-    await page.heading("All leads");
-    await (await page.wait(By.css('input[aria-label="Search leads"]'))).sendKeys(name);
+    await page.deals("all");
+    await (await page.wait(By.css('input[aria-label="Search deals"]'))).sendKeys(name);
     await page.waitLeadRow(name);
     await page.click(By.css(`input[aria-label=${JSON.stringify(`Select ${name}`)}]`), { global: true });
     await page.clickButton("Move to To Do", { global: true });
-    await page.dialogTitle("Move lead to a To Do list");
+    await page.dialogTitle("Move deal to a To Do list");
     await page.setValue(await page.wait(By.css('section[role="dialog"] select[aria-label="To Do list"]')), second);
-    await page.clickButton("Move leads");
-    await page.toast(`1 lead moved to To Do: ${second}`);
+    await page.clickButton("Move deals");
+    await page.toast(`1 deal moved to To Do: ${second}`);
     assert.match(await (await page.wait(badge(name))).getText(), new RegExp(`^To Do: ${second}`));
 
     await page.nav("To Do");

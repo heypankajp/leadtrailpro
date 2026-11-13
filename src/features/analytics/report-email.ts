@@ -31,14 +31,14 @@ export async function runStalledReport(now = new Date()): Promise<{ periodKey: s
     const report = await buildAnalytics(admins[0], "last_7d", null, emptyAnalyticsFilters);
     const lines = report.stalled.leads.slice(0, 10).map((lead) => `  - ${lead.clientName} (${lead.statusLabel}, ${lead.ownerName}): ${lead.reasons.join("; ")}`);
     const text = [
-      `Stalled leads this week: ${report.stalled.total}.`, "",
+      `Stalled deals this week: ${report.stalled.total}.`, "",
       lines.length ? lines.join("\n") : "  Nothing is stalled. Well done.", "",
       `Pipeline now: ${report.pipeline.byStatus.map((status) => `${status.label} ${status.count}`).join(", ")}.`,
       `Last 7 days: ${report.movement.funnel.anyToClient} conversion${report.movement.funnel.anyToClient === 1 ? "" : "s"}, ${report.movement.backwards} move${report.movement.backwards === 1 ? "" : "s"} backwards.`,
       "", "Open Analytics in LeadTrailPro for the full picture.",
     ].join("\n");
     for (const admin of admins) {
-      try { await sendMail({ to: admin.email, subject: `LeadTrailPro: ${report.stalled.total} stalled lead${report.stalled.total === 1 ? "" : "s"} need attention`, text }); recipients += 1; } catch (error) { failures += 1; console.error(`Stalled report to ${admin.email} failed.`, error instanceof Error ? error.message : error); }
+      try { await sendMail({ to: admin.email, subject: `LeadTrailPro: ${report.stalled.total} stalled deal${report.stalled.total === 1 ? "" : "s"} need attention`, text }); recipients += 1; } catch (error) { failures += 1; console.error(`Stalled report to ${admin.email} failed.`, error instanceof Error ? error.message : error); }
     }
   }
   const status = failures === 0 ? "success" : recipients ? "partial" : "failed";

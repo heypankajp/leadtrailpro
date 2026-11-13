@@ -15,7 +15,7 @@ describe("Analytics rules", () => {
     assert.deepEqual(buckets("2026-11-20", "2027-01-10", "month").map((bucket) => bucket.start), ["2026-11-20", "2026-12-01", "2027-01-01"]);
   });
 
-  test("status over time: each lead counts from its creation with its last status before the bucket end", () => {
+  test("status over time: each deal counts from its creation with its last status before the bucket end", () => {
     const leads = [{ id: 1, createdAt: "2026-11-01T10:00:00Z", initialCode: "cold" }, { id: 2, createdAt: "2026-11-05T10:00:00Z", initialCode: "cold" }];
     const changes = [{ leadId: 1, at: "2026-11-03T09:00:00Z", code: "warm" }, { leadId: 1, at: "2026-11-06T09:00:00Z", code: "hot" }];
     const ends = [{ label: "2026-11-02", endIso: "2026-11-03T00:00:00Z" }, { label: "2026-11-04", endIso: "2026-11-05T00:00:00Z" }, { label: "2026-11-07", endIso: "2026-11-08T00:00:00Z" }];
@@ -62,7 +62,7 @@ describe("Analytics rules", () => {
     const late = stalledAssessment({ statusCode: "warm", daysInStatus: 40, daysSinceActivity: 20, overdueDays: 3 }, 14);
     assert.equal(late.score, 26);
     assert.deepEqual(late.reasons, ["40 days in warm (limit 14)", "no activity for 20 days", "follow-up overdue by 3 days"]);
-    assert.deepEqual(stalledAssessment({ statusCode: "hot", daysInStatus: 3, daysSinceActivity: 9, overdueDays: null }, 14).reasons, ["hot lead quiet for 9 days"]);
+    assert.deepEqual(stalledAssessment({ statusCode: "hot", daysInStatus: 3, daysSinceActivity: 9, overdueDays: null }, 14).reasons, ["hot deal quiet for 9 days"]);
   });
 
   test("filters parse ids, trimmed text, and the source choice", () => {

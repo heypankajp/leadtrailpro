@@ -39,31 +39,30 @@ describe("Accessibility", () => {
     await page.signIn(admin);
   });
 
-  uiTest("action center and lead list", async () => {
+  uiTest("action center and deal list", async () => {
     await page.wait(By.css(".performance-grid"));
     await audit("action center");
     await addLead(page, { name: leadName, executive: "Ana Lee" });
     await page.toast(`${leadName} added to the pipeline`);
     await page.dialogTitle(leadName);
-    await audit("lead detail dialog");
+    await audit("deal detail dialog");
     await page.tab("Timeline");
-    await audit("lead timeline");
+    await audit("deal timeline");
     await page.tab("Collaboration");
     await page.wait(By.css(".message-composer textarea"));
-    await audit("lead collaboration");
+    await audit("deal collaboration");
     await page.closeDialog();
-    await page.nav("All leads");
-    await page.heading("All leads");
+    await page.deals("all");
     await page.waitLeadRow(leadName);
-    await audit("lead list");
+    await audit("deal list");
   });
 
   uiTest("tasks, reports, settings, list of values, and the trip planner", async () => {
-    await page.nav("Tasks & reminders");
-    await page.heading("Tasks & reminders");
+    await page.nav("Activities");
+    await page.heading("Activities");
     await audit("tasks");
-    await page.nav("Analytics");
-    await page.heading("Analytics");
+    await page.nav("Insights");
+    await page.heading("Insights");
     await page.wait(By.css(".report-table"));
     await audit("reports");
     await page.nav("Settings");

@@ -31,6 +31,6 @@ describe("needs-attention rules (TASK-05)", () => {
     assert.equal(resolveInactivityDays({ statusId: 3, bdActionId: 20, stageId: 11 }, withStages), 21, "a BD action rule beats status and stage");
     assert.equal(resolveInactivityDays({ statusId: 1, bdActionId: 5, stageId: 11 }, withStages), 14, "status and BD action beat everything");
     assert.equal(resolveInactivityDays({ statusId: 2, bdActionId: null, stageId: 12 }, withStages), 7, "no match: the default");
-    assert.equal(resolveInactivityDays({ statusId: 2, bdActionId: null }, withStages), 7, "a lead without a stage never matches a stage rule");
+    assert.equal(resolveInactivityDays({ statusId: 2, bdActionId: null }, withStages), 7, "a deal without a stage never matches a stage rule");
   });
 });

@@ -5,7 +5,7 @@ import { after, before, describe } from "node:test";
 import { By, Key, Page, createDriver, outputDir, uiTest, waitForServices, xq } from "./helpers/ui.mjs";
 import { admin, ensureAdmin, runId } from "./helpers/data.mjs";
 
-describe("Leads", () => {
+describe("Deals", () => {
   const lead = { name: `Acme Robotics ${runId}`, executive: "Priya Patel", phone: "+1 416 555 0101", email: `priya.${runId}@acme.example` };
   const uploadPath = path.join(outputDir, `upload-${runId}.txt`);
   let driver;
@@ -22,9 +22,9 @@ describe("Leads", () => {
   });
   after(async () => { await driver?.quit(); });
 
-  uiTest("adds a lead from the action center", async () => {
-    await page.clickButton("Add a lead", { global: true });
-    await page.dialogTitle("Add a new lead");
+  uiTest("adds a deal from the action center", async () => {
+    await page.clickButton("Add a deal", { global: true });
+    await page.dialogTitle("Add deal");
     await page.fill("Client name", lead.name);
     await page.fill("Client executive", lead.executive);
     await page.fill("Contact number", lead.phone);
@@ -32,10 +32,10 @@ describe("Leads", () => {
     await page.fill("City", "Toronto");
     await page.fill("Client industry", "Robotics");
     await page.fill("Address", "100 King St W, Toronto");
-    await page.clickButton("Save lead");
+    await page.clickButton("Save deal");
     await page.toast(`${lead.name} added to the pipeline`);
     await page.dialogTitle(lead.name);
-    await page.eyebrow("LEAD OVERVIEW");
+    await page.eyebrow("DEAL");
     assert.equal(await (await page.wait(By.css(".client-executive-name"))).getText(), lead.executive);
     assert.equal(await (await page.wait(By.css(".detail-owner strong"))).getText(), admin.name);
   });
@@ -126,12 +126,10 @@ describe("Leads", () => {
   });
 
   uiTest("schedules a follow-up that becomes a task", async () => {
-    await page.tab("Overview");
     await page.clickButton("Schedule follow-up");
     await page.fill("What needs to happen?", "Send the proposal draft.");
-    await page.clickButton("Schedule follow-up");
+    await page.clickButton("Save follow-up");
     await page.toast("Follow-up scheduled and added to tasks");
-    await page.tab("Tasks");
     await page.wait(By.xpath(`//article[contains(@class,"task-card")]//strong[normalize-space()=${xq(`Follow up with ${lead.executive}`)}]`));
   });
 
@@ -144,68 +142,90 @@ describe("Leads", () => {
     await page.wait(By.xpath(`//div[contains(@class,"attachment-row")]//strong[normalize-space()=${xq(path.basename(uploadPath))}]`));
   });
 
-  uiTest("edits the lead and changes its status", async () => {
+  uiTest("edits the deal and changes its status", async () => {
     await page.clickButton("Edit");
     await page.dialogTitle(`Edit ${lead.name}`);
     await page.fill("Client executive", "Priya Patel-Singh");
     await page.clickButton("Save changes");
-    await page.toast("Lead updated");
-    await page.tab("Overview");
+    await page.toast("Deal updated");
     await page.waitText(By.css(".client-executive-name"), "Priya Patel-Singh");
-    const status = await page.wait(By.css('select[aria-label="Update lead status"]'));
+    const status = await page.wait(By.css('select[aria-label="Update deal status"]'));
     await page.setValue(status, "Warm");
     await page.toast("Status updated");
   });
 
   uiTest("a closed status asks for its reason and shows it with the status", async () => {
-    await page.setValue(await page.wait(By.css('select[aria-label="Update lead status"]')), "Disqualified");
+    await page.setValue(await page.wait(By.css('select[aria-label="Update deal status"]')), "Disqualified");
     await page.dialogTitle(`Mark ${lead.name} as Disqualified`);
     await page.fill("Status reason", "Bad Timing / Not Right Now");
     await page.clickButton("Set status");
     await page.wait(By.css('select[aria-label="Status reason"]'));
     assert.equal(await page.selectedText(await page.wait(By.css('select[aria-label="Status reason"]'))), "Bad Timing / Not Right Now");
-    assert.equal(await page.selectedText(await page.wait(By.css('select[aria-label="Update lead status"]'))), "Disqualified");
+    assert.equal(await page.selectedText(await page.wait(By.css('select[aria-label="Update deal status"]'))), "Disqualified");
     await page.tab("Timeline");
     await page.wait(By.xpath('//article[contains(@class,"timeline-entry")]//strong[normalize-space()="Status changed from Warm to Disqualified – Bad Timing / Not Right Now"]'));
-    await page.tab("Overview");
     // Back to Warm for the list checks that follow; the reason select disappears once the status is open again.
-    await page.setValue(await page.wait(By.css('select[aria-label="Update lead status"]')), "Warm");
+    await page.setValue(await page.wait(By.css('select[aria-label="Update deal status"]')), "Warm");
     await page.driver.wait(async () => (await page.driver.findElements(By.css('select[aria-label="Status reason"]'))).length === 0, 15000, "Reason select still shown");
-    assert.equal(await page.selectedText(await page.wait(By.css('select[aria-label="Update lead status"]'))), "Warm");
+    assert.equal(await page.selectedText(await page.wait(By.css('select[aria-label="Update deal status"]'))), "Warm");
   });
 
-  uiTest("finds the lead under Warm leads and by global search", async () => {
+  uiTest("finds the deal under Warm deals and by global search", async () => {
     await page.closeDialog();
-    await page.nav("Warm leads");
-    await page.heading("Warm leads");
+    await page.goto("#/warm"); // the old address still opens the list of that status
+    await page.heading("Warm deals");
     await page.waitLeadRow(lead.name);
-    const search = await page.wait(By.css('input[aria-label="Search all leads"]'));
+    const search = await page.wait(By.css('input[aria-label="Search all deals"]'));
     await search.sendKeys(lead.name, Key.ENTER);
-    await page.heading("All leads");
+    await page.heading("All deals");
     await page.waitLeadRow(lead.name);
-    await page.waitText(By.css(".page-heading .eyebrow"), "1 RECORDS");
+    await page.waitText(By.css(".list-subhead span"), "1 record");
   });
 
-  uiTest("archives the lead and restores it from the archive", async () => {
+  uiTest("archives the deal and restores it from the archive", async () => {
     await page.click(By.xpath(`//tr[.//strong[normalize-space()=${xq(lead.name)}]]//button[contains(@class,"client-cell")]`), { global: true });
     await page.dialogTitle(lead.name);
     await page.clickButton("Archive");
     await page.dialogTitle(`Archive ${lead.name}`);
     await page.fill("Reason (optional)", "Duplicate record");
-    await page.clickButton("Archive lead");
-    await page.toast("Lead archived");
-    await page.eyebrow("ARCHIVED LEAD");
+    await page.clickButton("Archive deal");
+    await page.toast("Deal archived");
+    await page.eyebrow("ARCHIVED DEAL");
     await page.closeDialog();
-    await page.nav("Archive");
-    await page.heading("Archive");
+    await page.deals("archive");
     const row = await page.waitLeadRow(lead.name);
     assert.match(await row.getText(), /Duplicate record/);
     await row.findElement(By.xpath('.//button[normalize-space()="Restore"]')).click();
-    await page.dialogTitle("Restore lead");
+    await page.dialogTitle("Restore deal");
     await page.clickButton("Restore");
-    await page.toast("Lead restored to the pipeline");
-    await page.nav("All leads");
-    await page.heading("All leads");
+    await page.toast("Deal restored to the pipeline");
+    await page.deals("all");
     await page.waitLeadRow(lead.name);
+  });
+
+  // SPEC §10.13, §10.14: the deal's person and organization are contacts of their own; their pages list the deal.
+  uiTest("Contacts lists the deal's person and organization; their pages open the deal and Back returns", async () => {
+    await page.nav("Contacts");
+    await page.wait(By.css('div[aria-label="Contacts list"]'));
+    await (await page.wait(By.css('input[aria-label="Search people"]'))).sendKeys("Priya Patel-Singh");
+    const person = '//table[contains(@class,"contacts-table")]//tr[.//strong[normalize-space()="Priya Patel-Singh"]]';
+    assert.ok((await (await page.wait(By.xpath(person))).getText()).includes(lead.name), "the person's row names the organization");
+    await page.click(By.xpath(`${person}//button[contains(@class,"client-cell")]`), { global: true });
+    await page.dialogTitle("Priya Patel-Singh");
+    await page.eyebrow("PERSON");
+    await page.closeDialog();
+    await page.click(By.xpath('.//div[@aria-label="Contacts list"]/button[normalize-space()="Organizations"]'), { global: true });
+    await (await page.wait(By.css('input[aria-label="Search organizations"]'))).sendKeys(lead.name);
+    const organization = `//table[contains(@class,"contacts-table")]//tr[.//strong[normalize-space()=${xq(lead.name)}]]`;
+    assert.match(await (await page.wait(By.xpath(organization))).getText(), /1 deal · open/);
+    await page.click(By.xpath(`${organization}//button[contains(@class,"client-cell")]`), { global: true });
+    await page.dialogTitle(lead.name);
+    await page.eyebrow("ORGANIZATION");
+    await page.click(By.css(".contact-page .contact-deal-row"), { global: true });
+    await page.eyebrow("DEAL");
+    await page.closeDialog();
+    await page.eyebrow("ORGANIZATION");
+    await page.closeDialog();
+    await page.wait(By.xpath(organization));
   });
 });

@@ -45,7 +45,7 @@ export async function sendFromMailbox(mailbox: { email: string; refreshToken: st
   const data = await response.json().catch(() => ({})) as { id?: string; threadId?: string; error?: { message?: string; status?: string } };
   if (!response.ok || !data.id) {
     const reason = data.error?.message ?? `HTTP ${response.status}`;
-    if (response.status === 403 && /insufficient|scope/i.test(reason)) throw new HttpError(409, "This mailbox did not grant permission to send email. Reconnect Gmail from a lead's Emails tab and allow sending.");
+    if (response.status === 403 && /insufficient|scope/i.test(reason)) throw new HttpError(409, "This mailbox did not grant permission to send email. Reconnect Gmail from a deal's Emails tab and allow sending.");
     throw new Error(`Gmail could not send the message (${reason}).`);
   }
   return { id: data.id, threadId: data.threadId ?? "" };

@@ -18,14 +18,14 @@ export const stageLabels: Record<UserStage, string> = {
 };
 
 export const userPrivileges = [
-  { id: "view_leads", label: "View leads" },
-  { id: "create_leads", label: "Create leads" },
-  { id: "edit_leads", label: "Edit own leads" },
-  { id: "edit_any_lead", label: "Edit any lead" },
-  { id: "transfer_leads", label: "Transfer own leads" },
-  { id: "reassign_leads", label: "Reassign any lead" },
-  { id: "archive_leads", label: "Archive and restore leads" },
-  { id: "review_queued", label: "Approve or reject queued leads" },
+  { id: "view_leads", label: "View deals" },
+  { id: "create_leads", label: "Create deals" },
+  { id: "edit_leads", label: "Edit own deals" },
+  { id: "edit_any_lead", label: "Edit any deal" },
+  { id: "transfer_leads", label: "Transfer own deals" },
+  { id: "reassign_leads", label: "Reassign any deal" },
+  { id: "archive_leads", label: "Archive and restore deals" },
+  { id: "review_queued", label: "Approve or reject queued deals" },
   { id: "add_notes", label: "Add interaction notes" },
   { id: "collaborate", label: "Post collaboration messages" },
   { id: "moderate_messages", label: "Remove collaboration messages" },

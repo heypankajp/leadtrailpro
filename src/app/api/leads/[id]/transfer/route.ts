@@ -11,13 +11,13 @@ export async function POST(request: Request, context: RouteContext) {
     const user = await requireUser();
     const { id: rawId } = await context.params;
     const id = Number(rawId);
-    if (!Number.isSafeInteger(id) || id < 1) return jsonError(400, "Invalid lead ID.");
+    if (!Number.isSafeInteger(id) || id < 1) return jsonError(400, "Invalid deal ID.");
     const body = await readJsonBody(request);
     const ownerId = Number(body?.ownerId);
     if (!Number.isSafeInteger(ownerId) || ownerId < 1) return jsonError(400, "Choose the new owner.");
     const lead = await transferLead(id, ownerId, asString(body?.reason, 500), user);
     return NextResponse.json({ lead });
   } catch (error) {
-    return handleRouteError(error, "Transfer lead");
+    return handleRouteError(error, "Transfer deal");
   }
 }

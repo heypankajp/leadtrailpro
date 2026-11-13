@@ -8,7 +8,11 @@ import type { PipelineSettings, StageFollowUpActivity } from "../settings/model.
  * Pure helpers here are shared by the repository, the tracker import, and the unit tests.
  */
 
-export type StageValue = { id: number; code: string; value: string; sortOrder: number; active: boolean };
+/** `pipelineId`: the pipeline the stage belongs to (PD-09); null only for data from before migration 26. */
+export type StageValue = { id: number; code: string; value: string; sortOrder: number; active: boolean; pipelineId?: number | null };
+
+/** PD-09: a pipeline is a board of its own with its own ordered stages. The default one takes the automatic placing (BD actions, import). */
+export type Pipeline = { id: number; name: string; sortOrder: number; active: boolean; isDefault: boolean };
 
 /** A BD action with no stage of its own counts as this stage: the lead has been contacted at least once. */
 export const unmappedActionStageCode = "contact_made";
@@ -25,9 +29,11 @@ export function resolveStageForAction(bdActionId: number | null, actionStageId: 
 }
 
 /** PIPE-03: an action moves a lead forward only; a lead with no stage yet takes the mapped one. */
-export function stageAdvances(current: Pick<StageValue, "sortOrder"> | null, mapped: Pick<StageValue, "sortOrder"> | null): boolean {
+export function stageAdvances(current: Pick<StageValue, "sortOrder" | "pipelineId"> | null, mapped: Pick<StageValue, "sortOrder" | "pipelineId"> | null): boolean {
   if (!mapped) return false;
   if (!current) return true;
+  // PD-09: an action never pulls a deal out of the pipeline it was put in.
+  if ((current.pipelineId ?? null) !== (mapped.pipelineId ?? null) && current.pipelineId != null && mapped.pipelineId != null) return false;
   return mapped.sortOrder > current.sortOrder;
 }
 
@@ -43,6 +49,8 @@ export type PipelineFilters = {
   /** With `offset`: the next cards of one column (Show more). */
   stageId: number | null;
   offset: number;
+  /** PD-09: the pipeline shown; null = the default one. */
+  pipelineId: number | null;
 };
 
 export function parsePipelineFilters(params: URLSearchParams): PipelineFilters {
@@ -58,6 +66,7 @@ export function parsePipelineFilters(params: URLSearchParams): PipelineFilters {
     statusId: id("statusId"),
     q: (params.get("q") || "").trim().slice(0, 200),
     stageId: id("stageId"),
+    pipelineId: id("pipelineId"),
     offset: Number.isInteger(offset) && offset > 0 ? Math.min(offset, 10_000) : 0,
   };
 }
@@ -78,6 +87,8 @@ export type PipelineCard = {
   ownerName: string;
   stageId: number;
   followUpDate: string | null;
+  /** PD-11: the deal's value, when one was entered. */
+  dealValue: number | null;
   nextTaskDueAt: string | null;
   nextTaskTitle: string | null;
   lastActivityAt: string;
@@ -89,7 +100,8 @@ export type PipelineCard = {
   quiet: boolean;
 };
 
-export type PipelineStage = StageValue & { count: number; leads: PipelineCard[] };
+/** `valueTotal`: the sum of the values of every deal in the stage (not only the cards loaded), 0 when none has a value. */
+export type PipelineStage = StageValue & { count: number; valueTotal: number; leads: PipelineCard[] };
 export type PipelineBoard = { scope: PipelineScope; total: number; stages: PipelineStage[] };
 
 export type NextStep = { kind: "task" | "follow_up"; date: string; title: string | null };
@@ -136,4 +148,26 @@ export function defaultNextStep(stageCode: string | null, pipeline: PipelineSett
   const businessDays = configured ? configured.businessDays : 1;
   const who = names.executive?.trim() || names.client;
   return { activity, title: `${activityTitles[activity]} ${who}`, date: addWorkingDays(today, businessDays, holidays), businessDays, fromStage: Boolean(configured) };
+}
+
+/**
+ * The stages offered wherever a stage is chosen (PD-09): the stages of the active pipelines, the default pipeline first.
+ * With one pipeline the names are plain; with several, a stage of another pipeline reads "Pipeline: Stage".
+ */
+export function stageChoices<Stage extends { value: string; sortOrder: number; pipelineId?: number | null }>(stages: readonly Stage[], pipelines: readonly Pipeline[]): Stage[] {
+  const active = pipelines.filter((pipeline) => pipeline.active);
+  if (active.length <= 1) return stages.filter((stage) => stage.pipelineId == null || active.some((pipeline) => pipeline.id === stage.pipelineId) || !pipelines.length);
+  const rank = new Map(active.map((pipeline, index) => [pipeline.id, { index: pipeline.isDefault ? -1 : index, pipeline }]));
+  return stages
+    .filter((stage) => stage.pipelineId == null || rank.has(stage.pipelineId))
+    .map((stage) => ({ stage, place: stage.pipelineId == null ? undefined : rank.get(stage.pipelineId) }))
+    .sort((a, b) => (a.place?.index ?? -1) - (b.place?.index ?? -1) || a.stage.sortOrder - b.stage.sortOrder)
+    .map(({ stage, place }) => (place && !place.pipeline.isDefault ? { ...stage, value: `${place.pipeline.name}: ${stage.value}` } : stage));
+}
+
+/** The stages of one pipeline, in order: the columns of its board and the steps of the stage bar. */
+export function stagesOfPipeline<Stage extends { pipelineId?: number | null }>(stages: readonly Stage[], pipelineId: number | null | undefined, pipelines: readonly Pipeline[]): Stage[] {
+  const fallback = pipelines.find((pipeline) => pipeline.isDefault)?.id ?? null;
+  const wanted = pipelineId ?? fallback;
+  return stages.filter((stage) => (stage.pipelineId ?? fallback) === wanted);
 }

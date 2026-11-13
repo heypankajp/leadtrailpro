@@ -85,7 +85,7 @@ export async function uploadAttachment(input: UploadInput, actor: UserAccount): 
     });
     await recordAudit(connection, {
       actorId: actor.id, action: version > 1 ? "attachment.replaced" : "attachment.uploaded", entityType: "attachment", entityId: id,
-      after: { leadId: input.leadId, category: input.category, label, fileName, sizeBytes: input.file.size, version }, details: `${actor.name} uploaded ${fileName} to lead ${input.leadId}`,
+      after: { leadId: input.leadId, category: input.category, label, fileName, sizeBytes: input.file.size, version }, details: `${actor.name} uploaded ${fileName} to deal ${input.leadId}`,
     }, now);
     const lead = await getLead(input.leadId, connection);
     if (lead) await notifyUsers(connection, { userIds: [lead.ownerId], actorId: actor.id, type: "file_uploaded", title: `${input.category === "profile" ? "Profile shared" : "Document added"} on ${lead.clientName}`, body: `${actor.name} uploaded ${fileName} (${label}).`, leadId: lead.id });
@@ -103,6 +103,6 @@ export async function softDeleteAttachment(id: number, actor: UserAccount): Prom
     const now = new Date();
     await connection.query("UPDATE lead_attachments SET deleted_at = ?, deleted_by = ? WHERE id = ?", [toSqlDateTime(now), actor.id, id]);
     await addActivity(connection, { leadId: attachment.leadId, userId: actor.id, type: "file", summary: `File removed: ${attachment.fileName}`, meta: { attachmentId: id, deleted: true }, occurredAt: now });
-    await recordAudit(connection, { actorId: actor.id, action: "attachment.deleted", entityType: "attachment", entityId: id, before: { fileName: attachment.fileName, label: attachment.label }, after: { deleted: true }, details: `${actor.name} removed ${attachment.fileName} from lead ${attachment.leadId}` }, now);
+    await recordAudit(connection, { actorId: actor.id, action: "attachment.deleted", entityType: "attachment", entityId: id, before: { fileName: attachment.fileName, label: attachment.label }, after: { deleted: true }, details: `${actor.name} removed ${attachment.fileName} from deal ${attachment.leadId}` }, now);
   });
 }

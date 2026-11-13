@@ -37,7 +37,7 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
         <p className="dialog-description">In-app notifications are always on. Choose what is also sent by email{reference.mailerConfigured ? "" : " (email delivery is not configured yet, so these only apply once it is)"}.</p>
         <label className="checklist-item"><input type="checkbox" checked={prefs.dailyDigest} onChange={() => toggle("dailyDigest")} /><span>Daily digest of overdue and upcoming follow-ups, tasks, and yesterday&apos;s activity</span></label>
         <label className="checklist-item"><input type="checkbox" checked={prefs.weeklyDigest} onChange={() => toggle("weeklyDigest")} /><span>Weekly digest with last week&apos;s numbers and target progress</span></label>
-        <label className="checklist-item"><input type="checkbox" checked={prefs.emailEvents} onChange={() => toggle("emailEvents")} /><span>Email me each event too (task assignments, status changes, transfers, queued leads, file uploads)</span></label>
+        <label className="checklist-item"><input type="checkbox" checked={prefs.emailEvents} onChange={() => toggle("emailEvents")} /><span>Email me each event too (task assignments, status changes, transfers, queued deals, file uploads)</span></label>
         <ErrorText message={error} />
         <div className="modal-actions">
           <button type="button" className="button button-outline" onClick={onClose}>Cancel</button>

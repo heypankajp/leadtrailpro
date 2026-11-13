@@ -16,6 +16,6 @@ export async function GET(request: Request) {
     if (!metric || !teamBoardMetrics.includes(metric)) return jsonError(400, "Choose a board column.");
     return NextResponse.json({ leads: await teamBoardLeads(user, userId, metric) });
   } catch (error) {
-    return handleRouteError(error, "Team board leads");
+    return handleRouteError(error, "Team board deals");
   }
 }

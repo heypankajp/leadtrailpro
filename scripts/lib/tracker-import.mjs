@@ -4,6 +4,7 @@ import {
   canonicalBdAction, clean, findValue, fingerprintText, isEmail, latestNonEmpty, looksLikeAddress, normalizeCompanyName, pairRowChanges, parseBdAction, parseCity,
   parseClientResponse, parseDate, parseEmails, parseLeadType, parsePhones, parseStatusCode, poolCompanyKey, slugify, titleCase, truncate,
 } from "./tracker-mapping.mjs";
+import { refreshContactsFromSingleDeals, syncContactsFromLeads } from "./contacts-sync.mjs";
 
 /**
  * The incremental tracker import (SPEC §10.9), shared by the command line (scripts/import-tracker.mjs) and the app's
@@ -191,17 +192,17 @@ const listed = (lines) => lines.map((line) => `  ${line}`);
 export function formatReport(report) {
   const lines = [
     `LeadTrailPro tracker import ${report.dryRun ? "(DRY RUN, nothing written) " : ""}— ${report.finishedAt}`,
-    `File: ${report.fileName} (hash ${report.fileHash}); sheet ${report.sheetName}; actor ${report.actorEmail}; default owner ${report.defaultOwnerEmail ?? "none (companies without a Sales Manager go to the opportunity pool)"}; previous import ${report.previousImportAt ?? "none"}; ${report.seconds.toFixed(1)} s`,
+    `File: ${report.fileName} (hash ${report.fileHash}); sheet ${report.sheetName}; actor ${report.actorEmail}; default owner ${report.defaultOwnerEmail ?? "none (companies without a Sales Manager go to the leads inbox)"}; previous import ${report.previousImportAt ?? "none"}; ${report.seconds.toFixed(1)} s`,
     "",
     "== Summary", ...counted(report.counts),
     ...section("Defaults and mappings applied", counted(report.decisions)),
-    ...section("Fields changed on existing leads (sheet values applied)", counted(report.fieldChanges)),
+    ...section("Fields changed on existing deals (sheet values applied)", counted(report.fieldChanges)),
     ...section("Accounts created", listed(report.createdUsers)),
     ...section("List values created", listed(report.createdValues)),
-    ...section("Leads edited in the app since the previous import (check these)", listed(report.appEdited)),
+    ...section("Deals edited in the app since the previous import (check these)", listed(report.appEdited)),
     ...section("Rows removed from the sheet (timeline entries kept)", listed(report.removedRows)),
-    ...section("Leads updated", listed(report.updatedLeads)),
-    ...section("Companies placed in the opportunity pool (no Sales Manager)", listed(report.pooled ?? [])),
+    ...section("Deals updated", listed(report.updatedLeads)),
+    ...section("Companies placed in the leads inbox (no Sales Manager)", listed(report.pooled ?? [])),
     ...section("Rejected rows", listed(report.rejects)),
     ...section("Companies skipped", listed(report.skipped)),
   ];
@@ -356,7 +357,7 @@ export async function runTrackerImport(options) {
     if (managerUserId.has(key)) return managerUserId.get(key);
     const email = ownerMap[key];
     if (!email) {
-      decision(defaultOwner ? `Sales Manager "${managerName}" has no account mapping; leads assigned to ${defaultOwner.email}` : `Sales Manager "${managerName}" has no account mapping; companies placed in the opportunity pool`);
+      decision(defaultOwner ? `Sales Manager "${managerName}" has no account mapping; deals assigned to ${defaultOwner.email}` : `Sales Manager "${managerName}" has no account mapping; companies placed in the leads inbox`);
       managerUserId.set(key, defaultOwner?.id ?? null);
       return defaultOwner?.id ?? null;
     }
@@ -420,6 +421,18 @@ export async function runTrackerImport(options) {
     leadById.set(lead.id, lead);
     if (lead.key && !leadByKey.has(lead.key)) leadByKey.set(lead.key, lead);
   }
+  // An organization that was renamed or merged keeps its earlier names (SPEC §10.16): a sheet row under an old name
+  // still belongs to that organization's deal instead of creating a second one.
+  for (const row of (await query(
+    `SELECT l.id, o.aliases FROM leads l JOIN organizations o ON o.id = l.organization_id
+     WHERE jsonb_array_length(o.aliases) > 0 ORDER BY (l.record_state = 'active') DESC, l.id`,
+  )).rows) {
+    const lead = leadById.get(row.id);
+    for (const alias of Array.isArray(row.aliases) ? row.aliases : []) {
+      const key = normalizeCompanyName(String(alias));
+      if (lead && key && !leadByKey.has(key)) leadByKey.set(key, lead);
+    }
+  }
 
   // Opportunity pool cards (OPP-*): a company with no Sales Manager waits there, its lead and timeline kept as a draft on the
   // card (migration 17) until someone assigns it; a card the sheet later names a manager for becomes that lead.
@@ -458,7 +471,7 @@ export async function runTrackerImport(options) {
   for (const entry of unstamped) {
     const baseline = baselineRows.get(Number(entry.meta?.row));
     const lead = leadById.get(entry.leadId);
-    if (!baseline || !lead || baseline.key !== lead.key) { warn("Baseline row does not match the timeline entry", sheetName, entry.meta?.row ?? "?", `${lead?.clientName ?? `lead ${entry.leadId}`}: left without a fingerprint`); continue; }
+    if (!baseline || !lead || baseline.key !== lead.key) { warn("Baseline row does not match the timeline entry", sheetName, entry.meta?.row ?? "?", `${lead?.clientName ?? `deal ${entry.leadId}`}: left without a fingerprint`); continue; }
     await query("UPDATE lead_activities SET meta = COALESCE(meta, '{}'::jsonb) || jsonb_build_object('fingerprint', ?::text) WHERE id = ?", [baseline.fingerprint, entry.id]);
     entry.meta = { ...(entry.meta ?? {}), fingerprint: baseline.fingerprint };
     count("timeline entries stamped from the baseline workbook");
@@ -494,7 +507,7 @@ export async function runTrackerImport(options) {
   const vanished = [];
   for (const entries of known.values()) for (const entry of entries) vanished.push({ key: leadById.get(entry.leadId)?.key ?? "", date: entry.date, entry });
   const poolRebuild = new Set(); // companies whose pool card is rebuilt because rows left the sheet
-  for (const [fingerprint, card] of draftRows) if (!draftSeen.has(fingerprint)) { poolRebuild.add(card.draft.key); count("pool card rows no longer in the sheet (card rebuilt)"); }
+  for (const [fingerprint, card] of draftRows) if (!draftSeen.has(fingerprint)) { poolRebuild.add(card.draft.key); count("leads inbox card rows no longer in the sheet (card rebuilt)"); }
   if (addedRows.length) count("rows not seen before (new or edited)", addedRows.length);
   if (vanished.length) count("rows of the previous import no longer in the sheet (edited or deleted)", vanished.length);
   const changes = pairRowChanges(vanished, addedRows);
@@ -504,7 +517,7 @@ export async function runTrackerImport(options) {
   for (const item of changes.inserts) (insertsByKey.get(item.key) ?? insertsByKey.set(item.key, []).get(item.key)).push(item.record);
   for (const item of changes.removed) {
     const lead = leadById.get(item.entry.leadId);
-    report.removedRows.push(`${lead?.clientName ?? `lead ${item.entry.leadId}`}: "${item.entry.summary}" (${item.entry.date}; ${sheetName} row ${item.entry.meta?.row ?? "?"} of the previous workbook)`);
+    report.removedRows.push(`${lead?.clientName ?? `deal ${item.entry.leadId}`}: "${item.entry.summary}" (${item.entry.date}; ${sheetName} row ${item.entry.meta?.row ?? "?"} of the previous workbook)`);
     count("rows removed from the sheet (timeline entries kept)");
   }
 
@@ -542,9 +555,9 @@ export async function runTrackerImport(options) {
 
   async function insertLead(lead, insertOptions) {
     const ownerId = insertOptions.ownerId;
-    if (!lead.manager) decision("Leads with no Sales Manager in any row: assigned to the default owner");
+    if (!lead.manager) decision("Deals with no Sales Manager in any row: assigned to the default owner");
     let leadType = lead.type;
-    if (!leadType) { leadType = "Office"; decision('No lead type in any row: "Office" assumed'); }
+    if (!leadType) { leadType = "Office"; decision('No deal type in any row: "Office" assumed'); }
     let statusCode = lead.status ?? "cold";
     if (!lead.status) decision('No status in any row: "Cold" assumed');
     if (!insertOptions.archived && clientKeys.has(lead.rows[0].key) && statusCode !== "client") { statusCode = "client"; decision('Listed on the Clients sheet: status set to "Client"'); }
@@ -571,7 +584,7 @@ export async function runTrackerImport(options) {
     );
     const leadId = created.id;
     await activityInsert(leadId, {
-      userId: ownerId, type: "created", summary: `Lead imported from the sales tracker (${insertOptions.archived ? "archive sheet" : `first contact ${firstContact}`})`, body: null, valueCode: statusCode,
+      userId: ownerId, type: "created", summary: `Deal imported from the sales tracker (${insertOptions.archived ? "archive sheet" : `first contact ${firstContact}`})`, body: null, valueCode: statusCode,
       meta: { imported: true, sheet: lead.sheet, rows: lead.rows.length, file: fileHash }, occurredAt: `${firstContact} 09:00:00`,
     });
     count("timeline entries written");
@@ -615,7 +628,7 @@ export async function runTrackerImport(options) {
     }
     if (lead.response) change("client_response_id", "client response", existing.clientResponseId, await ensureValue("client_response", lead.response));
     if (lead.city) change("city_id", "city", existing.cityId, await ensureValue("city", lead.city));
-    if (lead.type) change("lead_type_id", "lead type", existing.leadTypeId, await ensureValue("lead_type", lead.type));
+    if (lead.type) change("lead_type_id", "deal type", existing.leadTypeId, await ensureValue("lead_type", lead.type));
     const sheetOwner = lead.manager ? await ownerFor(lead.manager) : null;
     if (sheetOwner) change("owner_id", "owner", existing.ownerId, sheetOwner);
     if (lead.address) change("address", "address", existing.address, lead.address);
@@ -637,7 +650,7 @@ export async function runTrackerImport(options) {
     if (lead.contract) change("contract_signed_date", "contract signed date", existing.contractSignedDate, lead.contract);
     const lastActivity = lead.lastActivity ? `${lead.lastActivity} 12:00:00` : null;
     if (lastActivity && (!existing.lastActivityAt || lastActivity > existing.lastActivityAt)) change("last_activity_at", null, existing.lastActivityAt, lastActivity);
-    if (!changed.length) { count("leads with new rows but no field changes"); return; }
+    if (!changed.length) { count("deals with new rows but no field changes"); return; }
 
     await query(`UPDATE leads SET ${changed.map((item) => `${item.column} = ?`).join(", ")} WHERE id = ?`, [...changed.map((item) => item.after), existing.id]);
     const labels = changed.filter((item) => item.label).map((item) => item.label);
@@ -662,10 +675,10 @@ export async function runTrackerImport(options) {
       actor.id, existing.id, JSON.stringify(Object.fromEntries(audited.map((item) => [item.column, item.before ?? null]))), JSON.stringify(Object.fromEntries(audited.map((item) => [item.column, item.after]))),
       truncate(`${actorName} updated ${labels.join(", ")} on ${existing.clientName} from the sales tracker (${edits.length} edited, ${inserts.length} new row${inserts.length === 1 ? "" : "s"})`, 500), nowSql,
     ]);
-    count("leads updated");
+    count("deals updated");
     report.updatedLeads.push(`${existing.clientName}: ${labels.join(", ")} (${edits.length} edited, ${inserts.length} new row${inserts.length === 1 ? "" : "s"})`);
     if (appEdits.has(existing.id)) report.appEdited.push(`${existing.clientName}: changed in the app on ${appEdits.get(existing.id)}, after the previous import on ${lastImportAt}; the sheet's values were applied to ${labels.join(", ")}`);
-    if (existing.recordState && existing.recordState !== "active") count(`leads updated that are ${existing.recordState}`);
+    if (existing.recordState && existing.recordState !== "active") count(`deals updated that are ${existing.recordState}`);
   }
 
   /**
@@ -677,13 +690,13 @@ export async function runTrackerImport(options) {
     const poolKey = poolKeyOf(lead.name);
     const card = cards.get(poolKey) ?? null;
     if (card && card.status === "not_relevant") {
-      report.skipped.push(`${name}: marked not relevant in the opportunity pool; its ${lead.rows.length} row${lead.rows.length === 1 ? "" : "s"} stay in the sheet only`);
-      count("companies skipped (marked not relevant in the opportunity pool)");
+      report.skipped.push(`${name}: marked not relevant in the leads inbox; its ${lead.rows.length} row${lead.rows.length === 1 ? "" : "s"} stay in the sheet only`);
+      count("companies skipped (marked not relevant in the leads inbox)");
       return;
     }
-    decision("Companies with no Sales Manager in any row: placed in the opportunity pool");
+    decision("Companies with no Sales Manager in any row: placed in the leads inbox");
     let leadType = lead.type;
-    if (!leadType) { leadType = "Office"; decision('No lead type in any row: "Office" assumed'); }
+    if (!leadType) { leadType = "Office"; decision('No deal type in any row: "Office" assumed'); }
     const statusCode = lead.status ?? "cold";
     if (!lead.status) decision('No status in any row: "Cold" assumed');
     let firstContact = lead.firstContact;
@@ -717,7 +730,7 @@ export async function runTrackerImport(options) {
         "UPDATE opportunities SET company_name = ?, location = CASE WHEN location = '' THEN ? ELSE location END, draft = ?, first_seen_at = LEAST(first_seen_at, ?::timestamp), last_seen_at = GREATEST(last_seen_at, ?::timestamp) WHERE id = ?",
         [name, truncate(lead.city, 160), JSON.stringify(draft), firstSeen, lastSeen, card.id],
       );
-      count(card.draft ? "opportunity pool cards updated" : "opportunity pool cards given the sheet's rows (company also found by the job searches)");
+      count(card.draft ? "leads inbox cards updated" : "leads inbox cards given the sheet's rows (company also found by the job searches)");
       card.draft = draft;
     } else {
       const { rows: [created] } = await query(
@@ -725,7 +738,7 @@ export async function runTrackerImport(options) {
         [poolKey, name, truncate(lead.city, 160), firstSeen, lastSeen, JSON.stringify(draft)],
       );
       cards.set(poolKey, { id: created.id, key: poolKey, status: "new", leadId: null, listingsCount: 0, draft });
-      count("companies with no Sales Manager placed in the opportunity pool");
+      count("companies with no Sales Manager placed in the leads inbox");
     }
     draftCardByKey.set(draft.key, cards.get(poolKey));
     report.pooled.push(`${name}: ${lead.rows.length} row${lead.rows.length === 1 ? "" : "s"}, status ${statusCode}, last contact ${draft.lead.lastActivity}`);
@@ -738,13 +751,13 @@ export async function runTrackerImport(options) {
     await query("UPDATE opportunities SET status = 'converted', lead_id = ?, draft = NULL, revived = FALSE, decided_by = ?, decided_at = ? WHERE id = ?", [leadId, actor.id, nowSql, card.id]);
     await query("UPDATE opportunity_listings SET lead_id = ? WHERE opportunity_id = ?", [leadId, card.id]);
     await query("INSERT INTO audit_log (actor_id, action, entity_type, entity_id, after_json, details, created_at) VALUES (?, 'opportunity.converted', 'opportunity', ?, ?, ?, ?)", [
-      actor.id, card.id, JSON.stringify({ leadId, status: "converted" }), truncate(`${actorName} assigned ${name} from the opportunity pool to its lead (sales tracker)`, 500), nowSql,
+      actor.id, card.id, JSON.stringify({ leadId, status: "converted" }), truncate(`${actorName} assigned ${name} from the leads inbox to its deal (sales tracker)`, 500), nowSql,
     ]);
     if (card.draft) draftCardByKey.delete(card.draft.key);
     card.status = "converted";
     card.leadId = leadId;
     card.draft = null;
-    count("opportunity pool cards assigned to leads (Sales Manager named, or lead created in the app)");
+    count("leads inbox cards assigned to deals (Sales Manager named, or deal created in the app)");
   }
 
   /** A pool card whose rows all left the sheet: the draft goes; the card itself stays only for its job listings. */
@@ -755,8 +768,8 @@ export async function runTrackerImport(options) {
     else { await query("DELETE FROM opportunities WHERE id = ?", [card.id]); cards.delete(card.key); }
     if (card.draft) draftCardByKey.delete(card.draft.key);
     card.draft = null;
-    report.removedRows.push(`${name}: every row removed from the sheet; the opportunity pool card was ${keepsListings ? "kept for its job listings" : "removed"}`);
-    count("opportunity pool cards removed or cleared (rows deleted from the sheet)");
+    report.removedRows.push(`${name}: every row removed from the sheet; the leads inbox card was ${keepsListings ? "kept for its job listings" : "removed"}`);
+    count("leads inbox cards removed or cleared (rows deleted from the sheet)");
   }
 
   const touched = new Set([...editsByKey.keys(), ...insertsByKey.keys(), ...poolRebuild]);
@@ -766,7 +779,7 @@ export async function runTrackerImport(options) {
     const edits = editsByKey.get(key) ?? [];
     const inserts = insertsByKey.get(key) ?? [];
     if (!rows.length) {
-      for (const { entry } of edits) report.removedRows.push(`lead ${entry.leadId}: "${entry.summary}" (${entry.date})`);
+      for (const { entry } of edits) report.removedRows.push(`deal ${entry.leadId}: "${entry.summary}" (${entry.date})`);
       const card = draftCardByKey.get(key);
       if (card) await retireCard(card);
       continue;
@@ -781,7 +794,7 @@ export async function runTrackerImport(options) {
       if (ownerId === null) await poolCompany(lead);
       else {
         const leadId = await insertLead(lead, { archived: false, ownerId });
-        count("leads created (new companies)");
+        count("deals created (new companies)");
         await convertCard(leadId, lead.name);
       }
     }
@@ -802,9 +815,14 @@ export async function runTrackerImport(options) {
       const lead = buildLead(rows, archiveSheetName);
       lead.type ??= "Office";
       await insertLead(lead, { archived: true, reason: "Imported from the 2021–22 archive sheet of the sales tracker", ownerId: (await ownerFor(lead.manager)) ?? defaultOwner?.id ?? actor.id });
-      count("archived leads created from the archive sheet");
+      count("archived deals created from the archive sheet");
     }
   }
+
+  // SPEC §10.14: new and changed deals join their organization and contact person (created when the names are new),
+  // and a contact that has a single deal takes that deal's values, so the Contacts pages show what the sheet says.
+  await syncContactsFromLeads(query);
+  await refreshContactsFromSingleDeals(query);
 
   const summary = Object.entries(report.counts).map(([key, value]) => `${key}: ${value}`).join(", ");
   await query("INSERT INTO audit_log (actor_id, action, entity_type, details, created_at) VALUES (?, 'import.tracker', 'setting', ?, ?)", [actor.id, truncate(`${actorName} imported ${fileName} (hash ${fileHash}${dryRun ? ", dry run" : ""}): ${summary}`, 500), nowSql]);

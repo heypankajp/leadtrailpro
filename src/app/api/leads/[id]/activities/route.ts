@@ -20,14 +20,14 @@ export async function POST(request: Request, context: RouteContext) {
     const user = await requireUser();
     const { id: rawId } = await context.params;
     const id = Number(rawId);
-    if (!Number.isSafeInteger(id) || id < 1) return jsonError(400, "Invalid lead ID.");
+    if (!Number.isSafeInteger(id) || id < 1) return jsonError(400, "Invalid deal ID.");
     const body = await readJsonBody(request);
     const type = body?.type;
     if (!loggableActivityTypes.includes(type as LoggableActivityType)) return jsonError(400, "Activity type must be call, email, visit, or note.");
     const privilege = type === "note" ? "add_notes" : "log_activities";
     if (!hasPrivilege(user, privilege)) return jsonError(403, type === "note" ? "You do not have permission to add notes." : "You do not have permission to log activities.");
     const lead = await getLead(id);
-    if (!lead) return jsonError(404, "Lead not found.");
+    if (!lead) return jsonError(404, "Deal not found.");
     const bodyText = asString(body?.body, 10000);
     const summary = asString(body?.summary, 500);
     if (type === "note" && !bodyText) return jsonError(400, "Write the note before saving.");
@@ -43,7 +43,7 @@ export async function POST(request: Request, context: RouteContext) {
     let moveFollowUpDate = false;
     if (followUp) {
       if (!hasPrivilege(user, "manage_tasks")) return jsonError(403, "You do not have permission to create tasks.");
-      if (lead.recordState !== "active") return jsonError(400, "Follow-up tasks can only be created for active leads.");
+      if (lead.recordState !== "active") return jsonError(400, "Follow-up tasks can only be created for active deals.");
       const { input, errors } = parseTaskInput({
         leadId: id,
         title: followUp.title,

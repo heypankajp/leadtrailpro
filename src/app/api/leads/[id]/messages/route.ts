@@ -17,10 +17,10 @@ const parseId = async (context: RouteContext) => {
 export async function GET(_request: Request, context: RouteContext) {
   try {
     const user = await requireUser();
-    requirePrivilege(user, "view_leads", "You do not have permission to view leads.");
+    requirePrivilege(user, "view_leads", "You do not have permission to view deals.");
     const id = await parseId(context);
-    if (!id) return jsonError(400, "Invalid lead ID.");
-    if (!(await getLead(id))) return jsonError(404, "Lead not found.");
+    if (!id) return jsonError(400, "Invalid deal ID.");
+    if (!(await getLead(id))) return jsonError(404, "Deal not found.");
     return NextResponse.json({ threads: await listThreads(id) });
   } catch (error) {
     return handleRouteError(error, "List messages");
@@ -34,7 +34,7 @@ export async function POST(request: Request, context: RouteContext) {
     const user = await requireUser();
     requirePrivilege(user, "collaborate", "You do not have permission to post messages.");
     const id = await parseId(context);
-    if (!id) return jsonError(400, "Invalid lead ID.");
+    if (!id) return jsonError(400, "Invalid deal ID.");
     const { input, errors } = parseMessageInput(await readJsonBody(request));
     if (errors.length) return jsonError(400, errors.join(" "));
     return NextResponse.json({ message: await postMessage(id, input, user) }, { status: 201 });

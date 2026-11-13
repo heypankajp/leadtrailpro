@@ -8,7 +8,7 @@ import { requirePrivilege, requireUser } from "@/features/users/session";
 export async function GET(request: Request) {
   try {
     const user = await requireUser();
-    requirePrivilege(user, "view_leads", "You do not have permission to view opportunities.");
+    requirePrivilege(user, "view_leads", "You do not have permission to view leads.");
     const params = new URL(request.url).searchParams;
     const status = params.get("status") ?? "new";
     if (!opportunityStatuses.includes(status as OpportunityStatus)) return NextResponse.json({ error: "Unknown status." }, { status: 400 });
@@ -16,6 +16,6 @@ export async function GET(request: Request) {
     const pageSize = Math.min(100, Math.max(1, Number(params.get("pageSize") ?? "50") || 50));
     return NextResponse.json(await listOpportunities({ status: status as OpportunityStatus, page, pageSize, search: asString(params.get("search"), 120) }));
   } catch (error) {
-    return handleRouteError(error, "List opportunities");
+    return handleRouteError(error, "List leads");
   }
 }

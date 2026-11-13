@@ -97,16 +97,31 @@ export class Page {
     return dialogs.length ? dialogs[dialogs.length - 1] : null;
   }
 
-  /** Search root: the topmost dialog when one is open (forms live in dialogs), otherwise the page. */
-  async scope(global = false) {
-    if (global) return this.driver;
-    return (await this.dialog()) ?? this.driver;
+  /** The open deal page (#/deal/<id>), or null. The page the person came from stays in the DOM underneath, hidden. */
+  async dealPage() {
+    const pages = await this.driver.findElements(By.css("div.deal-page"));
+    return pages.length ? pages[0] : null;
   }
 
+  /** Search root: the topmost dialog when one is open (forms live in dialogs), else the open deal page, otherwise the page. */
+  async scope(global = false) {
+    if (global) return this.driver;
+    return (await this.dialog()) ?? (await this.dealPage()) ?? this.driver;
+  }
+
+  /** Waits for the element; when the page redraws it between finding it and checking it, looks for it again. */
   async wait(locator, { timeout = DEFAULT_TIMEOUT, visible = true } = {}) {
-    const element = await this.driver.wait(until.elementLocated(locator), timeout);
-    if (visible) await this.driver.wait(until.elementIsVisible(element), timeout);
-    return element;
+    const deadline = Date.now() + timeout;
+    for (;;) {
+      const element = await this.driver.wait(until.elementLocated(locator), Math.max(1, deadline - Date.now()));
+      if (!visible) return element;
+      try {
+        await this.driver.wait(until.elementIsVisible(element), Math.max(1, deadline - Date.now()));
+        return element;
+      } catch (error) {
+        if (error?.name !== "StaleElementReferenceError" || Date.now() >= deadline) throw error;
+      }
+    }
   }
 
   async waitText(locator, text, timeout = DEFAULT_TIMEOUT) {
@@ -115,8 +130,10 @@ export class Page {
     return element;
   }
 
-  heading(text) { return this.wait(By.xpath(`//h1[normalize-space()=${xq(text)}]`)); }
-  dialogTitle(text) { return this.wait(By.xpath(`//section[@role="dialog"]//h2[contains(normalize-space(.), ${xq(text)})]`)); }
+  /** A page heading, or the heading of a deal list inside the Deals page ("All deals", "Archive"). */
+  heading(text) { return this.wait(By.xpath(`(//h1 | //div[contains(@class,"list-subhead")]/h2)[normalize-space()=${xq(text)}]`)); }
+  /** The title of the topmost dialog, or of the open deal page (a deal opens as a page, not as a dialog). */
+  dialogTitle(text) { return this.wait(By.xpath(`(//section[@role="dialog"]//h2 | //div[contains(@class,"deal-page")]//h1)[contains(normalize-space(.), ${xq(text)})]`)); }
   eyebrow(text) { return this.wait(By.xpath(`//span[contains(@class,"eyebrow") and normalize-space()=${xq(text)}]`)); }
 
   /** Clicks once the element is present and visible; falls back to a script click when something overlays it. */
@@ -194,11 +211,39 @@ export class Page {
   leadRow(name) { return By.xpath(`//table[contains(@class,"lead-table")]//tr[.//strong[normalize-space()=${xq(name)}]]`); }
   waitLeadRow(name) { return this.wait(this.leadRow(name)); }
 
+  /** Closes the topmost dialog; with no dialog open, leaves the open deal page through its Back button. */
   async closeDialog() {
     const dialog = await this.dialog();
-    if (!dialog) return;
-    await dialog.findElement(By.css('button[aria-label="Close dialog"]')).click();
-    await this.driver.wait(until.stalenessOf(dialog), DEFAULT_TIMEOUT);
+    if (dialog) {
+      await dialog.findElement(By.css('button[aria-label="Close dialog"]')).click();
+      await this.driver.wait(until.stalenessOf(dialog), DEFAULT_TIMEOUT);
+      return;
+    }
+    const deal = await this.dealPage();
+    if (!deal) return;
+    // A script click: after scrolling, Selenium may bring the button up underneath the sticky top bar.
+    await this.driver.executeScript("arguments[0].click()", await deal.findElement(By.css("button.deal-back")));
+    await this.driver.wait(until.stalenessOf(deal), DEFAULT_TIMEOUT);
+  }
+
+  /**
+   * Deals → one of its views: "board", "all" (the list, everyone's deals), "mine" (the list, my deals), "archive",
+   * or "queued" (deals waiting for approval).
+   */
+  async deals(view = "board") {
+    await this.nav("Deals");
+    const label = { board: "Board", all: "List", mine: "List", archive: "Archive", queued: "Queued for approval" }[view];
+    await this.click(`.view-switch button[aria-label="${label}"]`, { global: true });
+    if (view === "board") { await this.wait(By.css(".pipeline-toolbar")); return; }
+    if (view === "all" || view === "mine") await this.click(By.xpath(`.//div[@aria-label="Whose deals"]/button[normalize-space()=${xq(view === "all" ? "Everyone" : "My deals")}]`), { global: true });
+    await this.heading({ all: "All deals", mine: "My deals", archive: "Archive", queued: "Queued deals" }[view]);
+  }
+
+  /** The add-deal dialog, opened the way it opens from every page: the quick-add button in the top bar. */
+  async openAddDeal() {
+    await this.click('button[aria-label="Quick add"]', { global: true });
+    await this.click(By.xpath('.//div[contains(@class,"quick-add-menu")]/button[normalize-space()="Deal"]'), { global: true });
+    await this.dialogTitle("Add deal");
   }
 
   async signIn({ email, password }) {
@@ -216,12 +261,11 @@ export class Page {
   }
 }
 
-/** Opens "Add a lead", fills the form, and saves. Callers wait for the toast that follows. */
+/** Opens the add-deal dialog from the quick-add button in the top bar, fills the form, and saves. Callers wait for the toast that follows. */
 export async function addLead(page, { name, executive = "", firstContactDate = "" }) {
-  await page.clickButton("Add a lead", { global: true });
-  await page.dialogTitle("Add a new lead");
+  await page.openAddDeal();
   await page.fill("Client name", name);
   if (executive) await page.fill("Client executive", executive);
   if (firstContactDate) await page.fill("First contact date", firstContactDate);
-  await page.clickButton("Save lead");
+  await page.clickButton("Save deal");
 }

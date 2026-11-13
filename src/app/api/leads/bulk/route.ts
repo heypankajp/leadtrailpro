@@ -10,22 +10,22 @@ export async function POST(request: Request) {
     const user = await requireUser();
     const body = await readJsonBody(request);
     const ids = Array.isArray(body?.ids) ? body.ids.map(Number).filter((id) => Number.isSafeInteger(id) && id > 0).slice(0, 500) : [];
-    if (!ids.length) return jsonError(400, "Select at least one lead.");
+    if (!ids.length) return jsonError(400, "Select at least one deal.");
     const reason = asString(body?.reason, 500);
     if (body?.action === "archive" || body?.action === "restore") {
-      requirePrivilege(user, "archive_leads", "You do not have permission to archive or restore leads.");
+      requirePrivilege(user, "archive_leads", "You do not have permission to archive or restore deals.");
       const count = await bulkSetState(ids, body.action === "archive" ? "archived" : "active", reason, user);
       return NextResponse.json({ ok: true, count });
     }
     if (body?.action === "reassign") {
-      requirePrivilege(user, "reassign_leads", "You do not have permission to reassign leads.");
+      requirePrivilege(user, "reassign_leads", "You do not have permission to reassign deals.");
       const ownerId = Number(body.ownerId);
       if (!Number.isSafeInteger(ownerId) || ownerId < 1) return jsonError(400, "Choose the new owner.");
       const count = await bulkReassign(ids, ownerId, reason, user);
       return NextResponse.json({ ok: true, count });
     }
     if (body?.action === "stage") {
-      requirePrivilege(user, "edit_leads", "You do not have permission to move leads.");
+      requirePrivilege(user, "edit_leads", "You do not have permission to move deals.");
       const stageId = Number(body.stageId);
       if (!Number.isSafeInteger(stageId) || stageId < 1) return jsonError(400, "Choose the stage.");
       const count = await bulkSetStage(ids, stageId, user);
@@ -41,6 +41,6 @@ export async function POST(request: Request) {
     }
     return jsonError(400, "Action must be archive, restore, reassign, stage, or todo.");
   } catch (error) {
-    return handleRouteError(error, "Bulk lead update");
+    return handleRouteError(error, "Bulk deal update");
   }
 }

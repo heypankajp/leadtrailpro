@@ -4,7 +4,7 @@ import { By, Page, addLead, createDriver, uiTest, waitForServices, xq } from "./
 import { admin, ensureAdmin, localDateTime, runId } from "./helpers/data.mjs";
 
 describe("Tasks and reminders", () => {
-  const leadName = `Task Lead ${runId}`;
+  const leadName = `Task Deal ${runId}`;
   const title = `Call about onboarding ${runId}`;
   let driver;
   let page;
@@ -22,9 +22,9 @@ describe("Tasks and reminders", () => {
   });
   after(async () => { await driver?.quit(); });
 
-  uiTest("creates a task linked to a lead", async () => {
-    await page.nav("Tasks & reminders");
-    await page.heading("Tasks & reminders");
+  uiTest("creates a task linked to a deal", async () => {
+    await page.nav("Activities");
+    await page.heading("Activities");
     await page.clickButton("Create task", { global: true });
     await page.dialogTitle("Create task");
     await page.fill("Title", title);

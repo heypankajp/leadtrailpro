@@ -34,7 +34,7 @@ describe("company normalisation (TRIP-07)", () => {
   });
 });
 
-describe("lead matching precedence (TRIP-07)", () => {
+describe("deal matching precedence (TRIP-07)", () => {
   const leads = [
     lead({ id: 1 }),
     lead({ id: 2, clientName: "Northgate Packaging", companyUrl: "", contactPhone: "", address: "1200 Britannia Rd E, Mississauga", city: "Mississauga", statusCode: "hot", status: "Hot", statusLabel: "Hot" }),
@@ -51,16 +51,16 @@ describe("lead matching precedence (TRIP-07)", () => {
     assert.deepEqual([match?.lead.id, match?.matchedOn], [4, "phone"]);
     assert.deepEqual(actionFor(match), { code: "disqualified", label: "Disqualified – Not Interested" });
   });
-  test("an exact name at the same address beats an archived lead with the same name", () => {
+  test("an exact name at the same address beats an archived deal with the same name", () => {
     const match = matchLead({ name: "Northgate Packaging Inc", website: "", phone: "", address: "1200 Britannia Road E, Mississauga, ON" }, leads);
     assert.deepEqual([match?.lead.id, match?.matchedOn], [2, "name_address"]);
-    assert.deepEqual(actionFor(match), { code: "hot", label: "Hot Lead" });
+    assert.deepEqual(actionFor(match), { code: "hot", label: "Hot Deal" });
   });
-  test("an archived lead is used only when nothing active matches", () => {
+  test("an archived deal is used only when nothing active matches", () => {
     const match = matchLead({ name: "Northgate Packaging", website: "", phone: "", address: "9 Other Street, Brampton" }, leads.filter((item) => item.id !== 2));
     assert.deepEqual([match?.lead.id, match?.matchedOn], [3, "name_address"]);
   });
-  test("a lead with a city only matches by bare name when the address mentions that city", () => {
+  test("a deal with a city only matches by bare name when the address mentions that city", () => {
     assert.equal(matchLead({ name: "Northgate Packaging", website: "", phone: "", address: "Somewhere in Oakville" }, leads.filter((item) => item.id === 2)), null);
     assert.equal(matchLead({ name: "Northgate Packaging", website: "", phone: "", address: "Mississauga" }, leads.filter((item) => item.id === 2))?.matchedOn, "name");
   });

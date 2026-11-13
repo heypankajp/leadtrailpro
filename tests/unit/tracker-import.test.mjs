@@ -61,7 +61,7 @@ describe("tracker import library (SPEC §10.9)", () => {
     assert.throws(() => readSheet(workbook.getWorksheet("Other")), (error) => error instanceof TrackerImportError && error.code === "no_header");
   });
 
-  test("a company's rows merge into one lead: latest non-empty wins, emails union, dates widen", () => {
+  test("a company's rows merge into one deal: latest non-empty wins, emails union, dates widen", () => {
     const rows = [
       { row: 5, date: "2026-10-22", name: "Acme Ltd", manager: "Daniel", type: "Office", status: "warm", action: { step: 3, name: "Followup Call" }, response: null, city: "", address: null, comments: ["2026-10-22: call back"], executive: "", phones: ["905 111 2222"], altPhones: [], contactRemark: "", emails: ["ops@acme.example"], positions: "Welder", industry: "", followUp: null, contract: null, notes: "" },
       { row: 3, date: "2026-10-20", name: "Acme Ltd", manager: "Daniel", type: "Office", status: "cold", action: { step: 1, name: "Cold Call" }, response: "Approach Later", city: "Brampton", address: "1 King St, Brampton, ON", comments: [], executive: "Pat", phones: [], altPhones: [], contactRemark: "", emails: ["hr@acme.example"], positions: "", industry: "Logistics", followUp: null, contract: null, notes: "" },
@@ -82,15 +82,15 @@ describe("tracker import library (SPEC §10.9)", () => {
   test("the text report lists every section", () => {
     const text = formatReport({
       dryRun: true, fileName: "Sales Leads 2026.xlsx", fileHash: "abc", sheetName: "LeadsDec25", finishedAt: "2026-11-10T12:00:00Z", seconds: 1.25, actorEmail: "admin@example.com", defaultOwnerEmail: "admin@example.com", previousImportAt: null,
-      counts: { "rows read from LeadsDec25": 2, "leads created (new companies)": 1 }, decisions: { 'No status in any row: "Cold" assumed': 1 }, fieldChanges: {}, createdUsers: [], createdValues: ['city: "Oakville"'],
+      counts: { "rows read from LeadsDec25": 2, "deals created (new companies)": 1 }, decisions: { 'No status in any row: "Cold" assumed': 1 }, fieldChanges: {}, createdUsers: [], createdValues: ['city: "Oakville"'],
       appEdited: [], removedRows: [], updatedLeads: [], pooled: ["Harbour Metal Works: 2 rows, status cold, last contact 2026-10-08"], rejects: ["LeadsDec25 row 9: no client name"], skipped: [], warnings: { "Status not recognised": ["LeadsDec25 row 4: \"Luke\" ignored"] },
     });
     assert.match(text, /^LeadTrailPro tracker import \(DRY RUN, nothing written\) /);
     assert.match(text, /default owner admin@example.com;/);
-    assert.match(text, /== Summary\n     2  rows read from LeadsDec25\n     1  leads created/);
+    assert.match(text, /== Summary\n     2  rows read from LeadsDec25\n     1  deals created/);
     assert.match(text, /== List values created\n  city: "Oakville"/);
-    assert.match(text, /== Fields changed on existing leads \(sheet values applied\)\n  none/);
-    assert.match(text, /== Companies placed in the opportunity pool \(no Sales Manager\)\n  Harbour Metal Works: 2 rows/);
+    assert.match(text, /== Fields changed on existing deals \(sheet values applied\)\n  none/);
+    assert.match(text, /== Companies placed in the leads inbox \(no Sales Manager\)\n  Harbour Metal Works: 2 rows/);
     assert.match(text, /== Status not recognised \(1\)\n  LeadsDec25 row 4/);
   });
 
@@ -99,8 +99,8 @@ describe("tracker import library (SPEC §10.9)", () => {
       dryRun: false, fileName: "x.xlsx", fileHash: "abc", sheetName: "LeadsDec25", finishedAt: "2026-11-10T12:00:00Z", seconds: 1, actorEmail: "admin@example.com", defaultOwnerEmail: null, previousImportAt: null,
       counts: {}, decisions: {}, fieldChanges: {}, createdUsers: [], createdValues: [], appEdited: [], removedRows: [], updatedLeads: [], pooled: [], rejects: [], skipped: [], warnings: {},
     });
-    assert.match(text, /default owner none \(companies without a Sales Manager go to the opportunity pool\)/);
-    assert.match(text, /== Companies placed in the opportunity pool \(no Sales Manager\)\n  none/);
+    assert.match(text, /default owner none \(companies without a Sales Manager go to the leads inbox\)/);
+    assert.match(text, /== Companies placed in the leads inbox \(no Sales Manager\)\n  none/);
   });
 
   test("the pool's company key follows the app's normalisation, not the import's wider one", () => {
@@ -125,12 +125,12 @@ describe("tracker import through the app (SPEC §10.9)", () => {
   });
 
   test("the headline counts come first in a fixed order", () => {
-    const ordered = orderedCounts({ "timeline entries written": 5, "rows rejected": 1, "rows read from LeadsDec25": 9, "leads created (new companies)": 2, "companies with no Sales Manager placed in the opportunity pool": 3 });
-    assert.deepEqual(ordered.map(([key]) => key), ["rows read from LeadsDec25", "leads created (new companies)", "companies with no Sales Manager placed in the opportunity pool", "rows rejected", "timeline entries written"]);
-    assert.ok(headlineCounts.includes("leads updated"));
+    const ordered = orderedCounts({ "timeline entries written": 5, "rows rejected": 1, "rows read from LeadsDec25": 9, "deals created (new companies)": 2, "companies with no Sales Manager placed in the leads inbox": 3 });
+    assert.deepEqual(ordered.map(([key]) => key), ["rows read from LeadsDec25", "deals created (new companies)", "companies with no Sales Manager placed in the leads inbox", "rows rejected", "timeline entries written"]);
+    assert.ok(headlineCounts.includes("deals updated"));
   });
 
-  test("a pool card's draft is read back with its lead and entries; junk is rejected", () => {
+  test("a pool card's draft is read back with its deal and entries; junk is rejected", () => {
     const draft = {
       key: "harbour metal works", sheet: "LeadsDec25", file: "abc", importedAt: "2026-11-10 12:00:00", rows: 2,
       lead: { name: "Harbour Metal Works Ltd", type: "Office", status: "warm", action: "Followup Call", response: null, city: "Oakville", address: "", comments: "", executive: "Jamie Ortiz", phone: "905 555 0100", altPhone: "", contactRemark: "", emails: ["jamie@harbour.example"], industry: "Metal", positions: "Welder", firstContact: "2026-10-01", followUp: null, contract: null, lastActivity: "2026-10-08" },

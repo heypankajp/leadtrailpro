@@ -10,13 +10,13 @@ const idOf = async (context: RouteContext) => { const { id } = await context.par
 export async function GET(_request: Request, context: RouteContext) {
   try {
     const user = await requireUser();
-    requirePrivilege(user, "view_leads", "You do not have permission to view opportunities.");
+    requirePrivilege(user, "view_leads", "You do not have permission to view leads.");
     const id = await idOf(context);
     const opportunity = id === null ? null : await getOpportunity(id);
-    if (!opportunity) return jsonError(404, "Opportunity not found.");
+    if (!opportunity) return jsonError(404, "Lead not found.");
     return NextResponse.json({ opportunity });
   } catch (error) {
-    return handleRouteError(error, "Load opportunity");
+    return handleRouteError(error, "Load lead");
   }
 }
 
@@ -25,9 +25,9 @@ export async function PATCH(request: Request, context: RouteContext) {
   try {
     requireSameOrigin(request);
     const user = await requireUser();
-    requirePrivilege(user, "create_leads", "You do not have permission to change opportunities.");
+    requirePrivilege(user, "create_leads", "You do not have permission to change leads.");
     const id = await idOf(context);
-    if (id === null) return jsonError(404, "Opportunity not found.");
+    if (id === null) return jsonError(404, "Lead not found.");
     const body = (await readJsonBody(request)) ?? {};
     if (body.action === "not_relevant") {
       const reasonId = asOptionalId(body.reasonId);
@@ -37,6 +37,6 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (body.action === "restore") return NextResponse.json({ opportunity: await restoreOpportunity(id, user) });
     return jsonError(400, "Unknown action.");
   } catch (error) {
-    return handleRouteError(error, "Update opportunity");
+    return handleRouteError(error, "Update lead");
   }
 }

@@ -168,7 +168,7 @@ export default function TripResultsPage({ tripId }: { tripId: number }) {
                     </td>
                     <td>
                       <span className={`status-pill ${row.actionCode === "new" ? "status-opportunity" : statusClass(row.actionCode)}`}><i />{row.actionLabel}</span>
-                      {row.matchedLeadId && <button className="text-button print-hide open-lead" onClick={() => openLead(row.matchedLeadId!)}>Open lead</button>}
+                      {row.matchedLeadId && <button className="text-button print-hide open-lead" onClick={() => openLead(row.matchedLeadId!)}>Open deal</button>}
                     </td>
                     <td>
                       {row.shortlisted

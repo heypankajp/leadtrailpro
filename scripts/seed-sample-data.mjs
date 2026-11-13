@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { Client } from "pg";
+import { syncContactsFromLeads } from "./lib/contacts-sync.mjs";
 
 /**
  * Seeds sample leads, activities, tasks, and a demo team for a fresh database.
@@ -46,7 +47,7 @@ if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port >
     } else {
       const { rows: [{ existing }] } = await query("SELECT COUNT(*) AS existing FROM leads");
       if (Number(existing) > 0) {
-        console.log("Sample data already exists (the leads table is not empty). Nothing to do.");
+        console.log("Sample data already exists (the deals table is not empty). Nothing to do.");
       } else {
         const { rows: [admin] } = await query("SELECT id FROM users WHERE role = 'admin' AND is_active = TRUE ORDER BY id LIMIT 1");
         const { rows: templates } = await query("SELECT id, stage FROM target_templates");
@@ -117,7 +118,7 @@ if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port >
           );
           const leadId = inserted.id;
           const activities = [
-            ["created", `Lead created as ${status === "lost" ? "Lost Lead" : status[0].toUpperCase() + status.slice(1)}${reason ? ` – ${reason.replace(/_/g, " ")}` : ""}`, status, createdAt],
+            ["created", `Deal created as ${status === "lost" ? "Lost" : status[0].toUpperCase() + status.slice(1)}${reason ? ` – ${reason.replace(/_/g, " ")}` : ""}`, status, createdAt],
             ["call", `Call with ${executive || name}`, null, daysAgo(Math.max(firstContactDays - 1, 1), 11)],
             ["email", `Email to ${executive || name}`, null, daysAgo(Math.max(firstContactDays - 2, 1), 14)],
             ["note", "Initial conversation. They are reviewing staffing needs for the upcoming season.", null, daysAgo(Math.max(firstContactDays - 1, 1), 12)],
@@ -132,7 +133,7 @@ if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port >
           }
           await query(
             "INSERT INTO audit_log (actor_id, action, entity_type, entity_id, after_json, details, created_at) VALUES (?, 'lead.created', 'lead', ?, ?, ?, ?)",
-            [owner, leadId, JSON.stringify({ clientName: name, status }), `Seeded sample lead ${name}`, sql(createdAt)],
+            [owner, leadId, JSON.stringify({ clientName: name, status }), `Seeded sample deal ${name}`, sql(createdAt)],
           );
           if (state === "active" && followUpOffset !== null) {
             const due = daysAgo(-followUpOffset, 15);
@@ -143,11 +144,13 @@ if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port >
           }
           created += 1;
         }
+        // SPEC §10.14: every sample deal gets its organization and contact person.
+        await syncContactsFromLeads(query);
         await query(
           "INSERT INTO audit_log (actor_id, action, entity_type, details, created_at) VALUES (?, 'seed.sample_data', 'setting', ?, ?)",
-          [admin.id, `Seeded ${created} sample leads and demo users`, sql(new Date())],
+          [admin.id, `Seeded ${created} sample deals and demo users`, sql(new Date())],
         );
-        console.log(`Seeded ${created} sample leads with activities and tasks.`);
+        console.log(`Seeded ${created} sample deals with activities and tasks.`);
         console.log(`Demo accounts (password: ${demoPassword}): sarah.lee@example.com (Sales Manager), michael.patel@example.com (Sales Manager), jordan.taylor@example.com (Recruiter).`);
         console.log(`Seed fingerprint: ${createHash("sha256").update(String(created)).digest("hex").slice(0, 8)}`);
       }

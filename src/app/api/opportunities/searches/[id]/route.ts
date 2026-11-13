@@ -19,7 +19,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (errors.length) return jsonError(400, errors.join(" "));
     return NextResponse.json({ search: await updateSearch(id, input, user) });
   } catch (error) {
-    return handleRouteError(error, "Update opportunity search");
+    return handleRouteError(error, "Update lead search");
   }
 }
 
@@ -33,6 +33,6 @@ export async function DELETE(request: Request, context: RouteContext) {
     await deleteSearch(id, user);
     return NextResponse.json({ ok: true });
   } catch (error) {
-    return handleRouteError(error, "Delete opportunity search");
+    return handleRouteError(error, "Delete lead search");
   }
 }

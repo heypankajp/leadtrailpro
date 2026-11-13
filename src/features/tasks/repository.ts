@@ -87,7 +87,7 @@ export async function createTask(input: TaskInput, actor: UserAccount): Promise<
     }
     if (input.leadId) {
       const lead = await getLead(input.leadId, connection);
-      if (!lead) throw new HttpError(400, "The lead does not exist.");
+      if (!lead) throw new HttpError(400, "The deal does not exist.");
     }
     const now = new Date();
     const result = await connection.query(

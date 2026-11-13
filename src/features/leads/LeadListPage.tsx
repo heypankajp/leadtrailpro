@@ -8,6 +8,7 @@ import { reasonListFor } from "@/features/list-values/model";
 import { useApp } from "@/features/shell/AppContext";
 import { Dialog, ErrorText, Field, Loading, Pagination, PromptDialog } from "@/features/shell/components";
 import { entryStageCode } from "@/features/list-values/model";
+import { stageChoices } from "@/features/pipeline/model";
 import UserDirectoryDialog from "@/features/users/UserDirectoryDialog";
 import type { UserSummary } from "@/features/users/model";
 import { bulkLeads, fetchLeads, fetchTodoCounts, reviewLead, setLeadState, type LeadQuery } from "./client";
@@ -19,15 +20,15 @@ export const leadListViews = ["leads", "todo", "all-leads", "cold", "warm", "hot
 export type LeadListView = (typeof leadListViews)[number];
 
 const titles: Record<LeadListView, { title: string; eyebrow: string; blurb: string }> = {
-  leads: { title: "My leads", eyebrow: "YOUR PIPELINE", blurb: "Leads you own, most recently active first." },
-  todo: { title: "To Do", eyebrow: "LEADS PUT ASIDE", blurb: "Leads moved to a To Do list to come back to, longest waiting first. Move a lead here from its page or from any lead list, and take it off when it is done." },
-  "all-leads": { title: "All leads", eyebrow: "TEAM PIPELINE", blurb: "Every active lead across the team." },
-  cold: { title: "Cold leads", eyebrow: "BY STATUS", blurb: "Prospects that still need a first conversation." },
-  warm: { title: "Warm leads", eyebrow: "BY STATUS", blurb: "Conversations that are moving." },
-  hot: { title: "Hot leads", eyebrow: "BY STATUS", blurb: "Close to signing. Keep the momentum." },
+  leads: { title: "My deals", eyebrow: "YOUR PIPELINE", blurb: "Deals you own, most recently active first." },
+  todo: { title: "To Do", eyebrow: "DEALS PUT ASIDE", blurb: "Deals moved to a To Do list to come back to, longest waiting first. Move a deal here from its page or from any deal list, and take it off when it is done." },
+  "all-leads": { title: "All deals", eyebrow: "TEAM PIPELINE", blurb: "Every active deal across the team." },
+  cold: { title: "Cold deals", eyebrow: "BY STATUS", blurb: "Prospects that still need a first conversation." },
+  warm: { title: "Warm deals", eyebrow: "BY STATUS", blurb: "Conversations that are moving." },
+  hot: { title: "Hot deals", eyebrow: "BY STATUS", blurb: "Close to signing. Keep the momentum." },
   client: { title: "Clients", eyebrow: "BY STATUS", blurb: "Signed clients and ongoing accounts." },
-  queued: { title: "Queued leads", eyebrow: "ADMIN REVIEW", blurb: "Historical first-contact dates waiting for approval before they enter the pipeline." },
-  archive: { title: "Archive", eyebrow: "LEAD HISTORY", blurb: "Archived and rejected leads. Search and filter independently, restore any time." },
+  queued: { title: "Queued deals", eyebrow: "ADMIN REVIEW", blurb: "Historical first-contact dates waiting for approval before they enter the pipeline." },
+  archive: { title: "Archive", eyebrow: "DEAL HISTORY", blurb: "Archived and rejected deals. Search and filter independently, restore any time." },
 };
 
 const sortLabels: Record<LeadSortKey, string> = {
@@ -44,7 +45,8 @@ const emptyFilters: Filters = {
   firstContactFrom: "", firstContactTo: "", followUpFrom: "", followUpTo: "", contractSignedFrom: "", contractSignedTo: "", sort: "last_activity", direction: "desc",
 };
 
-export default function LeadListPage({ view }: { view: LeadListView }) {
+/** A deal list. On the Deals page (`embedded`) the heading, the view switch and the "+ Deal" button come from DealsPage. */
+export default function LeadListPage({ view, embedded = false }: { view: LeadListView; embedded?: boolean }) {
   const { reference, can, route, openLead, openNewLead, notify, dataVersion, bumpData } = useApp();
   // The shell keys this page by view and URL query, so initial filters come straight from the route.
   const [filters, setFilters] = useState<Filters>(() => {
@@ -121,7 +123,7 @@ export default function LeadListPage({ view }: { view: LeadListView }) {
     bumpData();
     const stageName = options.stageId ? reference.listValues.stage.find((stage) => stage.id === options.stageId)?.value ?? "the stage" : "";
     const todoName = options.todoListId ? todoLists.find((list) => list.id === options.todoListId)?.value ?? "the list" : "";
-    notify(`${result.count} ${result.count === 1 ? "lead" : "leads"} ${action === "archive" ? "archived" : action === "restore" ? "restored" : action === "stage" ? `moved to ${stageName}` : action === "todo" ? (options.todoListId ? `moved to To Do: ${todoName}` : "taken off To Do") : "reassigned"}`);
+    notify(`${result.count} ${result.count === 1 ? "deal" : "deals"} ${action === "archive" ? "archived" : action === "restore" ? "restored" : action === "stage" ? `moved to ${stageName}` : action === "todo" ? (options.todoListId ? `moved to To Do: ${todoName}` : "taken off To Do") : "reassigned"}`);
   };
 
   const options = (list: { id: number; value: string }[], placeholder: string, value: string, key: keyof Filters) => (
@@ -133,14 +135,21 @@ export default function LeadListPage({ view }: { view: LeadListView }) {
 
   return (
     <>
-      <div className="page-heading">
-        <div>
-          <div className="eyebrow">{title.eyebrow} <span className="eyebrow-dot">·</span> {data ? `${data.total} RECORDS` : "LOADING"}</div>
-          <h1>{title.title}</h1>
-          <p>{title.blurb}</p>
+      {embedded ? (
+        <div className="list-subhead">
+          <h2>{title.title}</h2>
+          <span>{data ? `${data.total} ${data.total === 1 ? "record" : "records"}` : "Loading"} · {title.blurb}</span>
         </div>
-        {can("create_leads") && view !== "archive" && view !== "queued" && <button className="button button-primary" onClick={openNewLead}><Plus size={17} /> Add a lead</button>}
-      </div>
+      ) : (
+        <div className="page-heading">
+          <div>
+            <div className="eyebrow">{title.eyebrow} <span className="eyebrow-dot">·</span> {data ? `${data.total} RECORDS` : "LOADING"}</div>
+            <h1>{title.title}</h1>
+            <p>{title.blurb}</p>
+          </div>
+          {can("create_leads") && view !== "archive" && view !== "queued" && <button className="button button-primary" onClick={openNewLead}><Plus size={17} /> Deal</button>}
+        </div>
+      )}
 
       <section className="panel leads-panel">
         <div className="lead-list-wrap">
@@ -153,8 +162,8 @@ export default function LeadListPage({ view }: { view: LeadListView }) {
                   </button>
                 ))}
               </div>
-              <div className="scope-toggle" role="group" aria-label="Whose leads">
-                <button className={todoScope === "mine" ? "is-active" : ""} onClick={() => { setTodoScope("mine"); setPage(1); setSelected([]); }}>My leads</button>
+              <div className="scope-toggle" role="group" aria-label="Whose deals">
+                <button className={todoScope === "mine" ? "is-active" : ""} onClick={() => { setTodoScope("mine"); setPage(1); setSelected([]); }}>My deals</button>
                 <button className={todoScope === "everyone" ? "is-active" : ""} onClick={() => { setTodoScope("everyone"); setPage(1); setSelected([]); }}>Everyone</button>
               </div>
             </div>
@@ -162,7 +171,7 @@ export default function LeadListPage({ view }: { view: LeadListView }) {
           <div className="lead-toolbar">
             <div className="search-field lead-search">
               <Search size={16} />
-              <input aria-label="Search leads" placeholder="Search client, contact, address, notes..." value={filters.q} onChange={(event) => update({ q: event.target.value })} />
+              <input aria-label="Search deals" placeholder="Search client, contact, address, notes..." value={filters.q} onChange={(event) => update({ q: event.target.value })} />
               {filters.q && <button className="clear-search" aria-label="Clear search" onClick={() => update({ q: "" })}><X size={13} /></button>}
             </div>
             {!statusViews.includes(view) && (
@@ -189,7 +198,7 @@ export default function LeadListPage({ view }: { view: LeadListView }) {
           {showFilters && (
             <div className="filters-panel">
               <div className="filter-grid">
-                {options(reference.listValues.lead_type, "Any lead type", filters.leadTypeId, "leadTypeId")}
+                {options(reference.listValues.lead_type, "Any deal type", filters.leadTypeId, "leadTypeId")}
                 {options(reference.listValues.lead_category, "Any category", filters.leadCategoryId, "leadCategoryId")}
                 {options(reference.listValues.company_size, "Any company size", filters.companySizeId, "companySizeId")}
                 {options(reference.listValues.city, "Any city", filters.cityId, "cityId")}
@@ -201,7 +210,7 @@ export default function LeadListPage({ view }: { view: LeadListView }) {
                 )}
                 {options(reference.listValues.client_response, "Any client response", filters.clientResponseId, "clientResponseId")}
                 {options(reference.listValues.bd_action, "Any BD action", filters.bdActionId, "bdActionId")}
-                {options(reference.listValues.stage, "Any stage", filters.stageId, "stageId")}
+                {options(stageChoices(reference.listValues.stage, reference.pipelines), "Any stage", filters.stageId, "stageId")}
                 {view !== "todo" && options(todoLists, "Any To Do list", filters.todoListId, "todoListId")}
               </div>
               <div className="filter-grid date-filters">
@@ -232,7 +241,7 @@ export default function LeadListPage({ view }: { view: LeadListView }) {
           )}
 
           <ErrorText message={error} />
-          {loading && !data ? <Loading text="Loading leads..." /> : data && (
+          {loading && !data ? <Loading text="Loading deals..." /> : data && (
             <LeadTable
               leads={data.leads}
               selected={selected}
@@ -250,7 +259,7 @@ export default function LeadListPage({ view }: { view: LeadListView }) {
           )}
           {data && (
             <div className="table-footer">
-              <span>Showing <strong>{data.leads.length}</strong> of <strong>{data.total}</strong> leads{loading ? " · refreshing" : ""}</span>
+              <span>Showing <strong>{data.leads.length}</strong> of <strong>{data.total}</strong> deals{loading ? " · refreshing" : ""}</span>
               <Pagination page={data.page} pageSize={data.pageSize} total={data.total} onPage={setPage} />
             </div>
           )}
@@ -260,12 +269,12 @@ export default function LeadListPage({ view }: { view: LeadListView }) {
       {dialog?.kind === "review" && (
         <PromptDialog
           title={dialog.approve ? `Approve ${dialog.lead.clientName}` : `Reject ${dialog.lead.clientName}`}
-          eyebrow="QUEUED LEAD"
-          description={dialog.approve ? "The lead moves into the active pipeline with its historical first-contact date." : "The lead is archived with your reason and stays in the audit history."}
+          eyebrow="QUEUED DEAL"
+          description={dialog.approve ? "The deal moves into the active pipeline with its historical first-contact date." : "The deal is archived with your reason and stays in the audit history."}
           label={dialog.approve ? "Comment (optional)" : "Reason"}
           required={!dialog.approve}
           danger={!dialog.approve}
-          confirmLabel={dialog.approve ? "Approve lead" : "Reject lead"}
+          confirmLabel={dialog.approve ? "Approve deal" : "Reject deal"}
           onClose={() => setDialog(null)}
           onConfirm={async (comment) => {
             await reviewLead(dialog.lead.id, dialog.approve, comment);
@@ -276,21 +285,21 @@ export default function LeadListPage({ view }: { view: LeadListView }) {
         />
       )}
       {dialog?.kind === "archive" && (
-        <PromptDialog title={`Archive ${dialog.ids.length === 1 ? "lead" : `${dialog.ids.length} leads`}`} eyebrow="ARCHIVE" label="Reason (optional)" confirmLabel="Archive" onClose={() => setDialog(null)} onConfirm={(reason) => runBulk(dialog.ids, "archive", { reason })} />
+        <PromptDialog title={`Archive ${dialog.ids.length === 1 ? "deal" : `${dialog.ids.length} deals`}`} eyebrow="ARCHIVE" label="Reason (optional)" confirmLabel="Archive" onClose={() => setDialog(null)} onConfirm={(reason) => runBulk(dialog.ids, "archive", { reason })} />
       )}
       {dialog?.kind === "restore" && (
         <PromptDialog
-          title={`Restore ${dialog.ids.length === 1 ? "lead" : `${dialog.ids.length} leads`}`} eyebrow="ARCHIVE" label="Note (optional)" confirmLabel="Restore" onClose={() => setDialog(null)}
+          title={`Restore ${dialog.ids.length === 1 ? "deal" : `${dialog.ids.length} deals`}`} eyebrow="ARCHIVE" label="Note (optional)" confirmLabel="Restore" onClose={() => setDialog(null)}
           onConfirm={async (reason) => {
-            if (dialog.ids.length === 1) { await setLeadState(dialog.ids[0], "active", reason); setDialog(null); bumpData(); notify("Lead restored to the pipeline"); }
+            if (dialog.ids.length === 1) { await setLeadState(dialog.ids[0], "active", reason); setDialog(null); bumpData(); notify("Deal restored to the pipeline"); }
             else await runBulk(dialog.ids, "restore", { reason });
           }}
         />
       )}
       {dialog?.kind === "reassign-pick" && (
         <UserDirectoryDialog
-          title="Reassign leads"
-          description={`Choose who will own the ${dialog.ids.length === 1 ? "selected lead" : `${dialog.ids.length} selected leads`}.`}
+          title="Reassign deals"
+          description={`Choose who will own the ${dialog.ids.length === 1 ? "selected deal" : `${dialog.ids.length} selected deals`}.`}
           users={owners}
           confirmLabel="Assign"
           onClose={() => setDialog(null)}
@@ -298,25 +307,25 @@ export default function LeadListPage({ view }: { view: LeadListView }) {
         />
       )}
       {dialog?.kind === "stage" && (
-        <Dialog title={`Move ${dialog.ids.length === 1 ? "lead" : `${dialog.ids.length} leads`} to a stage`} eyebrow="PIPELINE STAGE" size="narrow" onClose={() => setDialog(null)}>
+        <Dialog title={`Move ${dialog.ids.length === 1 ? "deal" : `${dialog.ids.length} deals`} to a stage`} eyebrow="PIPELINE STAGE" size="narrow" onClose={() => setDialog(null)}>
           <form className="stack-form" onSubmit={(event) => { event.preventDefault(); void runBulk(dialog.ids, "stage", { stageId: Number(bulkStageId) }).catch((caught: unknown) => notify(errorMessage(caught), "error")); }}>
-            <p className="dialog-description">Each lead you may edit moves to the chosen stage with a timeline entry; leads already there, queued, or closed are skipped.</p>
+            <p className="dialog-description">Each deal you may edit moves to the chosen stage with a timeline entry; deals already there, queued, or closed are skipped.</p>
             <Field label="Target stage" required>
               <select value={bulkStageId} onChange={(event) => setBulkStageId(event.target.value)} required>
-                {reference.listValues.stage.map((stage) => <option key={stage.id} value={stage.id}>{stage.value}</option>)}
+                {stageChoices(reference.listValues.stage, reference.pipelines).map((stage) => <option key={stage.id} value={stage.id}>{stage.value}</option>)}
               </select>
             </Field>
             <div className="modal-actions">
               <button type="button" className="button button-outline" onClick={() => setDialog(null)}>Cancel</button>
-              <button type="submit" className="button button-primary">Move leads</button>
+              <button type="submit" className="button button-primary">Move deals</button>
             </div>
           </form>
         </Dialog>
       )}
       {dialog?.kind === "todo" && (
-        <Dialog title={`Move ${dialog.ids.length === 1 ? "lead" : `${dialog.ids.length} leads`} to a To Do list`} eyebrow="TO DO" size="narrow" onClose={() => setDialog(null)}>
+        <Dialog title={`Move ${dialog.ids.length === 1 ? "deal" : `${dialog.ids.length} deals`} to a To Do list`} eyebrow="TO DO" size="narrow" onClose={() => setDialog(null)}>
           <form className="stack-form" onSubmit={(event) => { event.preventDefault(); void runBulk(dialog.ids, "todo", { todoListId: bulkTodoId ? Number(bulkTodoId) : null }).catch((caught: unknown) => notify(errorMessage(caught), "error")); }}>
-            <p className="dialog-description">Each lead you may edit goes on the chosen list, with a timeline entry. A lead is on one list at a time, so it leaves the list it was on.</p>
+            <p className="dialog-description">Each deal you may edit goes on the chosen list, with a timeline entry. A deal is on one list at a time, so it leaves the list it was on.</p>
             <Field label="To Do list" required>
               <select aria-label="To Do list" value={bulkTodoId} onChange={(event) => setBulkTodoId(event.target.value)}>
                 {todoLists.filter((list) => list.active).map((list) => <option key={list.id} value={list.id}>{list.value}</option>)}
@@ -325,7 +334,7 @@ export default function LeadListPage({ view }: { view: LeadListView }) {
             </Field>
             <div className="modal-actions">
               <button type="button" className="button button-outline" onClick={() => setDialog(null)}>Cancel</button>
-              <button type="submit" className="button button-primary">Move leads</button>
+              <button type="submit" className="button button-primary">Move deals</button>
             </div>
           </form>
         </Dialog>

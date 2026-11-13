@@ -3,7 +3,7 @@ import { after, before, describe } from "node:test";
 import { By, Page, addLead, baseUrl, createDriver, uiTest, waitForServices, xq } from "./helpers/ui.mjs";
 import { admin, ensureAdmin, isoDate, manager, runId } from "./helpers/data.mjs";
 
-describe("Team, roles, and lead ownership", () => {
+describe("Team, roles, and deal ownership", () => {
   const queuedLead = `Queued Co ${runId}`;
   const transferLead = `Transfer Co ${runId}`;
   let driver;
@@ -36,8 +36,8 @@ describe("Team, roles, and lead ownership", () => {
   });
 
   uiTest("admin assigns a task to the new sales manager", async () => {
-    await page.nav("Tasks & reminders");
-    await page.heading("Tasks & reminders");
+    await page.nav("Activities");
+    await page.heading("Activities");
     await page.clickButton("Create task", { global: true });
     await page.dialogTitle("Create task");
     await page.fill("Title", `Welcome call ${runId}`);
@@ -87,9 +87,10 @@ describe("Team, roles, and lead ownership", () => {
     await page.signOut();
     await page.signIn(manager);
     const labels = await Promise.all((await driver.findElements(By.css("nav.side-nav .nav-item > span"))).map((element) => element.getText()));
-    assert.ok(labels.includes("My leads"), "sales managers see My leads");
+    assert.ok(labels.includes("Deals") && labels.includes("Leads") && labels.includes("Contacts"), "sales managers see Deals, Leads and Contacts");
     assert.ok(!labels.includes("User management"), "sales managers cannot manage users");
-    assert.ok(!labels.includes("Queued leads"), "sales managers cannot review queued leads");
+    await page.deals("board");
+    assert.equal((await driver.findElements(By.css('.view-switch button[aria-label="Queued for approval"]'))).length, 0, "sales managers cannot review queued deals");
   });
 
   uiTest("the assigned task appears as a notification for the sales manager", async () => {
@@ -102,44 +103,41 @@ describe("Team, roles, and lead ownership", () => {
     await page.click(By.css("button.notif-button"), { global: true });
   });
 
-  uiTest("a historical first-contact date queues the lead for approval", async () => {
-    await page.clickButton("Add a lead", { global: true });
-    await page.dialogTitle("Add a new lead");
+  uiTest("a historical first-contact date queues the deal for approval", async () => {
+    await page.openAddDeal();
     await page.fill("Client name", queuedLead);
     await page.fill("First contact date", isoDate(-10));
     await page.wait(By.xpath('//small[contains(@class,"field-hint") and contains(normalize-space(.), "queued for Admin approval")]'));
-    await page.clickButton("Save lead");
+    await page.clickButton("Save deal");
     await page.toast(`${queuedLead} saved and queued for Admin approval`);
     await page.eyebrow("QUEUED FOR APPROVAL");
     await page.closeDialog();
   });
 
-  uiTest("admin approves the queued lead", async () => {
+  uiTest("admin approves the queued deal", async () => {
     await page.signOut();
     await page.signIn(admin);
-    await page.nav("Queued leads");
-    await page.heading("Queued leads");
+    await page.deals("queued");
     const row = await page.waitLeadRow(queuedLead);
     await row.findElement(By.xpath('.//button[normalize-space()="Approve"]')).click();
     await page.dialogTitle(`Approve ${queuedLead}`);
     await page.fill("Comment (optional)", "Verified with the team.");
-    await page.clickButton("Approve lead");
+    await page.clickButton("Approve deal");
     await page.toast(`${queuedLead} approved and added to the pipeline`);
-    await page.nav("All leads");
-    await page.heading("All leads");
+    await page.deals("all");
     const approved = await page.waitLeadRow(queuedLead);
-    assert.match(await approved.getText(), new RegExp(manager.name), "the lead keeps its creator as owner");
+    assert.match(await approved.getText(), new RegExp(manager.name), "the deal keeps its creator as owner");
   });
 
-  uiTest("admin transfers a lead to the sales manager", async () => {
+  uiTest("admin transfers a deal to the sales manager", async () => {
     await addLead(page, { name: transferLead });
     await page.toast(`${transferLead} added to the pipeline`);
     await page.dialogTitle(transferLead);
     await page.clickButton("Transfer");
-    await page.dialogTitle("Transfer lead");
+    await page.dialogTitle("Transfer deal");
     await page.click(By.xpath(`.//article[contains(@class,"user-directory-row")][.//strong[normalize-space()=${xq(manager.name)}]]//button`));
     await page.dialogTitle(`Transfer to ${manager.name}`);
-    await page.clickButton("Transfer lead");
+    await page.clickButton("Transfer deal");
     await page.toast(`transferred to ${manager.name}`);
     await page.waitText(By.css(".detail-owner strong"), manager.name);
     await page.tab("Collaboration");
@@ -161,16 +159,16 @@ describe("Team, roles, and lead ownership", () => {
     await page.signIn(admin);
   });
 
-  uiTest("terminating the manager reassigns their leads", async () => {
+  uiTest("terminating the manager reassigns their deals", async () => {
     await page.nav("User management");
     await page.heading("User management");
     await page.click(By.css(`button[aria-label="Terminate ${manager.name}"]`), { global: true });
     await page.dialogTitle(`Terminate ${manager.name}`);
-    await page.fill("Reassign leads and tasks to", `${admin.name} (me)`);
+    await page.fill("Reassign deals and tasks to", `${admin.name} (me)`);
     await page.fill("Reason (optional)", "Left the company.");
     await page.clickButton("Terminate and reassign");
     const message = await page.toast(`${manager.name} terminated`);
-    assert.match(message, /2 lead\(s\)/, "the approved lead and the transferred lead move to the successor");
+    assert.match(message, /2 deal\(s\)/, "the approved deal and the transferred deal move to the successor");
     await page.wait(By.xpath(`//table//tr[.//strong[normalize-space()=${xq(manager.name)}]][.//span[normalize-space()="Terminated"]]`));
   });
 

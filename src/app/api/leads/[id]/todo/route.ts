@@ -12,9 +12,9 @@ export async function PATCH(request: Request, context: RouteContext) {
     const user = await requireUser();
     const { id: rawId } = await context.params;
     const id = Number(rawId);
-    if (!Number.isSafeInteger(id) || id < 1) return jsonError(400, "Invalid lead ID.");
+    if (!Number.isSafeInteger(id) || id < 1) return jsonError(400, "Invalid deal ID.");
     const body = await readJsonBody(request);
-    if (!body || !("listId" in body)) return jsonError(400, "Send the To Do list as { listId }, or null to take the lead off its list.");
+    if (!body || !("listId" in body)) return jsonError(400, "Send the To Do list as { listId }, or null to take the deal off its list.");
     const listId = asOptionalId(body.listId);
     if (body.listId !== null && body.listId !== "" && !listId) return jsonError(400, "Choose a To Do list.");
     return NextResponse.json({ lead: await setLeadTodo(id, listId, user) });

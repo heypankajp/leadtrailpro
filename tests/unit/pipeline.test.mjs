@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { compareCards, defaultNextStep, nextStepOf, parsePipelineFilters, quietDaysSince, resolveStageForAction, stageAdvances } from "../../src/features/pipeline/model.ts";
+import { compareCards, defaultNextStep, nextStepOf, parsePipelineFilters, quietDaysSince, resolveStageForAction, stageAdvances, stageChoices, stagesOfPipeline } from "../../src/features/pipeline/model.ts";
 import { defaultPipelineSettings, normalizePipelineSettings } from "../../src/features/settings/model.ts";
 
 const stages = [
@@ -11,13 +11,13 @@ const stages = [
 ];
 
 describe("pipeline stages (PIPE-02/03)", () => {
-  test("a lead with no BD action starts in New Deal", () => assert.equal(resolveStageForAction(null, null, stages)?.code, "new_deal"));
+  test("a deal with no BD action starts in New Deal", () => assert.equal(resolveStageForAction(null, null, stages)?.code, "new_deal"));
   test("a mapped action lands in its stage", () => assert.equal(resolveStageForAction(10, 4, stages)?.code, "profile_shared"));
   test("an unmapped action counts as Contact Made", () => assert.equal(resolveStageForAction(10, null, stages)?.code, "contact_made"));
   test("a mapping to a stage that no longer exists counts as Contact Made", () => assert.equal(resolveStageForAction(10, 99, stages)?.code, "contact_made"));
   test("without the entry stage the first stage is used", () => assert.equal(resolveStageForAction(null, null, stages.slice(1))?.code, "contact_made"));
   test("no stages at all gives null", () => assert.equal(resolveStageForAction(10, 4, []), null));
-  test("an action moves a lead forward only", () => {
+  test("an action moves a deal forward only", () => {
     assert.equal(stageAdvances(stages[1], stages[3]), true);
     assert.equal(stageAdvances(stages[3], stages[1]), false);
     assert.equal(stageAdvances(stages[1], stages[1]), false);
@@ -51,8 +51,9 @@ describe("pipeline cards (PIPE-04/06)", () => {
     assert.deepEqual([e, d, c, a, b].sort(compareCards).map((card) => card.id), [2, 1, 3, 5, 4]);
   });
   test("filters parse the scope, ids, text, and the show-more window", () => {
-    assert.deepEqual(parsePipelineFilters(new URLSearchParams("scope=team&leadTypeId=3&ownerId=7&statusId=2&q=%20acme%20&stageId=4&offset=50")), { scope: "team", leadTypeId: 3, ownerId: 7, statusId: 2, q: "acme", stageId: 4, offset: 50 });
-    assert.deepEqual(parsePipelineFilters(new URLSearchParams("scope=other&leadTypeId=x&offset=-5")), { scope: "mine", leadTypeId: null, ownerId: null, statusId: null, q: "", stageId: null, offset: 0 });
+    assert.deepEqual(parsePipelineFilters(new URLSearchParams("scope=team&leadTypeId=3&ownerId=7&statusId=2&q=%20acme%20&stageId=4&offset=50")), { scope: "team", leadTypeId: 3, ownerId: 7, statusId: 2, q: "acme", stageId: 4, pipelineId: null, offset: 50 });
+    assert.deepEqual(parsePipelineFilters(new URLSearchParams("scope=other&leadTypeId=x&offset=-5")), { scope: "mine", leadTypeId: null, ownerId: null, statusId: null, q: "", stageId: null, pipelineId: null, offset: 0 });
+    assert.equal(parsePipelineFilters(new URLSearchParams("pipelineId=2")).pipelineId, 2);
   });
 });
 
@@ -75,5 +76,25 @@ describe("next step suggestions (PIPE-09)", () => {
     assert.match(normalizePipelineSettings({ followUps: { contact_made: { activity: "fax", businessDays: 1 } } }).error, /call, email, visit, or task/);
     assert.match(normalizePipelineSettings({ followUps: { contact_made: { activity: "call", businessDays: 99 } } }).error, /0 to 60 business days/);
     assert.match(normalizePipelineSettings({ followUps: { "Bad Key": { activity: "call", businessDays: 1 } } }).error, /stage code/);
+  });
+
+  // PD-09, SPEC §10.18
+  test("several pipelines: stage choices name the other pipeline, each pipeline has its own steps, and an action never crosses pipelines", () => {
+    const sales = { id: 1, name: "Sales pipeline", sortOrder: 1, active: true, isDefault: true };
+    const renewals = { id: 2, name: "Renewals", sortOrder: 2, active: true, isDefault: false };
+    const retired = { id: 3, name: "Old", sortOrder: 3, active: false, isDefault: false };
+    const all = [
+      { id: 10, value: "New Deal", sortOrder: 1, pipelineId: 1 }, { id: 11, value: "Qualified", sortOrder: 3, pipelineId: 1 },
+      { id: 20, value: "New", sortOrder: 8, pipelineId: 2 }, { id: 21, value: "Qualified", sortOrder: 9, pipelineId: 2 }, { id: 30, value: "Parked", sortOrder: 10, pipelineId: 3 },
+    ];
+    // One pipeline: plain names, nothing added.
+    assert.deepEqual(stageChoices(all.slice(0, 2), [sales]).map((stage) => stage.value), ["New Deal", "Qualified"]);
+    // Two active pipelines: the default first with plain names, the other one named; a switched-off pipeline is left out.
+    assert.deepEqual(stageChoices(all, [sales, renewals, retired]).map((stage) => stage.value), ["New Deal", "Qualified", "Renewals: New", "Renewals: Qualified"]);
+    assert.deepEqual(stagesOfPipeline(all, 2, [sales, renewals]).map((stage) => stage.id), [20, 21]);
+    assert.deepEqual(stagesOfPipeline(all, null, [sales, renewals]).map((stage) => stage.id), [10, 11]);
+    assert.equal(stageAdvances({ sortOrder: 8, pipelineId: 2 }, { sortOrder: 3, pipelineId: 1 }), false);
+    assert.equal(stageAdvances({ sortOrder: 1, pipelineId: 2 }, { sortOrder: 3, pipelineId: 1 }), false, "a later default stage does not pull a deal out of another pipeline");
+    assert.equal(stageAdvances({ sortOrder: 1, pipelineId: 1 }, { sortOrder: 3, pipelineId: 1 }), true);
   });
 });

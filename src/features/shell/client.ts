@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import type { Pipeline } from "@/features/pipeline/model";
 import type { ListValuesByKey } from "@/features/list-values/model";
 import type { PipelineSettings } from "@/features/settings/model";
 import type { TargetTemplate } from "@/features/targets/model";
@@ -6,6 +7,8 @@ import type { SystemRole, UserSummary } from "@/features/users/model";
 
 export type ReferenceData = {
   listValues: ListValuesByKey;
+  /** PD-09: the pipelines, the default one first. A second pipeline makes the board's picker and the "Pipeline: Stage" names appear. */
+  pipelines: Pipeline[];
   users: UserSummary[];
   roleLabels: Record<SystemRole, string>;
   inactivityDays: number;

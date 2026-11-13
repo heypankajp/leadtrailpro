@@ -15,9 +15,9 @@ const parseId = async (context: RouteContext) => {
 export async function GET(_request: Request, context: RouteContext) {
   try {
     const user = await requireUser();
-    requirePrivilege(user, "view_leads", "You do not have permission to view leads.");
+    requirePrivilege(user, "view_leads", "You do not have permission to view deals.");
     const id = await parseId(context);
-    if (!id) return jsonError(400, "Invalid lead ID.");
+    if (!id) return jsonError(400, "Invalid deal ID.");
     return NextResponse.json({ attachments: await listAttachments(id, { includeDeleted: hasPrivilege(user, "delete_files") }) });
   } catch (error) {
     return handleRouteError(error, "List attachments");
@@ -31,9 +31,9 @@ export async function POST(request: Request, context: RouteContext) {
     const user = await requireUser();
     requirePrivilege(user, "upload_files", "You do not have permission to upload files.");
     const id = await parseId(context);
-    if (!id) return jsonError(400, "Invalid lead ID.");
+    if (!id) return jsonError(400, "Invalid deal ID.");
     const lead = await getLead(id);
-    if (!lead) return jsonError(404, "Lead not found.");
+    if (!lead) return jsonError(404, "Deal not found.");
     const form = await request.formData().catch(() => null);
     const file = form?.get("file");
     if (!form || !(file instanceof File)) return jsonError(400, "Choose a file to upload.");

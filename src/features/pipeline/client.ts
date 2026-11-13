@@ -3,7 +3,7 @@ import type { LeadSummary } from "@/features/leads/model";
 import type { Task } from "@/features/tasks/model";
 import type { PipelineBoard, PipelineScope } from "./model";
 
-export type PipelineQuery = Partial<{ scope: PipelineScope; leadTypeId: number; ownerId: number; statusId: number; q: string; stageId: number; offset: number }>;
+export type PipelineQuery = Partial<{ scope: PipelineScope; leadTypeId: number; ownerId: number; statusId: number; q: string; stageId: number; pipelineId: number; offset: number }>;
 
 export const fetchPipeline = (query: PipelineQuery) => api<PipelineBoard>(`/api/pipeline${toQuery(query)}`);
 /** `task` is the stage's suggested task when Settings → Pipeline creates it automatically (PIPE-09), else null. */

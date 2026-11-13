@@ -7,7 +7,7 @@ import { requirePrivilege, requireUser } from "@/features/users/session";
 export async function GET() {
   try {
     const user = await requireUser();
-    requirePrivilege(user, "view_leads", "You do not have permission to view leads.");
+    requirePrivilege(user, "view_leads", "You do not have permission to view deals.");
     return NextResponse.json({ counts: await todoCounts(user) });
   } catch (error) {
     return handleRouteError(error, "Count To Do lists");

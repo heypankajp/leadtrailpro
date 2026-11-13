@@ -17,7 +17,7 @@ import { jobTypeOptions, maxMaxListings, maxPostedWithinDays, maxSearchTitles, m
 type Tab = OpportunityStatus | "searches";
 const pageSize = 50;
 
-const statusLabels: Record<OpportunityStatus, string> = { new: "Pool", not_relevant: "Not relevant", converted: "Assigned as leads", attached: "Existing leads" };
+const statusLabels: Record<OpportunityStatus, string> = { new: "Inbox", not_relevant: "Not relevant", converted: "Converted to deals", attached: "Existing deals" };
 
 /**
  * What the lead form starts with when a card is assigned: the company, where it is, and the roles it advertises; for a
@@ -25,7 +25,7 @@ const statusLabels: Record<OpportunityStatus, string> = { new: "Pool", not_relev
  */
 function prefillFor(item: Opportunity, values: ListValuesByKey): Partial<LeadInput> {
   const lines = item.listings.map((listing) => `${listing.title} (${listing.sourceLabel}${listing.postedAt ? `, posted ${formatDate(listing.postedAt)}` : ""}) ${listing.url}`);
-  const poolNote = lines.length ? `From the opportunity pool (first seen ${formatDate(item.firstSeenAt.slice(0, 10))}):\n${lines.join("\n")}` : "";
+  const poolNote = lines.length ? `From the leads inbox (first seen ${formatDate(item.firstSeenAt.slice(0, 10))}):\n${lines.join("\n")}` : "";
   const draft = item.tracker?.lead;
   if (!draft) {
     return { clientName: item.companyName, companyUrl: item.website, address: item.location, positions: item.listings.map((listing) => listing.title).join("\n").slice(0, 5000), comments: poolNote.slice(0, 5000) };
@@ -70,7 +70,7 @@ export default function OpportunitiesPage() {
     setRunning(true);
     try {
       const { run } = await runSearchesNow();
-      notify(`Search ${run.status}: ${run.listingsFound} listings, ${run.newCompanies} new ${run.newCompanies === 1 ? "company" : "companies"}, ${run.attached} attached to existing leads`, run.status === "failed" ? "error" : "success");
+      notify(`Search ${run.status}: ${run.listingsFound} listings, ${run.newCompanies} new ${run.newCompanies === 1 ? "company" : "companies"}, ${run.attached} attached to existing deals`, run.status === "failed" ? "error" : "success");
       bumpData();
     } catch (caught) {
       notify(errorMessage(caught, "The searches could not be run."), "error");
@@ -80,16 +80,16 @@ export default function OpportunitiesPage() {
   };
 
   const restore = async (item: Opportunity) => {
-    try { await restoreOpportunity(item.id); notify(`${item.companyName} is back in the pool`); bumpData(); } catch (caught) { notify(errorMessage(caught), "error"); }
+    try { await restoreOpportunity(item.id); notify(`${item.companyName} is back in the inbox`); bumpData(); } catch (caught) { notify(errorMessage(caught), "error"); }
   };
 
   return (
     <>
       <div className="page-heading">
         <div>
-          <div className="eyebrow">OPPORTUNITY POOL</div>
-          <h1>Opportunities</h1>
-          <p>Companies that are hiring, found by the scheduled job searches. Assign one to yourself or a colleague to create its lead, or mark it not relevant. A company that is already a lead or client never appears here: its new listings go to that lead.</p>
+          <div className="eyebrow">LEADS INBOX</div>
+          <h1>Leads</h1>
+          <p>Companies that are hiring, found by the scheduled job searches. Convert one to a deal for yourself or a colleague, or mark it not relevant. A company that is already a deal or client never appears here: its new listings go to that deal.</p>
         </div>
         {can("manage_settings") && <button className="button button-outline" onClick={() => void runNow()} disabled={running}><Play size={14} /> {running ? "Running searches..." : "Run searches now"}</button>}
       </div>
@@ -98,12 +98,12 @@ export default function OpportunitiesPage() {
       {tab === "searches" ? <SearchesPanel /> : (
         <div className="panel">
           <div className="opp-toolbar">
-            <label className="opp-search"><Search size={13} /><input placeholder="Filter by company, role, or location" aria-label="Filter opportunities" value={filter} onChange={(event) => { setFilter(event.target.value); setPage(1); }} /></label>
+            <label className="opp-search"><Search size={13} /><input placeholder="Filter by company, role, or location" aria-label="Filter leads" value={filter} onChange={(event) => { setFilter(event.target.value); setPage(1); }} /></label>
             {data && <small className="field-hint">{data.total} {data.total === 1 ? "company" : "companies"}</small>}
           </div>
           {error && <ErrorText message={error} />}
           {!data && !error ? <Loading /> : data && data.opportunities.length === 0 ? (
-            <EmptyState icon={<Briefcase size={22} />} title={status === "new" ? "Nothing in the pool" : `No ${statusLabels[status].toLowerCase()} yet`} text={status === "new" ? (can("manage_settings") ? "Add a search under Searches & runs and run it, or wait for the next scheduled run." : "The next scheduled search run will add companies here.") : undefined} />
+            <EmptyState icon={<Briefcase size={22} />} title={status === "new" ? "Nothing in the inbox" : `No ${statusLabels[status].toLowerCase()} yet`} text={status === "new" ? (can("manage_settings") ? "Add a search under Searches & runs and run it, or wait for the next scheduled run." : "The next scheduled search run will add companies here.") : undefined} />
           ) : data && (
             <table className="opp-table">
               <thead><tr><th>Company</th><th>Roles / history</th><th>Location</th><th>Seen</th><th>{status === "new" ? "Notes" : "Outcome"}</th><th aria-label="Actions" /></tr></thead>
@@ -139,24 +139,24 @@ export default function OpportunitiesPage() {
                       <td>{item.location || "—"}</td>
                       <td><span title={formatDateTime(item.lastSeenAt)}>{relativeTime(item.lastSeenAt)}</span><small className="muted-cell">first {formatDate(item.firstSeenAt.slice(0, 10))}</small></td>
                       <td>
-                        {item.history && <small className="opp-flag">Was a lead: {item.history.statusLabel}{item.history.recordState === "archived" ? " (archived)" : ""}, owner {item.history.ownerName}</small>}
-                        {item.revived && item.status === "new" && <small className="opp-flag">Back in the pool with a new role</small>}
+                        {item.history && <small className="opp-flag">Was a deal: {item.history.statusLabel}{item.history.recordState === "archived" ? " (archived)" : ""}, owner {item.history.ownerName}</small>}
+                        {item.revived && item.status === "new" && <small className="opp-flag">Back in the inbox with a new role</small>}
                         {item.tracker && item.status === "new" && (
                           <small className="opp-flag">From the sales tracker, no Sales Manager: {reference.listValues.status.find((value) => value.code === item.tracker!.lead.status)?.value ?? capitalize(item.tracker.lead.status)}{item.tracker.lead.executive ? ` · ${item.tracker.lead.executive}` : ""}{item.tracker.lead.phone ? ` · ${item.tracker.lead.phone}` : ""}</small>
                         )}
                         {item.status === "not_relevant" && <span>{item.reason}{item.reasonNote ? ` – ${item.reasonNote}` : ""}<small className="muted-cell">{item.decidedByName}{item.decidedAt ? ` · ${formatDateTime(item.decidedAt)}` : ""}</small></span>}
                         {(item.status === "converted" || item.status === "attached") && item.lead && (
-                          <span>{item.status === "converted" ? "Lead" : "Existing lead"}: <button type="button" className="link-button" onClick={() => openLead(item.lead!.id)}>{item.lead.clientName}</button><small className="muted-cell">{item.lead.statusLabel} · {item.lead.ownerName}</small></span>
+                          <span>{item.status === "converted" ? "Deal" : "Existing deal"}: <button type="button" className="link-button" onClick={() => openLead(item.lead!.id)}>{item.lead.clientName}</button><small className="muted-cell">{item.lead.statusLabel} · {item.lead.ownerName}</small></span>
                         )}
                         {item.status === "new" && !item.history && !item.revived && !item.tracker && <small className="muted-cell">New company</small>}
                       </td>
                       <td>
                         <div className="opp-actions">
-                          {item.status === "new" && can("create_leads") && !item.history && <button type="button" className="button button-primary button-small" onClick={() => setAssigning(item)}><UserPlus size={13} /> Assign as lead</button>}
-                          {item.status === "new" && can("create_leads") && item.history && <button type="button" className="button button-primary button-small" onClick={() => setReopening(item)}><RotateCcw size={13} /> Reopen lead</button>}
+                          {item.status === "new" && can("create_leads") && !item.history && <button type="button" className="button button-primary button-small" onClick={() => setAssigning(item)}><UserPlus size={13} /> Convert to deal</button>}
+                          {item.status === "new" && can("create_leads") && item.history && <button type="button" className="button button-primary button-small" onClick={() => setReopening(item)}><RotateCcw size={13} /> Reopen deal</button>}
                           {item.status === "new" && can("create_leads") && <button type="button" className="button button-outline button-small" onClick={() => setDismissing(item)}><X size={13} /> Not relevant</button>}
-                          {item.status === "not_relevant" && can("create_leads") && <button type="button" className="button button-outline button-small" onClick={() => void restore(item)}><RotateCcw size={13} /> Back to the pool</button>}
-                          {(item.status === "converted" || item.status === "attached") && item.lead && <button type="button" className="button button-outline button-small" onClick={() => openLead(item.lead!.id)}>Open lead</button>}
+                          {item.status === "not_relevant" && can("create_leads") && <button type="button" className="button button-outline button-small" onClick={() => void restore(item)}><RotateCcw size={13} /> Back to the inbox</button>}
+                          {(item.status === "converted" || item.status === "attached") && item.lead && <button type="button" className="button button-outline button-small" onClick={() => openLead(item.lead!.id)}>Open deal</button>}
                         </div>
                       </td>
                     </tr>
@@ -174,7 +174,7 @@ export default function OpportunitiesPage() {
           opportunityId={assigning.id}
           importedHistory={Boolean(assigning.tracker)}
           onClose={() => setAssigning(null)}
-          onSaved={(lead) => { setAssigning(null); notify(`${lead.clientName} is now a lead owned by ${lead.ownerName}`); bumpData(); reload(); }}
+          onSaved={(lead) => { setAssigning(null); notify(`${lead.clientName} is now a deal owned by ${lead.ownerName}`); bumpData(); reload(); }}
         />
       )}
       {reopening && (
@@ -211,19 +211,19 @@ function ReopenDialog({ opportunity, onClose, onDone }: { opportunity: Opportuni
       const { lead } = await reopenOpportunity(opportunity.id, Number(ownerId));
       onDone(lead);
     } catch (caught) {
-      setError(errorMessage(caught, "The lead could not be reopened."));
+      setError(errorMessage(caught, "The deal could not be reopened."));
       setBusy(false);
     }
   };
   return (
-    <Dialog title={`Reopen ${history.clientName}`} eyebrow="OPPORTUNITY POOL" onClose={onClose} size="narrow">
+    <Dialog title={`Reopen ${history.clientName}`} eyebrow="LEADS INBOX" onClose={onClose} size="narrow">
       <form className="lead-form" onSubmit={submit}>
-        <p className="field-hint">This company was a lead before: {history.statusLabel}{history.recordState === "archived" ? " (archived)" : ""}, owned by {history.ownerName}. Reopening keeps its notes and history; the status goes back to Cold and the new job listings are added to its timeline.</p>
+        <p className="field-hint">This company was a deal before: {history.statusLabel}{history.recordState === "archived" ? " (archived)" : ""}, owned by {history.ownerName}. Reopening keeps its notes and history; the status goes back to Cold and the new job listings are added to its timeline.</p>
         <Field label="Owner" required wide><select value={ownerId} onChange={(event) => setOwnerId(event.target.value)}>{owners.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
         <ErrorText message={error} />
         <div className="modal-actions">
           <button type="button" className="button button-outline" onClick={onClose}>Cancel</button>
-          <button type="submit" className="button button-primary" disabled={busy}><RotateCcw size={14} /> {busy ? "Reopening..." : "Reopen lead"}</button>
+          <button type="submit" className="button button-primary" disabled={busy}><RotateCcw size={14} /> {busy ? "Reopening..." : "Reopen deal"}</button>
         </div>
       </form>
     </Dialog>
@@ -249,7 +249,7 @@ function NotRelevantDialog({ opportunity, reasons, onClose, onDone }: { opportun
     }
   };
   return (
-    <Dialog title={`Not relevant: ${opportunity.companyName}`} eyebrow="OPPORTUNITY POOL" onClose={onClose} size="narrow">
+    <Dialog title={`Not relevant: ${opportunity.companyName}`} eyebrow="LEADS INBOX" onClose={onClose} size="narrow">
       <form className="lead-form" onSubmit={submit}>
         <Field label="Reason" required wide hint="A reason about the company keeps it hidden; “Role not relevant” lets it come back when a different role is advertised.">
           <select value={reasonId} onChange={(event) => setReasonId(event.target.value)} required>
@@ -277,14 +277,14 @@ function SearchesPanel() {
   const { data, error, reload } = useAsyncData(fetcher, dataVersion);
   const [editing, setEditing] = useState<{ id: number | null; input: OpportunitySearchInput } | null>(null);
   const remove = async (search: OpportunitySearch) => {
-    if (!window.confirm(`Remove the search "${search.name}"? Companies already in the pool stay.`)) return;
+    if (!window.confirm(`Remove the search "${search.name}"? Companies already in the inbox stay.`)) return;
     try { await deleteSearch(search.id); notify(`Search "${search.name}" removed`); reload(); } catch (caught) { notify(errorMessage(caught), "error"); }
   };
   return (
     <>
       <div className="panel opp-panel">
         <div className="opp-toolbar">
-          <div><strong>Searches</strong><small className="field-hint"> · each one is sent to every enabled job source on the schedule under Settings → Opportunity searches</small></div>
+          <div><strong>Searches</strong><small className="field-hint"> · each one is sent to every enabled job source on the schedule under Settings → Lead searches</small></div>
           <button type="button" className="button button-outline button-small" onClick={() => setEditing({ id: null, input: { ...emptySearch, titles: data?.defaults.titles ?? [], location: data?.defaults.location ?? "", postedWithinDays: data?.defaults.postedWithinDays ?? 30 } })}><Plus size={13} /> Add search</button>
         </div>
         {error && <ErrorText message={error} />}
@@ -318,7 +318,7 @@ function SearchesPanel() {
         {data && data.runs.length === 0 && <EmptyState title="No run yet" />}
         {data && data.runs.length > 0 && (
           <table className="opp-table">
-            <thead><tr><th>Started</th><th>How</th><th>Result</th><th>Listings</th><th>New companies</th><th>Attached to leads</th><th>Details</th></tr></thead>
+            <thead><tr><th>Started</th><th>How</th><th>Result</th><th>Listings</th><th>New companies</th><th>Attached to deals</th><th>Details</th></tr></thead>
             <tbody>
               {data.runs.map((run) => (
                 <tr key={run.id}>
@@ -369,7 +369,7 @@ function SearchFormDialog({ initial, title, onClose, onSave }: { initial: Opport
     }
   };
   return (
-    <Dialog title={title} eyebrow="OPPORTUNITY SEARCHES" onClose={onClose}>
+    <Dialog title={title} eyebrow="LEAD SEARCHES" onClose={onClose}>
       <form className="lead-form" onSubmit={submit}>
         <Field label="Name" required wide><input value={form.name} onChange={set("name")} required maxLength={120} placeholder="e.g. Bakery staff in Peel" autoFocus /></Field>
         <Field label="Job titles" required wide hint={`One per line, up to ${maxSearchTitles}. Indeed receives them as one query, so one search covers the whole group.`}><textarea value={form.titles} onChange={set("titles")} required rows={4} placeholder={"e.g. baker\npastry chef"} /></Field>

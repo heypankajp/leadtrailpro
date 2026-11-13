@@ -78,7 +78,7 @@ export default function NotificationsMenu() {
       setItems((current) => current?.map((entry) => (entry.id === item.id ? { ...entry, readAt: new Date().toISOString() } : entry)) ?? null);
     }
     if (item.leadId) { setOpen(false); openLead(item.leadId); return; }
-    if (item.taskId) { setOpen(false); navigate("tasks", item.taskId); return; }
+    if (item.taskId) { setOpen(false); navigate("activities", item.taskId); return; }
     setExpanded((current) => (current === item.id ? null : item.id));
   };
 

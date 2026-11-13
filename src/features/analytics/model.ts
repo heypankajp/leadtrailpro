@@ -147,7 +147,7 @@ export function stalledAssessment(lead: StalledInput, allowedDays: number): { sc
   if (lead.daysInStatus > allowedDays) { reasons.push(`${Math.round(lead.daysInStatus)} days in ${lead.statusCode} (limit ${allowedDays})`); score = Math.max(score, lead.daysInStatus - allowedDays); }
   if (lead.daysSinceActivity > allowedDays) { reasons.push(`no activity for ${Math.round(lead.daysSinceActivity)} days`); score = Math.max(score, lead.daysSinceActivity - allowedDays); }
   if (lead.overdueDays !== null && lead.overdueDays > 0) { reasons.push(`follow-up overdue by ${lead.overdueDays} day${lead.overdueDays === 1 ? "" : "s"}`); score = Math.max(score, lead.overdueDays); }
-  if (lead.statusCode === "hot" && lead.daysSinceActivity > 7 && lead.daysSinceActivity <= allowedDays) { reasons.push(`hot lead quiet for ${Math.round(lead.daysSinceActivity)} days`); score = Math.max(score, lead.daysSinceActivity); }
+  if (lead.statusCode === "hot" && lead.daysSinceActivity > 7 && lead.daysSinceActivity <= allowedDays) { reasons.push(`hot deal quiet for ${Math.round(lead.daysSinceActivity)} days`); score = Math.max(score, lead.daysSinceActivity); }
   return reasons.length ? { score: Math.round(score), reasons } : null;
 }
 
@@ -189,7 +189,7 @@ export type BreakdownRow = { label: string; leads: number; clients: number };
 /** Team board (RPT, November 7, 2026): one row per salesperson as things stand now, plus this week's activity. */
 export const teamBoardMetrics = ["active", "overdue", "stalled", "replies"] as const;
 export type TeamBoardMetric = (typeof teamBoardMetrics)[number];
-export const teamBoardMetricLabels: Record<TeamBoardMetric, string> = { active: "Active leads", overdue: "Overdue follow-ups", stalled: "Stalled leads", replies: "Client replies waiting" };
+export const teamBoardMetricLabels: Record<TeamBoardMetric, string> = { active: "Active deals", overdue: "Overdue follow-ups", stalled: "Stalled deals", replies: "Client replies waiting" };
 export type TeamBoardRow = {
   userId: number; name: string; role: string;
   activeLeads: number; overdueFollowUps: number; stalled: number; repliesWaiting: number;

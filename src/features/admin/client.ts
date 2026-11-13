@@ -1,4 +1,5 @@
 import type { EmailSettings } from "@/features/settings/model";
+import type { Pipeline } from "@/features/pipeline/model";
 import type { OpportunitySettings } from "@/features/opportunities/model";
 import type { JobSourceSettings, JobSourceStatus } from "@/features/jobs/model";
 import type { MapsOverview, MapsSettings } from "@/features/maps/model";
@@ -11,7 +12,9 @@ import type { SystemRole } from "@/features/users/model";
 import type { ApiToken } from "@/features/users/api-token-model";
 
 export const fetchListValues = (includeInactive: boolean) => api<{ listValues: ListValuesByKey }>(`/api/list-values${toQuery({ includeInactive })}`);
-export const createListValue = (listKey: ListKey, value: string) => api<{ value: ListValue }>("/api/list-values", { method: "POST", json: { listKey, value } });
+export const createListValue = (listKey: ListKey, value: string, pipelineId?: number | null) => api<{ value: ListValue }>("/api/list-values", { method: "POST", json: { listKey, value, pipelineId: pipelineId ?? null } });
+export const createPipeline = (name: string) => api<{ pipeline: Pipeline }>("/api/pipelines", { method: "POST", json: { name } });
+export const updatePipeline = (id: number, changes: { name?: string; active?: boolean }) => api<{ pipeline: Pipeline }>(`/api/pipelines/${id}`, { method: "PATCH", json: changes });
 export const updateListValue = (id: number, changes: { value?: string; active?: boolean; sortOrder?: number; stageId?: number | null }) => api<{ value: ListValue }>(`/api/list-values/${id}`, { method: "PATCH", json: changes });
 export const reorderListValues = (listKey: ListKey, orderedIds: number[]) => api<{ ok: true }>("/api/list-values/reorder", { method: "POST", json: { listKey, orderedIds } });
 

@@ -124,7 +124,7 @@ switch (command) {
   }
   case "import-status": {
     const { status } = await call("GET", `/api/imports/tracker${queryFrom(args.slice(1))}`);
-    console.log(`Sheet ${status.sheetName}: ${status.importedEntries} imported timeline entries on ${status.importedLeads} leads; ${status.unstampedEntries} without a fingerprint${status.unstampedEntries ? " (the next run needs --baseline once)" : ""}.`);
+    console.log(`Sheet ${status.sheetName}: ${status.importedEntries} imported timeline entries on ${status.importedLeads} deals; ${status.unstampedEntries} without a fingerprint${status.unstampedEntries ? " (the next run needs --baseline once)" : ""}.`);
     console.log(`Last applied import: ${status.lastImport ? `${status.lastImport.at} by ${status.lastImport.actorName ?? "?"}: ${status.lastImport.details}` : "none"}`);
     console.log("Sales Managers:");
     for (const manager of status.managers) console.log(`  ${manager.name} → ${manager.email}: ${manager.userId ? `${manager.userName}${manager.active ? "" : " (inactive)"}` : "no account yet (created on the first import)"}${manager.note ? ` — ${manager.note}` : ""}`);

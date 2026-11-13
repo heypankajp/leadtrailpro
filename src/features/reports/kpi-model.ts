@@ -79,8 +79,8 @@ export type KpiActivityRow = {
 };
 
 export const kpiActivityColumns = [
-  { key: "leadsCreated", label: "Leads created", short: "Created" },
-  { key: "leadsUpdated", label: "Leads updated", short: "Updated" },
+  { key: "leadsCreated", label: "Deals created", short: "Created" },
+  { key: "leadsUpdated", label: "Deals updated", short: "Updated" },
   { key: "calls", label: "Calls", short: "Calls" },
   { key: "emails", label: "Emails", short: "Emails" },
   { key: "visits", label: "Visits", short: "Visits" },
@@ -144,19 +144,19 @@ const count = (value: number) => value.toLocaleString("en-US");
 const plural = (value: number, noun: string) => `${count(value)} ${noun}${value === 1 ? "" : "s"}`;
 
 /** The current-state table: who, how many leads, one column per status, then what is waiting on the person. */
-const stateHeader = (data: KpiReportData) => ["Leads", ...data.statuses.map((status) => status.label), ...kpiAttentionColumns.map((column) => column.short)];
+const stateHeader = (data: KpiReportData) => ["Deals", ...data.statuses.map((status) => status.label), ...kpiAttentionColumns.map((column) => column.short)];
 const stateCells = (data: KpiReportData, row: KpiRow) => [count(row.leads), ...data.statuses.map((status) => count(row.byStatus[status.key] ?? 0)), ...kpiAttentionColumns.map((column) => count(row[column.key]))];
 const activityHeader = kpiActivityColumns.map((column) => column.short);
 const activityCells = (row: KpiActivityRow) => kpiActivityColumns.map((column) => (column.key === "targetPercent" ? (row.targetPercent === null ? "—" : `${row.targetPercent}%`) : count(row[column.key])));
 
-const intro = (data: KpiReportData) => `${kpiReportLabels[data.kind]} KPI report as of ${data.asOf} (${data.timeZone}): ${plural(data.totals.leads, "lead")} with ${plural(data.rows.length, "Sales Manager")}. Each row shows where that person's leads stand at that moment.`;
-const legend = `Leads = every lead the person owns (archived and deleted ones left out), split by status in the columns after it. ${kpiAttentionColumns.map((column) => `${column.short} = ${column.label}`).join("; ")}.`;
+const intro = (data: KpiReportData) => `${kpiReportLabels[data.kind]} KPI report as of ${data.asOf} (${data.timeZone}): ${plural(data.totals.leads, "deal")} with ${plural(data.rows.length, "Sales Manager")}. Each row shows where that person's deals stand at that moment.`;
+const legend = `Deals = every deal the person owns (archived and deleted ones left out), split by status in the columns after it. ${kpiAttentionColumns.map((column) => `${column.short} = ${column.label}`).join("; ")}.`;
 const activityTitle = (label: string) => `Activity recorded in LeadTrailPro, ${label}`;
 const noActivity = (label: string) => `No activity was recorded in LeadTrailPro for ${label}.`;
 const stageLine = (data: KpiReportData, strong: (value: string) => string, label: (value: string) => string) => {
   const stages = data.pipelineByStage ?? [];
   const onBoard = stages.reduce((sum, stage) => sum + stage.count, 0);
-  return `Pipeline by stage (${count(onBoard)} on the board): ${stages.length ? stages.map((stage) => `${label(stage.label)} ${strong(count(stage.count))}`).join(", ") : "no leads on the board"}.`;
+  return `Pipeline by stage (${count(onBoard)} on the board): ${stages.length ? stages.map((stage) => `${label(stage.label)} ${strong(count(stage.count))}`).join(", ") : "no deals on the board"}.`;
 };
 
 /** A fixed-width text table: the name column, right-aligned values, a rule above the totals. */

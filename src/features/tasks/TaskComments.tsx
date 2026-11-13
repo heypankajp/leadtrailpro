@@ -135,7 +135,7 @@ export default function TaskComments({ task }: { task: Task }) {
             label="Comment"
             rows={3}
             maxLength={maxMessageLength}
-            placeholder={task.leadId ? "Add a comment. Use @ to mention a colleague and the paperclip to reference the lead's files." : "Add a comment. Use @ to mention a colleague."}
+            placeholder={task.leadId ? "Add a comment. Use @ to mention a colleague and the paperclip to reference the deal's files." : "Add a comment. Use @ to mention a colleague."}
             onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); post(); } }}
           />
           <ErrorText message={error} />

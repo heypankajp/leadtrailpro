@@ -4,7 +4,7 @@ import { recordAudit } from "@/features/audit/repository";
 import { entryStageCode, fixedListKeys, isListKey, listKeys, slugify, statusCodes } from "./model";
 import type { ListKey, ListValue, ListValuesByKey } from "./model";
 
-type Row = { id: number; listKey: string; code: string; value: string; sortOrder: number; active: number | boolean; stageId: number | null };
+type Row = { id: number; listKey: string; code: string; value: string; sortOrder: number; active: number | boolean; stageId: number | null; pipelineId?: number | null };
 
 const toListValue = (row: Row): ListValue => ({
   id: Number(row.id),
@@ -14,11 +14,12 @@ const toListValue = (row: Row): ListValue => ({
   sortOrder: Number(row.sortOrder),
   active: Boolean(row.active),
   stageId: row.stageId === null || row.stageId === undefined ? null : Number(row.stageId),
+  pipelineId: row.pipelineId === null || row.pipelineId === undefined ? null : Number(row.pipelineId),
 });
 
 export async function listValues(options: { includeInactive?: boolean } = {}, db: Queryable = getDatabasePool()): Promise<ListValuesByKey> {
   const { rows } = await db.query(
-    `SELECT id, list_key AS "listKey", code, value, sort_order AS "sortOrder", is_active AS active, stage_id AS "stageId" FROM list_values
+    `SELECT id, list_key AS "listKey", code, value, sort_order AS "sortOrder", is_active AS active, stage_id AS "stageId", pipeline_id AS "pipelineId" FROM list_values
      ${options.includeInactive ? "" : "WHERE is_active = TRUE"} ORDER BY list_key, sort_order, value`,
   );
   const grouped = Object.fromEntries(listKeys.map((key) => [key, [] as ListValue[]])) as ListValuesByKey;
@@ -29,7 +30,7 @@ export async function listValues(options: { includeInactive?: boolean } = {}, db
 }
 
 export async function getListValue(id: number, db: Queryable = getDatabasePool()): Promise<ListValue | null> {
-  const { rows } = await db.query(`SELECT id, list_key AS "listKey", code, value, sort_order AS "sortOrder", is_active AS active, stage_id AS "stageId" FROM list_values WHERE id = ?`, [id]);
+  const { rows } = await db.query(`SELECT id, list_key AS "listKey", code, value, sort_order AS "sortOrder", is_active AS active, stage_id AS "stageId", pipeline_id AS "pipelineId" FROM list_values WHERE id = ?`, [id]);
   const row = (rows as Row[])[0];
   return row ? toListValue(row) : null;
 }
@@ -45,7 +46,8 @@ export async function assertListValue(db: Queryable, listKey: ListKey, id: numbe
   if (!value.active && !options.allowInactive) throw new HttpError(400, `${options.label} "${value.value}" is no longer active.`);
 }
 
-export async function createListValue(listKey: ListKey, value: string, actorId: number): Promise<ListValue> {
+/** `pipelineId` (stages only, PD-09): the pipeline the new stage joins; the default pipeline when left out. */
+export async function createListValue(listKey: ListKey, value: string, actorId: number, pipelineId: number | null = null): Promise<ListValue> {
   const trimmed = value.trim();
   if (!trimmed || trimmed.length > 120) throw new HttpError(400, "Enter a value between 1 and 120 characters.");
   if (fixedListKeys.includes(listKey)) throw new HttpError(400, "This list is fixed by the requirement: its values can be renamed but not added to.");
@@ -55,8 +57,14 @@ export async function createListValue(listKey: ListKey, value: string, actorId: 
     let code = slugify(trimmed);
     const { rows: codeRows } = await connection.query("SELECT COUNT(*) AS count FROM list_values WHERE list_key = ? AND code = ?", [listKey, code]);
     if (Number((codeRows as { count: number }[])[0].count) > 0) code = `${code}_${Date.now().toString(36)}`.slice(0, 60);
+    let stagePipeline: number | null = null;
+    if (listKey === "stage") {
+      const found = await connection.query(pipelineId ? "SELECT id FROM pipelines WHERE id = ?" : "SELECT id FROM pipelines WHERE is_default ORDER BY id LIMIT 1", pipelineId ? [pipelineId] : []);
+      if (!found.rows.length) throw new HttpError(400, "Choose the pipeline the stage belongs to.");
+      stagePipeline = Number(found.rows[0].id);
+    }
     const result = await connection.query(
-      "INSERT INTO list_values (list_key, code, value, sort_order) VALUES (?, ?, ?, ?) RETURNING id", [listKey, code, trimmed, sortOrder],
+      "INSERT INTO list_values (list_key, code, value, sort_order, pipeline_id) VALUES (?, ?, ?, ?, ?) RETURNING id", [listKey, code, trimmed, sortOrder, stagePipeline],
     );
     const created = (await getListValue(insertId(result), connection))!;
     await recordAudit(connection, {
@@ -84,7 +92,7 @@ export async function updateListValue(id: number, changes: { value?: string; act
     }
     if (changes.active !== undefined && changes.active !== existing.active) {
       if (!changes.active && existing.listKey === "status" && statusCodes.includes(existing.code as (typeof statusCodes)[number])) {
-        throw new HttpError(400, "The core statuses (Cold, Warm, Hot, Client, Lost Lead, Disqualified) cannot be deactivated. Rename them instead.");
+        throw new HttpError(400, "The core statuses (Cold, Warm, Hot, Client, Lost, Disqualified) cannot be deactivated. Rename them instead.");
       }
       if (!changes.active && fixedListKeys.includes(existing.listKey)) {
         throw new HttpError(400, "These values are fixed by the requirement and cannot be deactivated. Rename them instead.");

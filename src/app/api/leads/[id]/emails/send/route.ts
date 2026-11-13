@@ -26,12 +26,12 @@ export async function POST(request: Request, context: RouteContext) {
   try {
     requireSameOrigin(request);
     const user = await requireUser();
-    requirePrivilege(user, "log_activities", "You do not have permission to email from a lead.");
+    requirePrivilege(user, "log_activities", "You do not have permission to email from a deal.");
     const { id: rawId } = await context.params;
     const id = Number(rawId);
-    if (!Number.isSafeInteger(id) || id < 1) return jsonError(400, "Invalid lead ID.");
+    if (!Number.isSafeInteger(id) || id < 1) return jsonError(400, "Invalid deal ID.");
     const lead = await getLead(id);
-    if (!lead) return jsonError(404, "Lead not found.");
+    if (!lead) return jsonError(404, "Deal not found.");
     const body = (await readJsonBody(request)) ?? {};
     const to = addressList(body.to, 10);
     const cc = addressList(body.cc, 10);
@@ -47,7 +47,7 @@ export async function POST(request: Request, context: RouteContext) {
     const attachments: GmailAttachment[] = [];
     for (const attachmentId of attachmentIds) {
       const attachment = await getAttachmentWithStorage(attachmentId);
-      if (!attachment || attachment.leadId !== id || attachment.deletedAt) return jsonError(400, "One of the attachments does not belong to this lead.");
+      if (!attachment || attachment.leadId !== id || attachment.deletedAt) return jsonError(400, "One of the attachments does not belong to this deal.");
       attachments.push({ filename: attachment.fileName, content: await readAttachmentFile(attachment.storageKey), contentType: attachment.mimeType });
     }
     const html = `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.5">${escapeHtml(text).split(/\n{2,}/).map((paragraph) => `<p>${paragraph.replace(/\n/g, "<br>")}</p>`).join("")}</div>`;
@@ -61,6 +61,6 @@ export async function POST(request: Request, context: RouteContext) {
     });
     return NextResponse.json({ id: sent.id, threadId: sent.threadId });
   } catch (error) {
-    return handleRouteError(error, "Send lead email");
+    return handleRouteError(error, "Send deal email");
   }
 }

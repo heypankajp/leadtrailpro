@@ -220,14 +220,14 @@ export async function setUserPassword(id: number, password: string, actorId: num
  * the person owns to the chosen successor. Historical records keep the original attribution.
  */
 export async function terminateUser(id: number, reassignToUserId: number, actorId: number, reason: string): Promise<{ leadsReassigned: number; tasksReassigned: number }> {
-  if (id === reassignToUserId) throw new HttpError(400, "Choose a different person to receive the leads.");
+  if (id === reassignToUserId) throw new HttpError(400, "Choose a different person to receive the deals.");
   return withTransaction(async (connection) => {
     const user = await getUser(id, connection);
     if (!user) throw new HttpError(404, "User not found.");
     if (id === actorId) throw new HttpError(400, "You cannot terminate your own account.");
     const successor = await getUser(reassignToUserId, connection);
     if (!successor || !successor.active) throw new HttpError(400, "The receiving user must be an active account.");
-    if (successor.role === "recruiter") throw new HttpError(400, "Leads can only be reassigned to a Sales Manager or Admin.");
+    if (successor.role === "recruiter") throw new HttpError(400, "Deals can only be reassigned to a Sales Manager or Admin.");
     const now = new Date();
     const nowSql = toSqlDateTime(now);
 
@@ -253,7 +253,7 @@ export async function terminateUser(id: number, reassignToUserId: number, actorI
     await recordAudit(connection, {
       actorId, action: "user.terminated", entityType: "user", entityId: id,
       before: { active: true }, after: { active: false, terminatedAt: now.toISOString(), reassignedTo: reassignToUserId },
-      details: `${user.name} terminated. ${leads.length} lead(s) and ${affectedRows(taskResult)} open task(s) moved to ${successor.name}.${reason ? ` ${reason}` : ""}`,
+      details: `${user.name} terminated. ${leads.length} deal(s) and ${affectedRows(taskResult)} open task(s) moved to ${successor.name}.${reason ? ` ${reason}` : ""}`,
     }, now);
     return { leadsReassigned: leads.length, tasksReassigned: affectedRows(taskResult) };
   });

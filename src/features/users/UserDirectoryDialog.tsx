@@ -34,7 +34,7 @@ export default function UserDirectoryDialog({ title, description, users, exclude
             <button className="button button-outline button-small" onClick={() => onPick(user)}>{confirmLabel}</button>
           </article>
         ))}
-        {!visible.length && <EmptyState title="No matching people" text="Only active Sales Managers and Admins can own leads." />}
+        {!visible.length && <EmptyState title="No matching people" text="Only active Sales Managers and Admins can own deals." />}
       </div>
     </Dialog>
   );

@@ -1,3 +1,4 @@
+import { parseDealValue } from "./deal-value";
 import { isValidYmd } from "@/lib/dates";
 
 export const recordStates = ["active", "queued", "archived"] as const;
@@ -33,10 +34,18 @@ export type LeadInput = {
   contractSignedDate: string | null;
   /** PIPE-02: the pipeline stage; left out on creation, the lead takes the stage of its BD action, else New Deal. */
   stageId?: number | null;
+  /** PD-11: what the deal is expected to be worth, in the one currency the app uses, and when it should close. Both optional. */
+  dealValue?: number | null;
+  expectedCloseDate?: string | null;
 };
+
+export { dealCurrency, formatDealValue, maxDealValue, parseDealValue } from "./deal-value";
 
 export type LeadSummary = LeadInput & {
   id: number;
+  /** The organization and the person the deal belongs to (SPEC §10.14); the deal carries a copy of their fields. */
+  organizationId: number | null;
+  personId: number | null;
   ownerId: number;
   ownerName: string;
   createdById: number;
@@ -83,7 +92,7 @@ export const loggableActivityTypes = ["call", "email", "visit", "note"] as const
 export type LoggableActivityType = (typeof loggableActivityTypes)[number];
 
 export const activityLabels: Record<ActivityType, string> = {
-  created: "Lead created",
+  created: "Deal created",
   listing: "Job listing",
   call: "Call",
   email: "Email",
@@ -182,6 +191,12 @@ const optionalDate = (value: unknown, label: string, errors: string[]): string |
   return value;
 };
 
+const amount = (value: unknown, errors: string[]): number | null => {
+  const parsed = parseDealValue(value);
+  if (parsed.error) errors.push(parsed.error);
+  return parsed.value;
+};
+
 const emailList = (value: unknown, errors: string[]): string[] => {
   const raw = Array.isArray(value) ? value : typeof value === "string" ? value.split(/[,;\s]+/) : [];
   const emails: string[] = [];
@@ -200,7 +215,7 @@ export type ParsedLeadInput = { input: LeadInput; errors: string[] };
 
 export function parseLeadInput(value: unknown): ParsedLeadInput {
   const errors: string[] = [];
-  if (!value || typeof value !== "object") return { input: {} as LeadInput, errors: ["Invalid lead data."] };
+  if (!value || typeof value !== "object") return { input: {} as LeadInput, errors: ["Invalid deal data."] };
   const body = value as Record<string, unknown>;
   const companyUrl = text(body.companyUrl, 2048, "Company website", errors);
   if (companyUrl && !/^https?:\/\/\S+$/i.test(companyUrl)) errors.push("Company website must begin with http:// or https://.");
@@ -216,18 +231,20 @@ export function parseLeadInput(value: unknown): ParsedLeadInput {
     clientEmails: emailList(body.clientEmails, errors),
     industry: text(body.industry, 120, "Client industry", errors),
     positions: text(body.positions, 5000, "Positions", errors),
-    leadTypeId: requiredId(body.leadTypeId, "Lead type", errors),
+    leadTypeId: requiredId(body.leadTypeId, "Deal type", errors),
     statusId: requiredId(body.statusId, "Status", errors),
     statusReasonId: optionalId(body.statusReasonId, "Status reason", errors),
     bdActionId: optionalId(body.bdActionId, "BD action", errors),
     clientResponseId: optionalId(body.clientResponseId, "Client response", errors),
-    leadCategoryId: optionalId(body.leadCategoryId, "Lead category", errors),
+    leadCategoryId: optionalId(body.leadCategoryId, "Deal category", errors),
     companySizeId: optionalId(body.companySizeId, "Company size", errors),
     cityId: optionalId(body.cityId, "City", errors),
     firstContactDate: optionalDate(body.firstContactDate, "First contact date", errors) ?? "",
     followUpDate: optionalDate(body.followUpDate, "Follow-up date", errors),
     contractSignedDate: optionalDate(body.contractSignedDate, "Contract signed date", errors),
     stageId: optionalId(body.stageId, "Stage", errors),
+    dealValue: amount(body.dealValue, errors),
+    expectedCloseDate: optionalDate(body.expectedCloseDate, "Expected close date", errors),
   };
   if (!input.firstContactDate) errors.push("First contact date is required.");
   return { input, errors };
@@ -236,7 +253,7 @@ export function parseLeadInput(value: unknown): ParsedLeadInput {
 /** Parses a partial update: only keys present in the body are validated and returned. */
 export function parseLeadPatch(value: unknown): { changes: Partial<LeadInput>; errors: string[] } {
   const errors: string[] = [];
-  if (!value || typeof value !== "object") return { changes: {}, errors: ["Invalid lead data."] };
+  if (!value || typeof value !== "object") return { changes: {}, errors: ["Invalid deal data."] };
   const body = value as Record<string, unknown>;
   const changes: Partial<LeadInput> = {};
   const has = (key: string) => Object.prototype.hasOwnProperty.call(body, key);
@@ -254,12 +271,12 @@ export function parseLeadPatch(value: unknown): { changes: Partial<LeadInput>; e
   if (has("clientEmails")) changes.clientEmails = emailList(body.clientEmails, errors);
   if (has("industry")) changes.industry = text(body.industry, 120, "Client industry", errors);
   if (has("positions")) changes.positions = text(body.positions, 5000, "Positions", errors);
-  if (has("leadTypeId")) changes.leadTypeId = requiredId(body.leadTypeId, "Lead type", errors);
+  if (has("leadTypeId")) changes.leadTypeId = requiredId(body.leadTypeId, "Deal type", errors);
   if (has("statusId")) changes.statusId = requiredId(body.statusId, "Status", errors);
   if (has("statusReasonId")) changes.statusReasonId = optionalId(body.statusReasonId, "Status reason", errors);
   if (has("bdActionId")) changes.bdActionId = optionalId(body.bdActionId, "BD action", errors);
   if (has("clientResponseId")) changes.clientResponseId = optionalId(body.clientResponseId, "Client response", errors);
-  if (has("leadCategoryId")) changes.leadCategoryId = optionalId(body.leadCategoryId, "Lead category", errors);
+  if (has("leadCategoryId")) changes.leadCategoryId = optionalId(body.leadCategoryId, "Deal category", errors);
   if (has("companySizeId")) changes.companySizeId = optionalId(body.companySizeId, "Company size", errors);
   if (has("cityId")) changes.cityId = optionalId(body.cityId, "City", errors);
   if (has("firstContactDate")) {
@@ -269,6 +286,8 @@ export function parseLeadPatch(value: unknown): { changes: Partial<LeadInput>; e
   if (has("followUpDate")) changes.followUpDate = optionalDate(body.followUpDate, "Follow-up date", errors);
   if (has("contractSignedDate")) changes.contractSignedDate = optionalDate(body.contractSignedDate, "Contract signed date", errors);
   if (has("stageId")) changes.stageId = optionalId(body.stageId, "Stage", errors);
+  if (has("dealValue")) changes.dealValue = amount(body.dealValue, errors);
+  if (has("expectedCloseDate")) changes.expectedCloseDate = optionalDate(body.expectedCloseDate, "Expected close date", errors);
   return { changes, errors };
 }
 

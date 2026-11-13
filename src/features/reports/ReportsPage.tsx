@@ -15,7 +15,7 @@ import { fetchDrilldown, fetchReport, reportExportUrl } from "./client";
 import type { DrilldownMetric, DrilldownResult, PerformanceReport, PerformanceRow, ReportFilters } from "./model";
 
 const metricColumns: { key: keyof PerformanceRow; label: string; metric?: DrilldownMetric }[] = [
-  { key: "leadsCreated", label: "Leads", metric: "leads" },
+  { key: "leadsCreated", label: "Deals", metric: "leads" },
   { key: "leadsUpdated", label: "Updated" },
   { key: "calls", label: "Calls", metric: "calls" },
   { key: "emails", label: "Emails", metric: "emails" },
@@ -75,7 +75,7 @@ export default function ReportsPage() {
   return (
     <>
       <div className="page-heading">
-        <div><div className="eyebrow">{teamWide ? "TEAM PERFORMANCE" : "YOUR PERFORMANCE"}</div><h1>Analytics</h1><p>{report ? `${formatDate(report.range.startYmd)} to ${formatDate(report.range.endExclusiveYmd === report.range.startYmd ? report.range.startYmd : addDays(report.range.endExclusiveYmd, -1))}` : "Activity, leads, conversions, and target progress."}</p></div>
+        <div><div className="eyebrow">{teamWide ? "TEAM PERFORMANCE" : "YOUR PERFORMANCE"}</div><h1>Insights</h1><p>{report ? `${formatDate(report.range.startYmd)} to ${formatDate(report.range.endExclusiveYmd === report.range.startYmd ? report.range.startYmd : addDays(report.range.endExclusiveYmd, -1))}` : "Activity, deals, conversions, and target progress."}</p></div>
         <div className="heading-actions">
           <a className={`button button-outline ${report ? "" : "is-disabled"}`} href={report ? reportExportUrl("xlsx", period, teamWide ? userId : user.id, filters, custom) : undefined} download><Download size={16} /> Export Excel</a>
           <a className={`button button-outline ${report ? "" : "is-disabled"}`} href={report ? reportExportUrl("pdf", period, teamWide ? userId : user.id, filters, custom) : undefined} download><Download size={16} /> Export PDF</a>
@@ -121,7 +121,7 @@ export default function ReportsPage() {
       {report && (
         <>
           <div className="opportunity-stats">
-            <Stat label="Leads created" value={totals.leads} icon={<UsersRound size={17} />} />
+            <Stat label="Deals created" value={totals.leads} icon={<UsersRound size={17} />} />
             <Stat label="Calls made" value={totals.calls} icon={<Phone size={17} />} />
             <Stat label="Emails sent" value={totals.emails} icon={<Mail size={17} />} />
             <Stat label="Road visits" value={totals.visits} icon={<MapPin size={17} />} />
@@ -177,12 +177,12 @@ export default function ReportsPage() {
           {drill.data?.leads && (
             <div className="timeline-list">
               {drill.data.leads.map((lead) => <article className="timeline-entry" key={lead.id}><div><button className="link-button" onClick={() => openLead(lead.id)}><strong>{lead.clientName}</strong></button><small>{lead.status} · created {formatDateTime(lead.createdAt)}</small></div></article>)}
-              {!drill.data.leads.length && <EmptyState title="No leads created in this period" />}
+              {!drill.data.leads.length && <EmptyState title="No deals created in this period" />}
             </div>
           )}
           {drill.data?.tasks && (
             <div className="timeline-list">
-              {drill.data.tasks.map((task) => <article className="timeline-entry" key={task.id}><div><strong>{task.title}</strong><small>{task.status} · {task.leadName ?? "No lead"} · due {task.dueAt ? formatDateTime(task.dueAt) : "—"}</small></div></article>)}
+              {drill.data.tasks.map((task) => <article className="timeline-entry" key={task.id}><div><strong>{task.title}</strong><small>{task.status} · {task.leadName ?? "No deal"} · due {task.dueAt ? formatDateTime(task.dueAt) : "—"}</small></div></article>)}
               {!drill.data.tasks.length && <EmptyState title="No tasks in this period" />}
             </div>
           )}

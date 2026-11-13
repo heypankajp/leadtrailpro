@@ -184,7 +184,7 @@ export default function RichTextArea({ value, onChange, directory, attachments =
         <button type="button" aria-label="Link" title="Link ([text](https://…))" onClick={() => wrap("[", "](https://)", "link text")}><Link2 size={13} /></button>
         {directory && <button type="button" aria-label="Mention someone" title="Mention (@name, @all, @admin, @recruiter, @salesmanager)" onClick={startMention}><AtSign size={13} /></button>}
         {attachments.length > 0 && onAttachmentsChange && (
-          <button type="button" aria-label="Reference a file" title="Reference a file from this lead" aria-pressed={showFiles} onClick={() => setShowFiles((current) => !current)}>
+          <button type="button" aria-label="Reference a file" title="Reference a file from this deal" aria-pressed={showFiles} onClick={() => setShowFiles((current) => !current)}>
             <Paperclip size={13} />{selectedAttachmentIds.length ? <span className="toolbar-count">{selectedAttachmentIds.length}</span> : null}
           </button>
         )}

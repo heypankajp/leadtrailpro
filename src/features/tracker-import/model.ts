@@ -94,8 +94,8 @@ export function parseTrackerImportOptions(form: FormData): TrackerImportOptions 
 
 /** The counts an administrator looks at first, in a fixed order; the rest of `counts` follows as it comes. */
 export const headlineCounts = [
-  "rows read from", "rows unchanged since the previous import", "rows not seen before (new or edited)", "leads created (new companies)", "leads updated",
-  "companies with no Sales Manager placed in the opportunity pool", "timeline entries added (new rows)", "timeline entries updated (edited rows)", "rows removed from the sheet (timeline entries kept)", "rows rejected",
+  "rows read from", "rows unchanged since the previous import", "rows not seen before (new or edited)", "deals created (new companies)", "deals updated",
+  "companies with no Sales Manager placed in the leads inbox", "timeline entries added (new rows)", "timeline entries updated (edited rows)", "rows removed from the sheet (timeline entries kept)", "rows rejected",
 ];
 
 export function orderedCounts(counts: Record<string, number>): [string, number][] {

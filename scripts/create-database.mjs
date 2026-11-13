@@ -1,4 +1,5 @@
 import { Client } from "pg";
+import { syncContactsFromLeads } from "./lib/contacts-sync.mjs";
 
 /**
  * Creates or upgrades the leadtrailpro schema on PostgreSQL (14 or newer).
@@ -905,6 +906,127 @@ const migrations = [
       await addColumnIfMissing(client, "leads", "todo_list_id", "INTEGER NULL REFERENCES list_values(id) ON DELETE SET NULL");
       await addColumnIfMissing(client, "leads", "todo_since", "TIMESTAMP(0) NULL");
       await client.query("CREATE INDEX IF NOT EXISTS idx_leads_todo ON leads (todo_list_id) WHERE todo_list_id IS NOT NULL");
+    },
+  },
+  {
+    version: 22,
+    name: "Pipedrive naming (SPEC §10.13): the records called leads are now called deals, so the two seeded values that carry the old word are renamed, unless an administrator already renamed them",
+    async run(client) {
+      // Status "Lost Lead" becomes "Lost"; the inbox reason "Existing lead" becomes "Existing deal". Codes stay as they are.
+      const renames = [["status", "lost", "Lost Lead", "Lost"], ["opportunity_reason", "existing_lead", "Existing lead", "Existing deal"]];
+      for (const [listKey, code, from, to] of renames) {
+        await client.query(
+          "UPDATE list_values SET value = $4 WHERE list_key = $1 AND code = $2 AND value = $3 AND NOT EXISTS (SELECT 1 FROM list_values other WHERE other.list_key = $1 AND LOWER(other.value) = LOWER($4))",
+          [listKey, code, from, to],
+        );
+      }
+    },
+  },
+  {
+    version: 23,
+    name: "Contacts as records (SPEC §10.14): organizations and persons, every deal linked to its organization and contact person, filled from the deals that exist",
+    async run(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS organizations (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(200) NOT NULL,
+          name_key VARCHAR(200) NOT NULL,
+          website VARCHAR(2048) NOT NULL DEFAULT '',
+          address VARCHAR(500) NOT NULL DEFAULT '',
+          city_id INTEGER NULL REFERENCES list_values(id) ON DELETE SET NULL,
+          industry VARCHAR(120) NOT NULL DEFAULT '',
+          company_size_id INTEGER NULL REFERENCES list_values(id) ON DELETE SET NULL,
+          owner_id INTEGER NOT NULL REFERENCES users(id),
+          created_by INTEGER NOT NULL REFERENCES users(id),
+          created_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW},
+          updated_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW},
+          CONSTRAINT uq_organizations_name UNIQUE (name_key)
+        )
+      `);
+      await stampUpdatedAt(client, "organizations");
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS persons (
+          id SERIAL PRIMARY KEY,
+          organization_id INTEGER NULL REFERENCES organizations(id) ON DELETE SET NULL,
+          name VARCHAR(160) NOT NULL,
+          name_key VARCHAR(160) NOT NULL,
+          emails JSONB NOT NULL DEFAULT '[]',
+          phone VARCHAR(40) NOT NULL DEFAULT '',
+          alt_phone VARCHAR(40) NOT NULL DEFAULT '',
+          remark VARCHAR(500) NOT NULL DEFAULT '',
+          owner_id INTEGER NOT NULL REFERENCES users(id),
+          created_by INTEGER NOT NULL REFERENCES users(id),
+          created_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW},
+          updated_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW}
+        )
+      `);
+      await stampUpdatedAt(client, "persons");
+      // The same name twice inside one organization is one person; people without an organization may share a name.
+      await client.query("CREATE UNIQUE INDEX IF NOT EXISTS uq_persons_org_name ON persons (organization_id, name_key) WHERE organization_id IS NOT NULL");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_persons_name ON persons (name_key)");
+      await addColumnIfMissing(client, "leads", "organization_id", "INTEGER NULL REFERENCES organizations(id) ON DELETE SET NULL");
+      await addColumnIfMissing(client, "leads", "person_id", "INTEGER NULL REFERENCES persons(id) ON DELETE SET NULL");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_organization ON leads (organization_id)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_person ON leads (person_id)");
+      // One organization per client name and one person per contact name at that client, from the deals that exist.
+      let index = 0;
+      await syncContactsFromLeads((sql, params = []) => { index = 0; return client.query(sql.replace(/\?/g, () => "$" + (++index)), params); });
+    },
+  },
+  {
+    version: 24,
+    name: "Deal value and expected close date (PD-11, SPEC §10.15): two optional fields on a deal",
+    async run(client) {
+      await addColumnIfMissing(client, "leads", "deal_value", "NUMERIC(12, 2) NULL CHECK (deal_value IS NULL OR deal_value >= 0)");
+      await addColumnIfMissing(client, "leads", "expected_close_date", "DATE NULL");
+    },
+  },
+  {
+    version: 25,
+    name: "Notes and calls on a contact, and the earlier names of an organization (SPEC §10.16): contact_activities, organizations.aliases",
+    async run(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS contact_activities (
+          id SERIAL PRIMARY KEY,
+          organization_id INTEGER NULL REFERENCES organizations(id) ON DELETE CASCADE,
+          person_id INTEGER NULL REFERENCES persons(id) ON DELETE CASCADE,
+          user_id INTEGER NOT NULL REFERENCES users(id),
+          activity_type VARCHAR(20) NOT NULL CHECK (activity_type IN ('note', 'call', 'email', 'visit')),
+          summary VARCHAR(500) NOT NULL DEFAULT '',
+          body TEXT NULL,
+          occurred_at TIMESTAMP(0) NOT NULL,
+          created_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW},
+          CONSTRAINT ck_contact_activities_one_contact CHECK ((organization_id IS NOT NULL) <> (person_id IS NOT NULL))
+        )
+      `);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_contact_activities_organization ON contact_activities (organization_id, occurred_at)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_contact_activities_person ON contact_activities (person_id, occurred_at)");
+      // Names an organization had before a rename or a merge: the tracker import still finds its deal under them.
+      await addColumnIfMissing(client, "organizations", "aliases", "JSONB NOT NULL DEFAULT '[]'");
+    },
+  },
+  {
+    version: 26,
+    name: "Several pipelines (PD-09, SPEC §10.18): the pipelines table with the default Sales pipeline, and the pipeline each stage belongs to",
+    async run(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS pipelines (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(80) NOT NULL,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          is_default BOOLEAN NOT NULL DEFAULT FALSE,
+          created_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW},
+          CONSTRAINT uq_pipelines_name UNIQUE (name)
+        )
+      `);
+      await client.query("INSERT INTO pipelines (name, sort_order, is_default) SELECT 'Sales pipeline', 1, TRUE WHERE NOT EXISTS (SELECT 1 FROM pipelines WHERE is_default)");
+      await addColumnIfMissing(client, "list_values", "pipeline_id", "INTEGER NULL REFERENCES pipelines(id)");
+      // Every stage that exists belongs to the default pipeline.
+      await client.query("UPDATE list_values SET pipeline_id = (SELECT id FROM pipelines WHERE is_default ORDER BY id LIMIT 1) WHERE list_key = 'stage' AND pipeline_id IS NULL");
+      // A stage name is unique inside its pipeline, so two pipelines may both have a "Qualified".
+      await client.query("ALTER TABLE list_values DROP CONSTRAINT IF EXISTS uq_list_values_value");
+      await client.query("CREATE UNIQUE INDEX IF NOT EXISTS uq_list_values_value ON list_values (list_key, COALESCE(pipeline_id, 0), value)");
     },
   },
 ];

@@ -44,7 +44,7 @@ async function dailyDigest(user: UserAccount, today: string): Promise<{ title: s
     `Needs attention (${dashboard.inactiveLeads.length})${dashboard.inactiveLeads.length ? ":\n" + list(dashboard.inactiveLeads.map((lead) => `${lead.clientName}, quiet for more than ${dashboard.inactiveLimits[lead.id] ?? dashboard.inactivityDays} days`)) : ""}`,
     `No next step (${dashboard.noNextStepCount})${dashboard.noNextStep.length ? ":\n" + list(dashboard.noNextStep.map((lead) => `${lead.clientName} (${lead.statusLabel}, ${lead.stage ?? "no stage"}, last activity ${lead.lastActivityAt.slice(0, 10)})`)) : ""}`,
     `Client replies waiting (${dashboard.clientReplies.length})${dashboard.clientReplies.length ? ":\n" + list(dashboard.clientReplies.map((lead) => `${lead.clientName}, wrote ${(lead.lastClientEmailAt ?? "").slice(0, 16).replace("T", " ")} UTC`)) : ""}`,
-    row ? `Yesterday: ${row.calls} calls, ${row.emails} emails, ${row.visits} visits, ${row.leadsCreated} leads created, ${row.conversions} conversions.` : "",
+    row ? `Yesterday: ${row.calls} calls, ${row.emails} emails, ${row.visits} visits, ${row.leadsCreated} deals created, ${row.conversions} conversions.` : "",
     appLink("home") ? `Open your Action Center: ${appLink("home")}` : "",
   ].filter(Boolean);
   return { title, text: sections.join("\n\n") };
@@ -55,18 +55,18 @@ async function weeklyDigest(user: UserAccount, today: string): Promise<{ title: 
   const row = own.rows[0];
   const dashboard = await buildDashboard(user, "mine");
   const title = row
-    ? `Weekly digest: ${row.calls} calls, ${row.emails} emails, ${row.visits} visits, ${row.leadsCreated} leads last week`
+    ? `Weekly digest: ${row.calls} calls, ${row.emails} emails, ${row.visits} visits, ${row.leadsCreated} deals last week`
     : "Weekly digest";
   const sections = [
     `Hi ${user.firstName}, here is your LeadTrailPro week (week of ${startOfWeekYmd(today)}).`,
-    row ? `Last week (${own.range.startYmd} to ${own.range.endExclusiveYmd}, exclusive): ${row.calls} calls, ${row.emails} emails, ${row.visits} visits, ${row.notes} notes, ${row.leadsCreated} leads created, ${row.leadsUpdated} leads updated, ${row.conversions} conversions, ${row.tasksCompleted} tasks completed${row.targetPercent === null ? "" : `, ${row.targetPercent}% of target`}.` : "No activity was recorded for you last week.",
-    `This week: ${dashboard.followUps.overdue.length} overdue follow-ups, ${dashboard.followUps.today.length} due today, ${dashboard.openTasks.length} open tasks, ${dashboard.inactiveLeads.length} leads needing attention, ${dashboard.noNextStepCount} with no next step.`,
-    dashboard.targets.template ? `Targets (${dashboard.targets.template.name}): ${dashboard.targets.leads.achieved}/${dashboard.targets.leads.target} leads, ${dashboard.targets.visits.achieved}/${dashboard.targets.visits.target} visits, ${dashboard.targets.conversions.achieved}/${dashboard.targets.conversions.target} conversions.` : "",
+    row ? `Last week (${own.range.startYmd} to ${own.range.endExclusiveYmd}, exclusive): ${row.calls} calls, ${row.emails} emails, ${row.visits} visits, ${row.notes} notes, ${row.leadsCreated} deals created, ${row.leadsUpdated} deals updated, ${row.conversions} conversions, ${row.tasksCompleted} tasks completed${row.targetPercent === null ? "" : `, ${row.targetPercent}% of target`}.` : "No activity was recorded for you last week.",
+    `This week: ${dashboard.followUps.overdue.length} overdue follow-ups, ${dashboard.followUps.today.length} due today, ${dashboard.openTasks.length} open tasks, ${dashboard.inactiveLeads.length} deals needing attention, ${dashboard.noNextStepCount} with no next step.`,
+    dashboard.targets.template ? `Targets (${dashboard.targets.template.name}): ${dashboard.targets.leads.achieved}/${dashboard.targets.leads.target} deals, ${dashboard.targets.visits.achieved}/${dashboard.targets.visits.target} visits, ${dashboard.targets.conversions.achieved}/${dashboard.targets.conversions.target} conversions.` : "",
   ].filter(Boolean);
   if (hasPrivilege(user, "view_team_reports")) {
     const team = await performanceReport("last_week", user, null);
     const totals = team.rows.reduce((sum, item) => ({ calls: sum.calls + item.calls, emails: sum.emails + item.emails, visits: sum.visits + item.visits, leads: sum.leads + item.leadsCreated, conversions: sum.conversions + item.conversions }), { calls: 0, emails: 0, visits: 0, leads: 0, conversions: 0 });
-    sections.push(`Team last week (${team.rows.length} people): ${totals.calls} calls, ${totals.emails} emails, ${totals.visits} visits, ${totals.leads} leads, ${totals.conversions} conversions.${team.rows.length ? "\n" + list(team.rows.map((item) => `${item.name}: ${item.leadsCreated} leads, ${item.calls} calls, ${item.visits} visits, ${item.conversions} conversions${item.targetPercent === null ? "" : `, ${item.targetPercent}% of target`}`), 12) : ""}`);
+    sections.push(`Team last week (${team.rows.length} people): ${totals.calls} calls, ${totals.emails} emails, ${totals.visits} visits, ${totals.leads} deals, ${totals.conversions} conversions.${team.rows.length ? "\n" + list(team.rows.map((item) => `${item.name}: ${item.leadsCreated} deals, ${item.calls} calls, ${item.visits} visits, ${item.conversions} conversions${item.targetPercent === null ? "" : `, ${item.targetPercent}% of target`}`), 12) : ""}`);
   }
   if (appLink("reports")) sections.push(`Open the reports: ${appLink("reports")}`);
   return { title, text: sections.join("\n\n") };

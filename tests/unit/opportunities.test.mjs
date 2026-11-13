@@ -8,7 +8,7 @@ import { jsearchDatePosted } from "../../src/features/jobs/sources/jsearch.ts";
 
 const listing = (title, url, location = "Mississauga, ON") => ({ title, source: "Test", location, postedAt: null, employmentType: null, url });
 
-describe("Opportunity pool rules", () => {
+describe("Leads inbox rules", () => {
   test("schedule settings: defaults, validation, days deduped and sorted", () => {
     assert.deepEqual(normalizeOpportunitySettings(undefined), { settings: defaultOpportunitySettings, error: null });
     assert.deepEqual(normalizeOpportunitySettings({ days: [5, 1, 5], time: "07:00", maxListings: 300, enabled: false, notify: false, sources: ["hasdata", "hasdata"] }).settings, { enabled: false, days: [1, 5], time: "07:00", maxListings: 300, notify: false, sources: ["hasdata"], defaultTitles: defaultOpportunitySettings.defaultTitles, defaultLocation: "Ontario", postedWithinDays: 30 });
@@ -78,7 +78,7 @@ describe("Opportunity pool rules", () => {
     ]);
   });
 
-  test("decision: a live lead or client takes the listings; closed, archived, or absent leads leave the company in the pool", () => {
+  test("decision: a live deal or client takes the listings; closed, archived, or absent deals leave the company in the pool", () => {
     const live = { id: 7, recordState: "active", statusCode: "warm" };
     const client = { id: 8, recordState: "active", statusCode: "client" };
     const lost = { id: 9, recordState: "active", statusCode: "lost" };

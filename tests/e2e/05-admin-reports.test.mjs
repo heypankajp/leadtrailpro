@@ -33,9 +33,9 @@ describe("Administration and reports", () => {
     const select = await page.wait(By.css('select[aria-label="Stage for First Call"]'));
     assert.equal(await page.selectedText(select), "Contact Made");
     await page.setValue(select, "Qualified");
-    await page.toast('"First Call" now lands leads in Qualified');
+    await page.toast('"First Call" now lands deals in Qualified');
     await page.setValue(await page.wait(By.css('select[aria-label="Stage for First Call"]')), "Contact Made");
-    await page.toast('"First Call" now lands leads in Contact Made');
+    await page.toast('"First Call" now lands deals in Contact Made');
     await page.clickButton("Recompute stages from BD actions", { global: true });
     await page.dialogTitle("Recompute stages from BD actions");
     await page.clickButton("Recompute stages");
@@ -48,11 +48,11 @@ describe("Administration and reports", () => {
     await page.fill("Admin is shown as", "Owner", { global: true });
     await page.clickButton("Save settings", { global: true });
     await page.toast("Settings saved");
-    await page.waitText(By.css(".workspace-switcher strong"), "Owner");
+    await page.waitText(By.css(".profile-button small"), "Owner");
     await page.fill("Admin is shown as", "Admin", { global: true });
     await page.clickButton("Save settings", { global: true });
     await page.toast("Settings saved");
-    await page.waitText(By.css(".workspace-switcher strong"), "Admin");
+    await page.waitText(By.css(".profile-button small"), "Admin");
   });
 
   uiTest("adds a needs-attention rule for a status next to the seeded stage rules", async () => {
@@ -176,15 +176,15 @@ describe("Administration and reports", () => {
     const name = `Ramp-up ${runId}`;
     await page.fill("Template name", name);
     await page.fill("Stage", "Training");
-    await page.fill("Leads per day", "3");
+    await page.fill("Deals per day", "3");
     await page.clickButton("Save template");
     await page.toast("Template created");
     await page.wait(By.xpath(`//table//strong[normalize-space()=${xq(name)}]`));
   });
 
   uiTest("reports open a drill-down for a metric", async () => {
-    await page.nav("Analytics");
-    await page.heading("Analytics");
+    await page.nav("Insights");
+    await page.heading("Insights");
     const firstRow = await page.wait(By.xpath('(//table[contains(@class,"report-table")]//tbody/tr)[1]'));
     const name = await firstRow.findElement(By.css("strong")).getText();
     const numbers = await firstRow.findElements(By.css("button.link-button.number"));
@@ -194,9 +194,9 @@ describe("Administration and reports", () => {
     await page.closeDialog();
   });
 
-  uiTest("analytics sections render the pipeline, stalled leads, and the leaderboard", async () => {
+  uiTest("analytics sections render the pipeline, stalled deals, and the leaderboard", async () => {
     await page.wait(By.xpath("//h2[normalize-space()='Pipeline now']"));
-    await page.wait(By.xpath("//h2[normalize-space()='Stalled leads']"));
+    await page.wait(By.xpath("//h2[normalize-space()='Stalled deals']"));
     await page.wait(By.xpath("//h2[normalize-space()='Leaderboard']"));
     await page.wait(By.xpath("//section[contains(@class,'team-board')]//table//th[normalize-space()='Client replies waiting']"));
     await page.click(By.xpath("//div[contains(@class,'report-periods')]//button[normalize-space()='Last 30 days']"), { global: true });
@@ -224,7 +224,7 @@ describe("Administration and reports", () => {
   uiTest("action center metrics link to the reports page", async () => {
     await page.nav("Action center");
     await page.click(By.css('button[aria-label="View Calls made report"]'), { global: true });
-    await page.heading("Analytics");
+    await page.heading("Insights");
   });
 
   uiTest("creates an API token, sees it once, and revokes it", async () => {

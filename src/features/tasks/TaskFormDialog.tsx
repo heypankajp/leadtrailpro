@@ -24,7 +24,7 @@ export default function TaskFormDialog({ task, leadId, leadName, defaultAssignee
   const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? "normal");
   const [checklist, setChecklist] = useState<ChecklistItem[]>(task?.checklist ?? []);
   const [newItem, setNewItem] = useState("");
-  const [lead, setLead] = useState<{ id: number; name: string } | null>(task?.leadId ? { id: task.leadId, name: task.leadName ?? `Lead ${task.leadId}` } : leadId ? { id: leadId, name: leadName ?? `Lead ${leadId}` } : null);
+  const [lead, setLead] = useState<{ id: number; name: string } | null>(task?.leadId ? { id: task.leadId, name: task.leadName ?? `Deal ${task.leadId}` } : leadId ? { id: leadId, name: leadName ?? `Deal ${leadId}` } : null);
   const [leadSearch, setLeadSearch] = useState("");
   const [leadResults, setLeadResults] = useState<LeadSummary[]>([]);
   const [error, setError] = useState("");
@@ -63,7 +63,7 @@ export default function TaskFormDialog({ task, leadId, leadName, defaultAssignee
   };
 
   return (
-    <Dialog title={task ? "Edit task" : "Create task"} eyebrow={lead ? `LEAD · ${lead.name.toUpperCase()}` : "TASKS & REMINDERS"} onClose={onClose}>
+    <Dialog title={task ? "Edit task" : "Create task"} eyebrow={lead ? `DEAL · ${lead.name.toUpperCase()}` : "TASKS & REMINDERS"} onClose={onClose}>
       <form className="lead-form" onSubmit={submit}>
         <Field label="Title" required wide><input value={title} onChange={(event) => setTitle(event.target.value)} required maxLength={200} placeholder="Follow up on the staffing proposal" autoFocus /></Field>
         <Field label="Assignee" required>
@@ -72,12 +72,12 @@ export default function TaskFormDialog({ task, leadId, leadName, defaultAssignee
         <Field label="Priority"><select value={priority} onChange={(event) => setPriority(event.target.value as TaskPriority)}>{taskPriorities.map((option) => <option key={option} value={option}>{option[0].toUpperCase()}{option.slice(1)}</option>)}</select></Field>
         <NaturalDateField onResolve={(result, time) => setDueAt(`${result.date}T${time}`)} />
         <Field label="Due date and time" hint="Confirm or adjust the date before saving."><input type="datetime-local" value={dueAt} onChange={(event) => setDueAt(event.target.value)} /></Field>
-        <Field label="Lead" hint={lead ? undefined : "Optional. Search by client name."}>
+        <Field label="Deal" hint={lead ? undefined : "Optional. Search by client name."}>
           {lead ? (
-            <span className="chip-value">{lead.name}{!leadId && <button type="button" aria-label="Remove lead" onClick={() => setLead(null)}><X size={12} /></button>}</span>
+            <span className="chip-value">{lead.name}{!leadId && <button type="button" aria-label="Remove deal" onClick={() => setLead(null)}><X size={12} /></button>}</span>
           ) : (
             <span className="lead-picker">
-              <span className="search-field"><Search size={14} /><input value={leadSearch} onChange={(event) => setLeadSearch(event.target.value)} placeholder="Search leads..." /></span>
+              <span className="search-field"><Search size={14} /><input value={leadSearch} onChange={(event) => setLeadSearch(event.target.value)} placeholder="Search deals..." /></span>
               {visibleResults.length > 0 && (
                 <span className="lead-picker-results">
                   {visibleResults.map((result) => <button type="button" key={result.id} onClick={() => { setLead({ id: result.id, name: result.clientName }); setLeadSearch(""); setLeadResults([]); }}>{result.clientName} <small>{result.ownerName}</small></button>)}

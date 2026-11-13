@@ -152,12 +152,12 @@ function TerminateDialog({ user, onClose, onDone }: { user: UserAccount; onClose
   const [busy, setBusy] = useState(false);
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!successor) { setError("Choose who receives the leads."); return; }
+    if (!successor) { setError("Choose who receives the deals."); return; }
     setBusy(true);
     setError("");
     try {
       const result = await terminateUser(user.id, Number(successor), reason.trim());
-      onDone(`${user.name} terminated. ${result.leadsReassigned} lead(s) and ${result.tasksReassigned} open task(s) moved to ${successors.find((person) => person.id === Number(successor))?.name ?? "the successor"}.`);
+      onDone(`${user.name} terminated. ${result.leadsReassigned} deal(s) and ${result.tasksReassigned} open task(s) moved to ${successors.find((person) => person.id === Number(successor))?.name ?? "the successor"}.`);
     } catch (caught) {
       setError(errorMessage(caught));
       setBusy(false);
@@ -166,8 +166,8 @@ function TerminateDialog({ user, onClose, onDone }: { user: UserAccount; onClose
   return (
     <Dialog title={`Terminate ${user.name}`} eyebrow="ACCOUNT TERMINATION" onClose={onClose} size="narrow">
       <form className="stack-form" onSubmit={submit}>
-        <p className="dialog-description">The account loses sign-in access immediately and stays in audit history. Every lead and open task they own moves to the person you choose.</p>
-        <Field label="Reassign leads and tasks to" required>
+        <p className="dialog-description">The account loses sign-in access immediately and stays in audit history. Every deal and open task they own moves to the person you choose.</p>
+        <Field label="Reassign deals and tasks to" required>
           <select value={successor} onChange={(event) => setSuccessor(event.target.value)}>{successors.map((person) => <option key={person.id} value={person.id}>{person.name}{person.id === me.id ? " (me)" : ""}</option>)}</select>
         </Field>
         <Field label="Reason (optional)"><textarea rows={3} value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} /></Field>

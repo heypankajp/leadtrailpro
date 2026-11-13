@@ -13,7 +13,7 @@ import type { UserAccount } from "@/features/users/model";
 import { assignTargetTemplate, createTargetTemplate, fetchTargetTemplates, updateTargetTemplate } from "./client";
 
 const numberFields: { key: keyof Omit<TargetTemplateInput, "name" | "stage">; label: string }[] = [
-  { key: "dailyLeads", label: "Leads per day" }, { key: "weeklyLeads", label: "Leads per week" }, { key: "dailyVisits", label: "Road visits per day" },
+  { key: "dailyLeads", label: "Deals per day" }, { key: "weeklyLeads", label: "Deals per week" }, { key: "dailyVisits", label: "Road visits per day" },
   { key: "weeklyVisits", label: "Road visits per week" }, { key: "monthlyConversions", label: "Conversions per month" },
 ];
 
@@ -47,7 +47,7 @@ export default function TargetsPanel() {
   return (
     <>
       <div className="page-heading">
-        <div><div className="eyebrow">ADMINISTRATION</div><h1>Targets & templates</h1><p>Daily and weekly lead targets, minimum road visits, and monthly conversions per productivity stage.</p></div>
+        <div><div className="eyebrow">ADMINISTRATION</div><h1>Targets & templates</h1><p>Daily and weekly deal targets, minimum road visits, and monthly conversions per productivity stage.</p></div>
         <button className="button button-primary" onClick={() => setDialog({})}><Plus size={17} /> New template</button>
       </div>
       <ErrorText message={error} />

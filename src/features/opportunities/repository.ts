@@ -197,8 +197,8 @@ export async function countNewOpportunities(db: Queryable = getDatabasePool()): 
 export async function markNotRelevant(id: number, reasonId: number, note: string, actor: UserAccount): Promise<Opportunity> {
   return withTransaction(async (connection) => {
     const before = await getOpportunity(id, connection);
-    if (!before) throw new HttpError(404, "Opportunity not found.");
-    if (before.status !== "new") throw new HttpError(409, `${before.companyName} is no longer in the pool (${before.status === "converted" ? "already assigned" : before.status === "attached" ? "attached to an existing lead" : "already marked not relevant"}).`);
+    if (!before) throw new HttpError(404, "Lead not found.");
+    if (before.status !== "new") throw new HttpError(409, `${before.companyName} is no longer in the inbox (${before.status === "converted" ? "already assigned" : before.status === "attached" ? "attached to an existing deal" : "already marked not relevant"}).`);
     await assertListValue(connection, "opportunity_reason", reasonId, { required: true, label: "Reason" });
     const reason = (await getListValue(reasonId, connection))!;
     const scope = reasonScopeFor(reason.code);
@@ -216,18 +216,18 @@ export async function markNotRelevant(id: number, reasonId: number, note: string
   });
 }
 
-/** Puts a not-relevant card back in the pool. */
+/** Puts a not-relevant card back in the inbox. */
 export async function restoreOpportunity(id: number, actor: UserAccount): Promise<Opportunity> {
   return withTransaction(async (connection) => {
     const before = await getOpportunity(id, connection);
-    if (!before) throw new HttpError(404, "Opportunity not found.");
+    if (!before) throw new HttpError(404, "Lead not found.");
     if (before.status !== "not_relevant") throw new HttpError(409, `${before.companyName} is not marked not relevant.`);
     const result = await connection.query(
       "UPDATE opportunities SET status = 'new', reason_id = NULL, reason_scope = NULL, reason_note = '', decided_by = NULL, decided_at = NULL, revived = TRUE WHERE id = ? AND status = 'not_relevant'", [id],
     );
     if (!affectedRows(result)) throw new HttpError(409, "The card changed meanwhile; reload the list.");
     const after = (await getOpportunity(id, connection))!;
-    await recordAudit(connection, { actorId: actor.id, action: "opportunity.restored", entityType: "opportunity", entityId: id, before: { status: "not_relevant", reason: before.reason }, after: { status: "new" }, details: `${actor.name} put ${after.companyName} back in the pool` });
+    await recordAudit(connection, { actorId: actor.id, action: "opportunity.restored", entityType: "opportunity", entityId: id, before: { status: "not_relevant", reason: before.reason }, after: { status: "new" }, details: `${actor.name} put ${after.companyName} back in the inbox` });
     return after;
   });
 }
@@ -239,12 +239,12 @@ export async function restoreOpportunity(id: number, actor: UserAccount): Promis
  */
 export async function reopenLeadFromOpportunity(id: number, ownerId: number, actor: UserAccount): Promise<LeadSummary> {
   const card = await getOpportunity(id);
-  if (!card) throw new HttpError(404, "Opportunity not found.");
-  if (card.status !== "new") throw new HttpError(409, `${card.companyName} is no longer in the pool.`);
-  if (!card.history) throw new HttpError(400, "This company has no earlier lead to reopen; assign it as a new lead.");
+  if (!card) throw new HttpError(404, "Lead not found.");
+  if (card.status !== "new") throw new HttpError(409, `${card.companyName} is no longer in the inbox.`);
+  if (!card.history) throw new HttpError(400, "This company has no earlier deal to reopen; assign it as a new deal.");
   const lead = await getLead(card.history.id);
-  if (!lead) throw new HttpError(404, "The earlier lead no longer exists.");
-  const reason = "Reopened from the opportunity pool";
+  if (!lead) throw new HttpError(404, "The earlier deal no longer exists.");
+  const reason = "Reopened from the leads inbox";
   if (lead.recordState === "archived") await setLeadState(lead.id, "active", reason, actor);
   if (closedStatusCodes.includes(lead.statusCode)) {
     const { rows } = await getDatabasePool().query("SELECT id FROM list_values WHERE list_key = 'status' AND code = 'cold' LIMIT 1");
