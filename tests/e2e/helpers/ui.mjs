@@ -165,7 +165,7 @@ export class Page {
     return this.click(By.xpath(`.//button[normalize-space()=${xq(text)}]`), options);
   }
 
-  /** The input/select/textarea under a visible label ("Client name", "Email address"). */
+  /** The input/select/textarea under a visible label ("Organization", "Email address"). */
   async control(label, global = false) {
     const root = await this.scope(global);
     const t = xq(label);
@@ -231,12 +231,66 @@ export class Page {
    * or "queued" (deals waiting for approval).
    */
   async deals(view = "board") {
-    await this.nav("Deals");
+    await this.nav("Pipeline");
     const label = { board: "Board", all: "List", mine: "List", archive: "Archive", queued: "Queued for approval" }[view];
     await this.click(`.view-switch button[aria-label="${label}"]`, { global: true });
     if (view === "board") { await this.wait(By.css(".pipeline-toolbar")); return; }
     if (view === "all" || view === "mine") await this.click(By.xpath(`.//div[@aria-label="Whose deals"]/button[normalize-space()=${xq(view === "all" ? "Everyone" : "My deals")}]`), { global: true });
     await this.heading({ all: "All deals", mine: "My deals", archive: "Archive", queued: "Queued deals" }[view]);
+  }
+
+  /**
+   * Saves the add-deal dialog. A new organization or contact is created only after the dialog's confirmation (PD-15),
+   * which is given here when it appears; a duplicate notice or an error is left for the caller to read.
+   */
+  async saveDeal() {
+    const dialog = await this.dialog();
+    await this.clickButton("Save deal");
+    const outcome = await this.driver.wait(async () => {
+      try {
+        if (!dialog || !(await dialog.isDisplayed())) return "closed";
+        const confirm = await dialog.findElements(By.xpath('.//button[normalize-space()="Create and add deal"]'));
+        if (confirm.length && (await confirm[0].isDisplayed())) return confirm[0];
+        const notices = await dialog.findElements(By.css('.duplicate-note, p[role="alert"]'));
+        return notices.length ? "notice" : null;
+      } catch {
+        return "closed";
+      }
+    }, DEFAULT_TIMEOUT, "Saving the deal neither closed the dialog nor asked for a confirmation");
+    if (typeof outcome !== "string") await outcome.click();
+  }
+
+  /**
+   * PD-22: opens a board card's actions menu. The ⇄ button only shows on hover (opacity 0 otherwise), which WebDriver
+   * counts as hidden, so it is pressed the way a keyboard user would reach it: a click on the element itself.
+   */
+  async openCardMenu(name) {
+    const button = await this.wait(By.css(`button[aria-label="Actions for ${name}"]`), { visible: false });
+    // The menu closes when the page scrolls, so the card is brought into view first and the click waits for that scroll to settle.
+    await this.driver.executeScript("arguments[0].scrollIntoView({ block: 'nearest' });", button);
+    await sleep(300);
+    await this.driver.executeScript("arguments[0].click();", button);
+    return this.wait(By.css(".card-menu"));
+  }
+
+  /** PD-22: moves a board card through its actions menu (the ⇄ button) to the named stage. */
+  async moveCard(name, stage) {
+    await this.openCardMenu(name);
+    await this.click(By.xpath(`//div[contains(@class,"card-menu")]//button[@role="menuitem" and normalize-space()=${xq(stage)}]`), { global: true });
+  }
+
+  /** The stage names a card's actions menu offers, in order; the menu is closed again. */
+  async cardStages(name) {
+    const menu = await this.openCardMenu(name);
+    const labels = await this.driver.executeScript(`
+      const items = [], menu = arguments[0];
+      for (const node of menu.children) {
+        if (node.classList.contains("card-menu-rule")) break;
+        if (node.getAttribute("role") === "menuitem") items.push(node.textContent.trim());
+      }
+      return items;`, menu);
+    await this.driver.actions().sendKeys(Key.ESCAPE).perform();
+    return labels;
   }
 
   /** The add-deal dialog, opened the way it opens from every page: the quick-add button in the top bar. */
@@ -264,8 +318,8 @@ export class Page {
 /** Opens the add-deal dialog from the quick-add button in the top bar, fills the form, and saves. Callers wait for the toast that follows. */
 export async function addLead(page, { name, executive = "", firstContactDate = "" }) {
   await page.openAddDeal();
-  await page.fill("Client name", name);
-  if (executive) await page.fill("Client executive", executive);
+  await page.fill("Organization", name);
+  if (executive) await page.fill("Contact", executive);
   if (firstContactDate) await page.fill("First contact date", firstContactDate);
-  await page.clickButton("Save deal");
+  await page.saveDeal();
 }

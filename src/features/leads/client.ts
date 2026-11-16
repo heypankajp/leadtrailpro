@@ -4,12 +4,15 @@ import type { AuditEntry } from "@/features/audit/model";
 import type { Task, TaskPriority } from "@/features/tasks/model";
 import type { LeadActivity, LeadInput, LeadPage, LeadRecordState, LeadSortKey, LeadSummary, LoggableActivityType } from "./model";
 import type { TodoCounts } from "./todo-model";
+import type { QuickFilterKey } from "./quick-filters";
 
 export type LeadQuery = Partial<{
   state: LeadRecordState; q: string; mine: boolean; statusCode: string; statusId: number; statusReasonId: number; leadTypeId: number; leadCategoryId: number;
   companySizeId: number; cityId: number; ownerId: number; clientResponseId: number; bdActionId: number; stageId: number; todoListId: number; todo: boolean;
   firstContactFrom: string; firstContactTo: string; followUpFrom: string; followUpTo: string; contractSignedFrom: string; contractSignedTo: string;
   sort: LeadSortKey; direction: "asc" | "desc"; page: number; pageSize: number;
+  /** PD-30: a ready-made or data cleanup filter. */
+  quick: QuickFilterKey;
 }>;
 
 export type LeadDetail = {
@@ -20,12 +23,15 @@ export type LeadDetail = {
   audit: AuditEntry[];
   /** Live messages on the lead (COLL-01), for the tab count. */
   messageCount: number;
+  /** PD-19: the email addresses of every contact of the deal's organization. */
+  organizationEmails: string[];
   permissions: { edit: boolean };
 };
 
 export const fetchLeads = (query: LeadQuery) => api<LeadPage>(`/api/leads${toQuery(query)}`);
 export const fetchLead = (id: number) => api<LeadDetail>(`/api/leads/${id}`);
-export const createLead = (input: LeadInput & { ownerId?: number | null; opportunityId?: number | null; organizationId?: number | null; personId?: number | null; allowSimilar?: boolean }) => api<{ lead: LeadSummary }>("/api/leads", { method: "POST", json: input });
+/** `createOrganization` / `createContact`: the user confirmed the new organization or contact the server asked about (PD-15, 409 `confirm_create`). */
+export const createLead = (input: LeadInput & { ownerId?: number | null; opportunityId?: number | null; organizationId?: number | null; personId?: number | null; allowSimilar?: boolean; createOrganization?: boolean; createContact?: boolean }) => api<{ lead: LeadSummary }>("/api/leads", { method: "POST", json: input });
 /** `task`: the stage's suggested task when the change moved the lead to a new stage and Settings → Pipeline creates it automatically (PIPE-09). */
 export const updateLead = (id: number, changes: Partial<LeadInput>) => api<{ lead: LeadSummary; task?: Task | null }>(`/api/leads/${id}`, { method: "PATCH", json: changes });
 export const transferLead = (id: number, ownerId: number, reason: string) => api<{ lead: LeadSummary }>(`/api/leads/${id}/transfer`, { method: "POST", json: { ownerId, reason } });

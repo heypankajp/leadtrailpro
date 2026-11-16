@@ -15,6 +15,8 @@ import { bulkLeads, fetchLeads, fetchTodoCounts, reviewLead, setLeadState, type 
 import { todoTabs, type TodoCounts, type TodoScope } from "./todo-model";
 import LeadTable from "./LeadTable";
 import { leadSortKeys, type LeadPage, type LeadSortKey, type LeadSummary } from "./model";
+import QuickFilterMenu from "./QuickFilterMenu";
+import { isQuickFilterKey, type QuickFilterKey } from "./quick-filters";
 
 export const leadListViews = ["leads", "todo", "all-leads", "cold", "warm", "hot", "client", "queued", "archive"] as const;
 export type LeadListView = (typeof leadListViews)[number];
@@ -38,11 +40,14 @@ const sortLabels: Record<LeadSortKey, string> = {
 type Filters = {
   q: string; statusId: string; statusReasonId: string; leadTypeId: string; leadCategoryId: string; companySizeId: string; cityId: string; ownerId: string; clientResponseId: string; bdActionId: string; stageId: string; todoListId: string;
   firstContactFrom: string; firstContactTo: string; followUpFrom: string; followUpTo: string; contractSignedFrom: string; contractSignedTo: string; sort: LeadSortKey; direction: "asc" | "desc";
+  /** PD-30: a ready-made or data cleanup filter. */
+  quick: QuickFilterKey | null;
 };
 
 const emptyFilters: Filters = {
   q: "", statusId: "", statusReasonId: "", leadTypeId: "", leadCategoryId: "", companySizeId: "", cityId: "", ownerId: "", clientResponseId: "", bdActionId: "", stageId: "", todoListId: "",
   firstContactFrom: "", firstContactTo: "", followUpFrom: "", followUpTo: "", contractSignedFrom: "", contractSignedTo: "", sort: "last_activity", direction: "desc",
+  quick: null,
 };
 
 /** A deal list. On the Deals page (`embedded`) the heading, the view switch and the "+ Deal" button come from DealsPage. */
@@ -54,7 +59,10 @@ export default function LeadListPage({ view, embedded = false }: { view: LeadLis
     const direction = route.query.get("direction");
     // The To Do page opens with the leads that have waited longest on top.
     const fallbackSort: LeadSortKey = view === "todo" ? "todo_since" : "last_activity";
-    return { ...emptyFilters, q: route.query.get("q") ?? "", sort: leadSortKeys.includes(sort as LeadSortKey) ? (sort as LeadSortKey) : fallbackSort, direction: direction === "asc" || (!direction && view === "todo") ? "asc" : "desc" };
+    // PD-28 / PD-30: the board's column menu and its Filter menu open the list with a stage, a status or a filter.
+    const numericParam = (key: string) => (/^\d+$/.test(route.query.get(key) ?? "") ? route.query.get(key)! : "");
+    const quick = route.query.get("quick");
+    return { ...emptyFilters, stageId: numericParam("stageId"), statusId: numericParam("statusId"), quick: isQuickFilterKey(quick) ? quick : null, q: route.query.get("q") ?? "", sort: leadSortKeys.includes(sort as LeadSortKey) ? (sort as LeadSortKey) : fallbackSort, direction: direction === "asc" || (!direction && view === "todo") ? "asc" : "desc" };
   });
   // TODO-04: the To Do page shows the person's own leads or everyone's, one list or all of them.
   const [todoScope, setTodoScope] = useState<TodoScope>("mine");
@@ -98,6 +106,7 @@ export default function LeadListPage({ view, embedded = false }: { view: LeadLis
       cityId: numeric(filters.cityId), ownerId: numeric(filters.ownerId), clientResponseId: numeric(filters.clientResponseId), bdActionId: numeric(filters.bdActionId), stageId: numeric(filters.stageId), ...(view === "todo" ? {} : { todoListId: numeric(filters.todoListId) }),
       firstContactFrom: filters.firstContactFrom || undefined, firstContactTo: filters.firstContactTo || undefined, followUpFrom: filters.followUpFrom || undefined, followUpTo: filters.followUpTo || undefined,
       contractSignedFrom: filters.contractSignedFrom || undefined, contractSignedTo: filters.contractSignedTo || undefined,
+      quick: filters.quick ?? undefined,
     };
   }, [view, page, filters, debouncedQ, todoScope, todoTab]);
 
@@ -110,7 +119,7 @@ export default function LeadListPage({ view, embedded = false }: { view: LeadLis
   // Changing the status filter resets the reason filter, which only applies to Lost Lead and Disqualified (LEAD-07).
   const update = (changes: Partial<Filters>) => { setFilters((current) => ({ ...current, ...(changes.statusId !== undefined ? { statusReasonId: "" } : {}), ...changes })); setPage(1); setSelected([]); };
   const reasonKey = reasonListFor(reference.listValues.status.find((item) => String(item.id) === filters.statusId)?.code);
-  const activeFilterCount = Object.entries(filters).filter(([key, value]) => !["q", "sort", "direction"].includes(key) && value).length;
+  const activeFilterCount = Object.entries(filters).filter(([key, value]) => !["q", "sort", "direction", "quick"].includes(key) && value).length;
   const statusViews = ["cold", "warm", "hot", "client"];
   const owners = reference.users.filter((user) => user.role !== "recruiter");
   const canSelect = view === "queued" ? false : can("archive_leads") || can("reassign_leads") || can("edit_leads");
@@ -193,12 +202,13 @@ export default function LeadListPage({ view, embedded = false }: { view: LeadLis
             <button className={`button button-outline button-small ${showFilters || activeFilterCount ? "is-active" : ""}`} onClick={() => setShowFilters((open) => !open)}>
               <Filter size={14} /> Filters{activeFilterCount ? ` (${activeFilterCount})` : ""}
             </button>
+            {(view === "leads" || view === "all-leads") && <QuickFilterMenu value={filters.quick} onChange={(quick) => update({ quick })} />}
           </div>
 
           {showFilters && (
             <div className="filters-panel">
               <div className="filter-grid">
-                {options(reference.listValues.lead_type, "Any deal type", filters.leadTypeId, "leadTypeId")}
+                {options(reference.listValues.lead_type, "Any deal source", filters.leadTypeId, "leadTypeId")}
                 {options(reference.listValues.lead_category, "Any category", filters.leadCategoryId, "leadCategoryId")}
                 {options(reference.listValues.company_size, "Any company size", filters.companySizeId, "companySizeId")}
                 {options(reference.listValues.city, "Any city", filters.cityId, "cityId")}

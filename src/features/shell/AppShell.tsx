@@ -37,13 +37,14 @@ import { fetchReference } from "./client";
 
 type NavItem = { id: string; label: string; icon: LucideIcon; privilege?: UserPrivilege; count?: "queued" | "tasks" | "leads" | "todo"; preview?: boolean; hideForRecruiter?: boolean };
 
-// The first group follows Pipedrive's menu (Deals, Leads, Contacts, Activities, Insights); our own tools come after it.
+// The first group follows Pipedrive's menu (Pipeline, Leads, Contacts, Activities, Insights); our own tools come after it.
+// PD-26: the entry that opens the deals is called "Pipeline"; the records stay "deals".
 const navigation: { title: string; items: NavItem[] }[] = [
   {
     title: "",
     items: [
       { id: "home", label: "Action center", icon: LayoutDashboard },
-      { id: "deals", label: "Deals", icon: CircleDollarSign, privilege: "view_leads", count: "queued" },
+      { id: "deals", label: "Pipeline", icon: CircleDollarSign, privilege: "view_leads", count: "queued" },
       { id: "leads", label: "Leads", icon: Radar, privilege: "view_leads", count: "leads", hideForRecruiter: true },
       { id: "contacts", label: "Contacts", icon: Contact, privilege: "view_leads" },
       { id: "activities", label: "Activities", icon: CalendarCheck2, count: "tasks" },
@@ -74,7 +75,7 @@ const navigation: { title: string; items: NavItem[] }[] = [
 ];
 
 const pageTitles: Record<string, string> = {
-  home: "Action center", deals: "Deals", leads: "Leads", contacts: "Contacts", activities: "Activities", insights: "Insights", todo: "To Do",
+  home: "Action center", deals: "Pipeline", leads: "Leads", contacts: "Contacts", activities: "Activities", insights: "Insights", todo: "To Do",
   "lead-generation": "Lead generation", trips: "Sales trip planner", planner: "Road visit planner",
   targets: "Targets & templates", admin: "User management", values: "List of values", devices: "Device authorization", settings: "Settings",
   import: "Tracker import", api: "API access",
@@ -307,7 +308,7 @@ export default function AppShell({ user, setUser, signOut, passwordSignIn }: { u
                 <span className="sidebar-toggle-expanded"><PanelLeftClose size={18} /></span>
                 <span className="sidebar-toggle-collapsed"><PanelLeftOpen size={18} /></span>
               </button>
-              <span className="topbar-title">{dealId !== null ? "Deals" : contact ? "Contacts" : pageTitles[view]}</span>
+              <span className="topbar-title">{dealId !== null ? "Pipeline" : contact ? "Contacts" : pageTitles[view]}</span>
             </div>
             <div className="topbar-center">
               <form className="global-search" role="search" onSubmit={submitSearch}>

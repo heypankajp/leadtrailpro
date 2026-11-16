@@ -16,6 +16,7 @@ import { matchLead, normalizeCompanyName, type MatchableLead, type MatchedOn } f
 import type { UserAccount } from "@/features/users/model";
 import { activityTypes } from "./model";
 import type { ActivityType, LeadActivity, LeadFilters, LeadInput, LeadPage, LeadRecordState, LeadSummary, LoggableActivityType } from "./model";
+import { quickFilterClause } from "./quick-filter-sql";
 
 // ---- Row mapping ----
 
@@ -175,6 +176,11 @@ export async function listLeads(filters: LeadFilters, viewer: UserAccount): Prom
   for (const [value, column, operator] of dateFilters) {
     if (value) { clauses.push(`${column} ${operator} ?`); params.push(value); }
   }
+  if (filters.quick) {
+    const quick = await quickFilterClause(getDatabasePool(), filters.quick);
+    clauses.push(quick.clause);
+    params.push(...quick.params);
+  }
   if (filters.q) {
     const pattern = likePattern(filters.q.toLowerCase());
     const fields = [
@@ -288,7 +294,7 @@ export async function logActivity(lead: LeadSummary, actor: UserAccount, entry: 
 // ---- Mutations ----
 
 async function validateListReferences(db: Queryable, input: Partial<LeadInput>) {
-  if (input.leadTypeId !== undefined) await assertListValue(db, "lead_type", input.leadTypeId, { required: true, label: "Deal type" });
+  if (input.leadTypeId !== undefined) await assertListValue(db, "lead_type", input.leadTypeId, { required: true, label: "Deal source" });
   if (input.statusId !== undefined) await assertListValue(db, "status", input.statusId, { required: true, label: "Status" });
   if (input.bdActionId !== undefined) await assertListValue(db, "bd_action", input.bdActionId, { label: "BD action" });
   if (input.stageId !== undefined) await assertListValue(db, "stage", input.stageId, { label: "Stage" });

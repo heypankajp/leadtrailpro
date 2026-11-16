@@ -131,3 +131,20 @@ describe("mailbox scan (processMailbox)", () => {
     assert.ok(mailboxWatchPageSize >= 50);
   });
 });
+
+describe("emails of the whole organization (PD-19)", () => {
+  test("a message with any contact of the company matches every deal of it, and each owner is notified once", () => {
+    // Two deals of Acme, both owned by 11, and a third owned by 13; the addresses include every contact of the organization.
+    const company = [
+      { id: 1, ownerId: 11, clientName: "Acme Foundry", clientEmails: ["buyer@acme.com", "hr@acme.com"] },
+      { id: 3, ownerId: 11, clientName: "Acme Foundry", clientEmails: ["plant@acme.com", "hr@acme.com"] },
+      { id: 4, ownerId: 13, clientName: "Acme Foundry", clientEmails: ["hr@acme.com"] },
+    ];
+    const matches = matchMessage(message({ from: "HR <hr@acme.com>", cc: "" }), mailbox, company, team, { notify: true });
+    assert.deepEqual(matches.map((match) => match.lead.id), [1, 3, 4]);
+    assert.deepEqual(matches.map((match) => match.notify), [true, false, true]);
+    // In Cc only: the deal still gets the message, nobody is notified because the client did not write it.
+    const copied = matchMessage(message({ from: "someone@else.example", to: mailbox, cc: "plant@acme.com" }), mailbox, company, team, { notify: true });
+    assert.deepEqual(copied.map((match) => [match.lead.id, match.notify]), [[3, false]]);
+  });
+});

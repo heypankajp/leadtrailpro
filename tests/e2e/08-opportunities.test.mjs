@@ -45,23 +45,26 @@ describe("Leads inbox", () => {
     const row = await page.wait(cardRow(company));
     await row.findElement(By.xpath('.//button[contains(normalize-space(.), "Convert to deal")]')).click();
     await page.dialogTitle("Add deal");
-    assert.equal(await (await page.control("Client name")).getAttribute("value"), company);
+    assert.equal(await (await page.control("Organization")).getAttribute("value"), company);
     assert.match(await (await page.control("Position(s)")).getAttribute("value"), /Baker/);
-    await page.clickButton("Save deal");
+    await page.saveDeal();
     await page.toast("is now a deal owned by");
     await page.tab("Converted to deals");
     const assigned = await page.wait(cardRow(company));
     assert.match(await assigned.getText(), /Deal:/);
   });
 
-  uiTest("the duplicate guard stops a second deal for the same company and opens the existing one", async () => {
+  uiTest("Add deal: a near-match name meets the duplicate guard, and the exact organization shows its open deals (PD-15)", async () => {
     await page.nav("Action center");
     await page.openAddDeal();
-    await page.fill("Client name", "Lakeshore Bakery Co");
-    await page.clickButton("Save deal");
+    await page.fill("Organization", "Lakeshore Bakery Co");
+    await page.saveDeal();
     const notice = await page.wait(By.css(".duplicate-note"));
     assert.match(await notice.getText(), /already exists as a Cold deal/);
-    await page.clickButton(`Open ${company}`);
+    await page.fill("Organization", company);
+    const open = await page.wait(By.css(".open-deals-note"));
+    assert.match(await open.getText(), /already has an open deal/);
+    await page.click(By.xpath(`//div[contains(@class,"open-deals-note")]//button[normalize-space()=${JSON.stringify(company)}]`));
     await page.dialogTitle(company);
     await page.tab("Timeline");
     await page.waitText(By.css("div.deal-page"), "Created from the leads inbox");
@@ -137,12 +140,12 @@ describe("Leads inbox cards from the sales tracker", () => {
     assert.match(text, /Jamie Ortiz/);
     await row.findElement(By.xpath('.//button[contains(normalize-space(.), "Convert to deal")]')).click();
     await page.dialogTitle("Add deal");
-    assert.equal(await (await page.control("Client name")).getAttribute("value"), company);
-    assert.equal(await (await page.control("Client executive")).getAttribute("value"), "Jamie Ortiz");
+    assert.equal(await (await page.control("Organization")).getAttribute("value"), company);
+    assert.equal(await (await page.control("Contact")).getAttribute("value"), "Jamie Ortiz");
     assert.equal(await (await page.control("First contact date")).getAttribute("value"), "2026-10-01");
     assert.equal(await page.selectedText(await page.control("Status")), "Warm");
     assert.equal(await page.selectedText(await page.control("City")), "Oakville");
-    await page.clickButton("Save deal");
+    await page.saveDeal();
     await page.toast("is now a deal owned by");
     await page.tab("Converted to deals");
     const assigned = await page.wait(cardRow(company));

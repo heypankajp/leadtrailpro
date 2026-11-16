@@ -33,14 +33,15 @@ describe("Contacts (SPEC §10.13, §10.14)", () => {
     assert.deepEqual(parseOrganizationInput(null).input.cityId, null);
   });
 
-  test("a person needs a name; emails come as a list or as typed text, lower-cased and without repeats; the organization may stay empty", () => {
+  test("a contact needs a name and an organization (PD-17); emails come as a list or as typed text, lower-cased and without repeats", () => {
     const typed = parsePersonInput({ name: " Adam Brooks ", organizationName: " Northern Fitness ", emails: "Adam@Northern.example, adam@northern.example; elvis@northern.example", phone: "645-697-5476" });
     assert.deepEqual(typed.errors, []);
-    assert.deepEqual(typed.input, { name: "Adam Brooks", organizationName: "Northern Fitness", emails: ["adam@northern.example", "elvis@northern.example"], phone: "645-697-5476", altPhone: "", remark: "" });
-    assert.deepEqual(parsePersonInput({ name: "Adam", emails: ["a@b.example"] }).input.emails, ["a@b.example"]);
-    assert.equal(parsePersonInput({ name: "Adam" }).input.organizationName, "");
-    assert.match(parsePersonInput({ name: "" }).errors.join(" "), /Enter the person's name/);
-    assert.match(parsePersonInput({ name: "Adam", emails: "not-an-email" }).errors.join(" "), /Not an email address: not-an-email/);
+    assert.deepEqual(typed.input, { name: "Adam Brooks", organizationName: "Northern Fitness", emails: ["adam@northern.example", "elvis@northern.example"], phone: "645-697-5476", altPhone: "", remark: "", createOrganization: false });
+    assert.deepEqual(parsePersonInput({ name: "Adam", organizationName: "Acme", emails: ["a@b.example"] }).input.emails, ["a@b.example"]);
+    assert.equal(parsePersonInput({ name: "Adam", organizationName: "Acme", createOrganization: true }).input.createOrganization, true);
+    assert.match(parsePersonInput({ name: "Adam" }).errors.join(" "), /Choose the contact's organization/);
+    assert.match(parsePersonInput({ name: "", organizationName: "Acme" }).errors.join(" "), /Enter the contact's name/);
+    assert.match(parsePersonInput({ name: "Adam", organizationName: "Acme", emails: "not-an-email" }).errors.join(" "), /Not an email address: not-an-email/);
   });
 
   test("a note on a contact needs its text; a call, an email or a visit needs a summary or notes; the time is not in the future", () => {

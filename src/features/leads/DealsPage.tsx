@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState, type ReactNode } from "react";
-import { Archive, Clock3, List, Plus, SquareKanban } from "lucide-react";
+import { Archive, Clock3, List, Plus, SquareKanban, Tags } from "lucide-react";
 import { useAsyncData } from "@/lib/useAsyncData";
 import PipelinePage from "@/features/pipeline/PipelinePage";
 import { useApp } from "@/features/shell/AppContext";
@@ -9,19 +9,20 @@ import { fetchLeads } from "./client";
 import LeadListPage, { type LeadListView } from "./LeadListPage";
 
 const statusModes = ["cold", "warm", "hot", "client"] as const;
-type Tab = "board" | "list" | "queued" | "archive";
+type Tab = "board" | "status" | "list" | "queued" | "archive";
 
 /**
- * The Deals page, after Pipedrive's: one heading, a view switch (board, list, archive, and the approval queue for
- * people who review it) and the "+ Deal" button. The address carries the view: #/deals (board), #/deals/list,
- * #/deals/archive, #/deals/queued, and #/deals/cold|warm|hot|client for the list of one status.
+ * The Pipeline page (the menu says "Pipeline" since PD-26; its records are deals), after Pipedrive's: one heading, a view
+ * switch (board by stage, board by status, list, archive, and the approval queue for people who review it) and the
+ * "+ Deal" button. The address carries the view: #/deals (board), #/deals/status (PD-24), #/deals/list, #/deals/archive,
+ * #/deals/queued, and #/deals/cold|warm|hot|client for the list of one status.
  */
 export default function DealsPage({ mode }: { mode: string | null }) {
   const { user, can, route, navigate, openNewLead, dataVersion } = useApp();
   // Recruiters work from the list: the board is for the people who own deals.
   const boardAllowed = user.role !== "recruiter";
   const statusMode = statusModes.find((item) => item === mode) ?? null;
-  const tab: Tab = mode === "archive" ? "archive" : mode === "queued" && can("review_queued") ? "queued" : statusMode || mode === "list" || !boardAllowed ? "list" : "board";
+  const tab: Tab = mode === "archive" ? "archive" : mode === "queued" && can("review_queued") ? "queued" : statusMode || mode === "list" || !boardAllowed ? "list" : mode === "status" ? "status" : "board";
   const [scope, setScope] = useState<"mine" | "everyone">(() => {
     const asked = route.query.get("scope");
     if (asked === "mine" || asked === "everyone") return boardAllowed ? asked : "everyone";
@@ -43,14 +44,16 @@ export default function DealsPage({ mode }: { mode: string | null }) {
   return (
     <>
       <div className="deals-head">
-        <h1 className="sr-only">Deals</h1>
-        <div className="view-switch" role="group" aria-label="Deals view">
+        <h1 className="sr-only">Pipeline</h1>
+        <div className="view-switch" role="group" aria-label="Pipeline view">
           {boardAllowed && viewButton("board", "Board", <SquareKanban size={16} />)}
+          {boardAllowed && viewButton("status", "Board by status", <Tags size={16} />)}
           {viewButton("list", "List", <List size={16} />)}
           {viewButton("archive", "Archive", <Archive size={16} />)}
           {canReview && viewButton("queued", "Queued for approval", <Clock3 size={16} />, queued)}
         </div>
-        {can("create_leads") && tab !== "archive" && tab !== "queued" && <button className="button button-primary deal-add" onClick={openNewLead}><Plus size={16} /> Deal</button>}
+        {/* PD-28: on the boards a deal is added from its stage ("+" and the column's "…"); the list keeps the button. */}
+        {can("create_leads") && tab === "list" && <button className="button button-primary deal-add" onClick={openNewLead}><Plus size={16} /> Deal</button>}
         <span className="deals-head-spacer" />
         {tab === "list" && !statusMode && boardAllowed && (
           <div className="scope-toggle" role="group" aria-label="Whose deals">
@@ -59,7 +62,7 @@ export default function DealsPage({ mode }: { mode: string | null }) {
           </div>
         )}
       </div>
-      {tab === "board" ? <PipelinePage /> : <LeadListPage key={listView} view={listView} embedded />}
+      {tab === "board" || tab === "status" ? <PipelinePage key={tab} groupBy={tab === "status" ? "status" : "stage"} /> : <LeadListPage key={listView} view={listView} embedded />}
     </>
   );
 }

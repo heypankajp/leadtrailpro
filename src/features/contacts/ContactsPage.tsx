@@ -14,7 +14,7 @@ import { dealCountLabel, type ContactPage, type OrganizationRow, type PersonRow 
 export type ContactsTab = "people" | "organizations" | "timeline";
 
 /**
- * Contacts, after Pipedrive's: People and Organizations as two lists (SPEC §10.13, §10.14). A contact can be added
+ * Contacts, after Pipedrive's: contacts and organizations as two lists (SPEC §10.13, §10.14; "Contact" since §10.19). A contact can be added
  * here before any deal exists; its name opens its page, where deals are added to it.
  */
 export default function ContactsPage({ tab }: { tab: ContactsTab }) {
@@ -32,8 +32,8 @@ export default function ContactsPage({ tab }: { tab: ContactsTab }) {
   const fetcher = useCallback((): Promise<ContactPage<PersonRow> | ContactPage<OrganizationRow> | null> => (tab === "timeline" ? Promise.resolve(null) : tab === "people" ? fetchPeople(debouncedQ, page) : fetchOrganizations(debouncedQ, page)), [tab, debouncedQ, page]);
   const { data, error, loading } = useAsyncData(fetcher, dataVersion);
   const search = (value: string) => { setQ(value); setPage(1); };
-  const noun = tab === "people" ? "people" : "organizations";
-  const one = tab === "people" ? "person" : "organization";
+  const noun = tab === "people" ? "contacts" : "organizations";
+  const one = tab === "people" ? "contact" : "organization";
   const deals = (row: { deals: number; openDeals: number; dealId: number | null; name: string }) => (
     row.dealId === null
       ? <span className="muted-cell">{dealCountLabel(row.deals, row.openDeals)}</span>
@@ -45,11 +45,11 @@ export default function ContactsPage({ tab }: { tab: ContactsTab }) {
       <div className="deals-head">
         <h1 className="sr-only">Contacts</h1>
         <div className="scope-toggle" role="group" aria-label="Contacts list">
-          <button className={tab === "people" ? "is-active" : ""} aria-pressed={tab === "people"} onClick={() => navigate("contacts", "people")}><UserRound size={14} /> People</button>
+          <button className={tab === "people" ? "is-active" : ""} aria-pressed={tab === "people"} onClick={() => navigate("contacts", "people")}><UserRound size={14} /> Contacts</button>
           <button className={tab === "organizations" ? "is-active" : ""} aria-pressed={tab === "organizations"} onClick={() => navigate("contacts", "organizations")}><Building2 size={14} /> Organizations</button>
           <button className={tab === "timeline" ? "is-active" : ""} aria-pressed={tab === "timeline"} onClick={() => navigate("contacts", "timeline")}><CalendarRange size={14} /> Timeline</button>
         </div>
-        {can("create_leads") && tab !== "timeline" && <button className="button button-primary deal-add" onClick={() => setAdding(true)}><Plus size={16} /> {tab === "people" ? "Person" : "Organization"}</button>}
+        {can("create_leads") && tab !== "timeline" && <button className="button button-primary deal-add" onClick={() => setAdding(true)}><Plus size={16} /> {tab === "people" ? "Contact" : "Organization"}</button>}
         <span className="deals-head-spacer" />
         <span className="board-total" role="status">{data ? `${data.total} ${data.total === 1 ? one : noun}` : ""}</span>
       </div>
@@ -71,7 +71,7 @@ export default function ContactsPage({ tab }: { tab: ContactsTab }) {
                 <thead>
                   {tab === "people"
                     ? <tr><th>NAME</th><th>ORGANIZATION</th><th>EMAIL</th><th>PHONE</th><th>DEALS</th><th>OWNER</th><th>LAST ACTIVITY</th></tr>
-                    : <tr><th>NAME</th><th>INDUSTRY</th><th>CITY</th><th>PEOPLE</th><th>DEALS</th><th>OWNER</th><th>LAST ACTIVITY</th></tr>}
+                    : <tr><th>NAME</th><th>INDUSTRY</th><th>CITY</th><th>CONTACTS</th><th>DEALS</th><th>OWNER</th><th>LAST ACTIVITY</th></tr>}
                 </thead>
                 <tbody>
                   {tab === "people" && (data.rows as PersonRow[]).map((row) => (

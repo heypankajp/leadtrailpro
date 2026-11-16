@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { organizationEmails as contactEmailsOf } from "@/features/contacts/repository";
 import { handleRouteError, jsonError, readJsonBody, requireSameOrigin } from "@/lib/http";
 import { listAttachments } from "@/features/attachments/repository";
 import { listAudit } from "@/features/audit/repository";
@@ -26,14 +27,16 @@ export async function GET(_request: Request, context: RouteContext) {
     if (!id) return jsonError(400, "Invalid deal ID.");
     const lead = await getLead(id);
     if (!lead) return jsonError(404, "Deal not found.");
-    const [activities, tasks, attachments, audit, messageCount] = await Promise.all([
+    const [activities, tasks, attachments, audit, messageCount, organizationEmails] = await Promise.all([
       listActivities(id),
       listTasks({ leadId: id }),
       listAttachments(id, { includeDeleted: hasPrivilege(user, "delete_files") }),
       hasPrivilege(user, "view_audit") ? listAudit({ entityType: "lead", entityId: id, limit: 200 }) : Promise.resolve([]),
       countMessages(id),
+      // PD-19: the deal's emails cover every contact of its organization.
+      contactEmailsOf(lead.organizationId),
     ]);
-    return NextResponse.json({ lead, activities, tasks, attachments, audit, messageCount, permissions: { edit: canEditLead(user, lead) } });
+    return NextResponse.json({ lead, activities, tasks, attachments, audit, messageCount, organizationEmails, permissions: { edit: canEditLead(user, lead) } });
   } catch (error) {
     return handleRouteError(error, "Load deal");
   }

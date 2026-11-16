@@ -2,7 +2,7 @@ export const listKeys = ["lead_type", "status", "bd_action", "stage", "client_re
 export type ListKey = (typeof listKeys)[number];
 
 export const listKeyLabels: Record<ListKey, string> = {
-  lead_type: "Deal type",
+  lead_type: "Deal source",
   status: "Status",
   bd_action: "BD action",
   stage: "Pipeline stage",

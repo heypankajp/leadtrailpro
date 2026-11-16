@@ -87,7 +87,7 @@ describe("Team, roles, and deal ownership", () => {
     await page.signOut();
     await page.signIn(manager);
     const labels = await Promise.all((await driver.findElements(By.css("nav.side-nav .nav-item > span"))).map((element) => element.getText()));
-    assert.ok(labels.includes("Deals") && labels.includes("Leads") && labels.includes("Contacts"), "sales managers see Deals, Leads and Contacts");
+    assert.ok(labels.includes("Pipeline") && labels.includes("Leads") && labels.includes("Contacts"), "sales managers see Pipeline, Leads and Contacts");
     assert.ok(!labels.includes("User management"), "sales managers cannot manage users");
     await page.deals("board");
     assert.equal((await driver.findElements(By.css('.view-switch button[aria-label="Queued for approval"]'))).length, 0, "sales managers cannot review queued deals");
@@ -105,10 +105,10 @@ describe("Team, roles, and deal ownership", () => {
 
   uiTest("a historical first-contact date queues the deal for approval", async () => {
     await page.openAddDeal();
-    await page.fill("Client name", queuedLead);
+    await page.fill("Organization", queuedLead);
     await page.fill("First contact date", isoDate(-10));
     await page.wait(By.xpath('//small[contains(@class,"field-hint") and contains(normalize-space(.), "queued for Admin approval")]'));
-    await page.clickButton("Save deal");
+    await page.saveDeal();
     await page.toast(`${queuedLead} saved and queued for Admin approval`);
     await page.eyebrow("QUEUED FOR APPROVAL");
     await page.closeDialog();

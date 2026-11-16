@@ -44,7 +44,7 @@ export default function NextStepDialog({ lead, reason, onClose, onSaved }: { lea
     setError("");
     const finalTitle = title.trim() || suggested.title;
     try {
-      await createTask({ leadId: lead.id, title: finalTitle, description: "", assigneeId: Number(assigneeId) || lead.ownerId, dueAt: fromLocalInput(`${date}T${time}`), priority: "normal", checklist: [] });
+      await createTask({ leadId: lead.id, title: finalTitle, description: "", assigneeId: Number(assigneeId) || lead.ownerId, dueAt: fromLocalInput(`${date}T${time}`), priority: "normal", checklist: [], activityType: activity });
       if (setFollowUp) await updateLead(lead.id, { followUpDate: date });
       onSaved(`Next step saved: ${finalTitle} on ${date}`);
     } catch (caught) {

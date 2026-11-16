@@ -56,9 +56,9 @@ export default function AnalyticsSections({ period, custom, ownerId }: Props) {
       {can("view_team_reports") && <TeamBoardSection drill={drillWith} />}
       <div className="report-toolbar analytics-filters" aria-label="Pipeline filters">
         <select aria-label="Status" value={filters.statusId ?? ""} onChange={(event) => set({ statusId: event.target.value ? Number(event.target.value) : null })}><option value="">All statuses</option>{values.status.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}</select>
-        <select aria-label="Deal type" value={filters.leadTypeId ?? ""} onChange={(event) => set({ leadTypeId: event.target.value ? Number(event.target.value) : null })}><option value="">All deal types</option>{values.lead_type.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}</select>
+        <select aria-label="Deal source" value={filters.leadTypeId ?? ""} onChange={(event) => set({ leadTypeId: event.target.value ? Number(event.target.value) : null })}><option value="">All deal sources</option>{values.lead_type.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}</select>
         <select aria-label="City" value={filters.cityId ?? ""} onChange={(event) => set({ cityId: event.target.value ? Number(event.target.value) : null })}><option value="">All cities</option>{values.city.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}</select>
-        <select aria-label="Deal source" value={filters.source} onChange={(event) => set({ source: event.target.value as AnalyticsFilters["source"] })}><option value="">Any source</option><option value="pool">From the leads inbox</option><option value="other">Added by hand or from a trip</option></select>
+        <select aria-label="Origin" value={filters.source} onChange={(event) => set({ source: event.target.value as AnalyticsFilters["source"] })}><option value="">Any origin</option><option value="pool">From the leads inbox</option><option value="other">Added by hand or from a trip</option></select>
         <input aria-label="Industry" placeholder="Industry" value={filters.industry} onChange={(event) => set({ industry: event.target.value })} maxLength={120} />
         <input aria-label="Client" placeholder="Client name" value={filters.client} onChange={(event) => set({ client: event.target.value })} maxLength={120} />
         <input aria-label="Job type" placeholder="Job type (e.g. full time)" value={filters.jobType} onChange={(event) => set({ jobType: event.target.value })} maxLength={60} />
@@ -226,9 +226,9 @@ export default function AnalyticsSections({ period, custom, ownerId }: Props) {
           )}
 
           <section className="panel analytics-panel">
-            <div className="panel-heading"><div><h2>Where the deals are</h2><p>Active deals by industry, city, and deal type, with how many are clients; and the clients worked most in the period</p></div></div>
+            <div className="panel-heading"><div><h2>Where the deals are</h2><p>Active deals by industry, city, and deal source, with how many are clients; and the clients worked most in the period</p></div></div>
             <div className="analytics-grid analytics-grid-3">
-              {([["Industry", data.breakdown.industries], ["City", data.breakdown.cities], ["Deal type", data.breakdown.leadTypes]] as const).map(([title, rows]) => (
+              {([["Industry", data.breakdown.industries], ["City", data.breakdown.cities], ["Deal source", data.breakdown.leadTypes]] as const).map(([title, rows]) => (
                 <div key={title}>
                   <h3 className="analytics-subtitle"><Layers size={13} /> {title}</h3>
                   {rows.length === 0 ? <EmptyState title="No deals" /> : <StackedBars horizontal height={Math.max(140, 28 * rows.length + 50)} xKey="label" series={[{ key: "clients", label: "Clients", color: statusColors.client }, { key: "others", label: "Other deals", color: seriesColors[0] }]} data={rows.map((row) => ({ label: row.label, clients: row.clients, others: row.leads - row.clients }))} />}

@@ -38,7 +38,7 @@ function Shell({ kind, name, subtitle, ownerName, actions, side, deals, activiti
         {back}
         <Avatar name={name} seed={name} />
         <div className="deal-heading">
-          <span className="eyebrow">{kind === "organization" ? "ORGANIZATION" : "PERSON"}</span>
+          <span className="eyebrow">{kind === "organization" ? "ORGANIZATION" : "CONTACT"}</span>
           <h1>{name}</h1>
           <p>{subtitle}</p>
         </div>
@@ -46,7 +46,7 @@ function Shell({ kind, name, subtitle, ownerName, actions, side, deals, activiti
         <div className="detail-header-actions">{actions}</div>
       </header>
       <div className="deal-columns">
-        <aside className="deal-side" aria-label={kind === "organization" ? "Organization details" : "Person details"}>{side}</aside>
+        <aside className="deal-side" aria-label={kind === "organization" ? "Organization details" : "Contact details"}>{side}</aside>
         <div className="deal-main">
           {composer}
           <section className="deal-block" aria-label="Deals">
@@ -164,14 +164,14 @@ function MergeDialog({ kind, id, name, onClose, onMerged }: { kind: Kind; id: nu
     } catch (caught) { setError(errorMessage(caught)); setBusy(false); }
   };
   return (
-    <Dialog title={`Merge a duplicate into ${name}`} eyebrow={kind === "organization" ? "ORGANIZATION" : "PERSON"} onClose={onClose}>
+    <Dialog title={`Merge a duplicate into ${name}`} eyebrow={kind === "organization" ? "ORGANIZATION" : "CONTACT"} onClose={onClose}>
       <div className="stack-form">
-        <p className="dialog-description">Find the other record of the same {kind}. Its deals{kind === "organization" ? ", people" : ""} and notes move to {name}, empty details are filled in from it, and it is removed. This cannot be undone.</p>
-        <Field label={`The duplicate ${kind}`}><input value={q} onChange={(event) => { setQ(event.target.value); setPicked(null); }} placeholder="Type its name..." autoFocus /></Field>
+        <p className="dialog-description">Find the other record of the same {kind === "organization" ? "organization" : "contact"}. Its deals{kind === "organization" ? ", contacts" : ""} and notes move to {name}, empty details are filled in from it, and it is removed. This cannot be undone.</p>
+        <Field label={`The duplicate ${kind === "organization" ? "organization" : "contact"}`}><input value={q} onChange={(event) => { setQ(event.target.value); setPicked(null); }} placeholder="Type its name..." autoFocus /></Field>
         {typed.length >= 2 && !picked && (
           <div className="merge-matches" role="listbox" aria-label="Matching records">
             {matches.map((row) => <button type="button" role="option" aria-selected="false" key={row.id} onClick={() => setPicked({ id: row.id, name: row.name })}><strong>{row.name}</strong><small>{row.detail}</small></button>)}
-            {!matches.length && <p className="side-empty">No other {kind} matches.</p>}
+            {!matches.length && <p className="side-empty">No other {kind === "organization" ? "organization" : "contact"} matches.</p>}
           </div>
         )}
         {picked && <p className="form-note"><GitMerge size={14} /> <span><strong>{picked.name}</strong> will be merged into <strong>{name}</strong>.</span></p>}
@@ -198,12 +198,12 @@ function RemoveDialog({ name, kind, onClose, onConfirm }: { name: string; kind: 
   const [error, setError] = useState("");
   const confirm = async () => { setBusy(true); setError(""); try { await onConfirm(); } catch (caught) { setError(errorMessage(caught)); setBusy(false); } };
   return (
-    <Dialog title={`Remove ${name}?`} eyebrow={kind === "organization" ? "ORGANIZATION" : "PERSON"} size="narrow" onClose={onClose}>
-      <p className="dialog-description">{kind === "organization" ? "The organization has no deals. Its people stay, without an organization." : "The person has no deals."} This cannot be undone.</p>
+    <Dialog title={`Remove ${name}?`} eyebrow={kind === "organization" ? "ORGANIZATION" : "CONTACT"} size="narrow" onClose={onClose}>
+      <p className="dialog-description">{kind === "organization" ? "The organization has no deals. Its contacts are removed with it." : "The contact has no deals."} This cannot be undone.</p>
       <ErrorText message={error} />
       <div className="modal-actions">
         <button type="button" className="button button-outline" onClick={onClose}>Cancel</button>
-        <button type="button" className="button button-danger" disabled={busy} onClick={() => void confirm()}>{busy ? "Removing..." : `Remove ${kind}`}</button>
+        <button type="button" className="button button-danger" disabled={busy} onClick={() => void confirm()}>{busy ? "Removing..." : `Remove ${kind === "organization" ? "organization" : "contact"}`}</button>
       </div>
     </Dialog>
   );
@@ -243,15 +243,15 @@ function OrganizationPage({ id, backLabel, onClose }: Omit<Props, "kind">) {
             <SideRow label="Address"><strong>{organization.address || "Not provided"}</strong></SideRow>
             <SideRow label="Website">{organization.website ? <a href={organization.website} target="_blank" rel="noopener noreferrer">{organization.website.replace(/^https?:\/\//, "")}</a> : missing()}</SideRow>
           </SidePanel>
-          <SidePanel title={`People (${people.length})`} icon={<UsersRound size={14} />}>
+          <SidePanel title={`Contacts (${people.length})`} icon={<UsersRound size={14} />}>
             {people.map((person) => (
               <div className="side-person" key={person.id}>
                 <button type="button" className="link-button contact-name" onClick={() => openContact("person", person.id)}>{person.name}</button>
                 <small>{[person.email, person.phone].filter(Boolean).join(" · ") || "No email or phone yet"}</small>
               </div>
             ))}
-            {!people.length && <p className="side-empty">No people yet.</p>}
-            {permissions.addDeal && <div className="side-actions"><button className="text-button" onClick={() => setDialog("person")}><Plus size={13} /> Person</button></div>}
+            {!people.length && <p className="side-empty">No contacts yet.</p>}
+            {permissions.addDeal && <div className="side-actions"><button className="text-button" onClick={() => setDialog("person")}><Plus size={13} /> Contact</button></div>}
           </SidePanel>
           <SidePanel title="Overview" icon={<Info size={14} />}>
             <SideRow label="Created"><strong>{`${formatDateTime(organization.createdAt)} by ${organization.createdByName}`}</strong></SideRow>
@@ -272,8 +272,8 @@ function PersonPage({ id, backLabel, onClose }: Omit<Props, "kind">) {
   const { data, error, reload } = useAsyncData<PersonDetail>(fetcher, dataVersion);
   const [dialog, setDialog] = useState<"edit" | "remove" | "merge" | null>(null);
   const back = useBack(backLabel, onClose);
-  if (error && !data) return <Frame back={back} title="Person"><ErrorText message={error} /></Frame>;
-  if (!data) return <Frame back={back} title=""><Loading text="Loading person..." /></Frame>;
+  if (error && !data) return <Frame back={back} title="Contact"><ErrorText message={error} /></Frame>;
+  if (!data) return <Frame back={back} title=""><Loading text="Loading contact..." /></Frame>;
   const { person, deals, activities, permissions } = data;
   const addDeal = permissions.addDeal ? () => openNewLeadFor({
     organizationId: person.organizationId, personId: person.id,
@@ -308,7 +308,7 @@ function PersonPage({ id, backLabel, onClose }: Omit<Props, "kind">) {
         </>}
       />
       {dialog === "merge" && <MergeDialog kind="person" id={person.id} name={person.name} onClose={() => setDialog(null)} onMerged={(other) => { setDialog(null); reload(); bumpData(); notify(`${other} merged into ${person.name}`); }} />}
-      {dialog === "edit" && <PersonFormDialog person={person} movable={deals.length === 0} onClose={() => setDialog(null)} onSaved={() => { setDialog(null); reload(); bumpData(); notify("Person updated"); }} />}
+      {dialog === "edit" && <PersonFormDialog person={person} movable={deals.length === 0} onClose={() => setDialog(null)} onSaved={() => { setDialog(null); reload(); bumpData(); notify("Contact updated"); }} />}
       {dialog === "remove" && <RemoveDialog name={person.name} kind="person" onClose={() => setDialog(null)} onConfirm={async () => { await removePerson(person.id); notify(`${person.name} removed`); bumpData(); onClose(); }} />}
     </>
   );

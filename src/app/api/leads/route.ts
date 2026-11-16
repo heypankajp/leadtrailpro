@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { asOptionalId, handleRouteError, jsonError, readJsonBody, requireSameOrigin } from "@/lib/http";
+import { asOptionalId, handleRouteError, HttpError, jsonError, readJsonBody, requireSameOrigin } from "@/lib/http";
+import { newContactNames } from "@/features/contacts/repository";
 import { parseLeadFilters, parseLeadInput } from "@/features/leads/model";
-import { createLead, listLeads } from "@/features/leads/repository";
+import { createLead, findDuplicateLead, listLeads } from "@/features/leads/repository";
 import { requirePrivilege, requireUser } from "@/features/users/session";
 
 export async function GET(request: Request) {
@@ -23,7 +24,19 @@ export async function POST(request: Request) {
     const body = await readJsonBody(request);
     const { input, errors } = parseLeadInput(body);
     if (errors.length) return jsonError(400, errors.join(" "));
-    const lead = await createLead(input, user, asOptionalId(body?.ownerId), { allowSimilar: body?.allowSimilar === true, opportunityId: asOptionalId(body?.opportunityId), organizationId: asOptionalId(body?.organizationId), personId: asOptionalId(body?.personId) });
+    const organizationId = asOptionalId(body?.organizationId);
+    const personId = asOptionalId(body?.personId);
+    // PD-15: a new organization or contact is created only once the user has confirmed it.
+    const fresh = await newContactNames(input.clientName, input.clientExecutive, organizationId, personId);
+    const unconfirmed = (fresh.organization && body?.createOrganization !== true) || (fresh.contact && body?.createContact !== true);
+    // A name close to an existing deal ("Lakeshore Bakery Co" for "Lakeshore Bakery Co.") meets the duplicate guard first:
+    // createLead refuses it with a link to that deal, before anyone is asked to create a new organization.
+    const duplicate = unconfirmed && fresh.organization ? await findDuplicateLead(input) : null;
+    if (unconfirmed && !(duplicate && (duplicate.exact || body?.allowSimilar !== true))) {
+      const named = [fresh.organization && `the organization ${fresh.organization}`, fresh.contact && `the contact ${fresh.contact}`].filter(Boolean).join(" and ");
+      throw new HttpError(409, `Saving this deal creates ${named}. Confirm to continue.`, { code: "confirm_create", ...fresh });
+    }
+    const lead = await createLead(input, user, asOptionalId(body?.ownerId), { allowSimilar: body?.allowSimilar === true, opportunityId: asOptionalId(body?.opportunityId), organizationId, personId });
     return NextResponse.json({ lead }, { status: 201 });
   } catch (error) {
     return handleRouteError(error, "Create deal");

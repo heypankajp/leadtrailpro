@@ -1,5 +1,6 @@
 import { parseDealValue } from "./deal-value";
 import { isValidYmd } from "@/lib/dates";
+import { isQuickFilterKey, type QuickFilterKey } from "./quick-filters";
 
 export const recordStates = ["active", "queued", "archived"] as const;
 export type LeadRecordState = (typeof recordStates)[number];
@@ -152,6 +153,8 @@ export type LeadFilters = {
   followUpTo: string | null;
   contractSignedFrom: string | null;
   contractSignedTo: string | null;
+  /** PD-30: a ready-made or data cleanup filter (quick-filters.ts). */
+  quick: QuickFilterKey | null;
   sort: LeadSortKey;
   direction: "asc" | "desc";
   page: number;
@@ -231,7 +234,7 @@ export function parseLeadInput(value: unknown): ParsedLeadInput {
     clientEmails: emailList(body.clientEmails, errors),
     industry: text(body.industry, 120, "Client industry", errors),
     positions: text(body.positions, 5000, "Positions", errors),
-    leadTypeId: requiredId(body.leadTypeId, "Deal type", errors),
+    leadTypeId: requiredId(body.leadTypeId, "Deal source", errors),
     statusId: requiredId(body.statusId, "Status", errors),
     statusReasonId: optionalId(body.statusReasonId, "Status reason", errors),
     bdActionId: optionalId(body.bdActionId, "BD action", errors),
@@ -271,7 +274,7 @@ export function parseLeadPatch(value: unknown): { changes: Partial<LeadInput>; e
   if (has("clientEmails")) changes.clientEmails = emailList(body.clientEmails, errors);
   if (has("industry")) changes.industry = text(body.industry, 120, "Client industry", errors);
   if (has("positions")) changes.positions = text(body.positions, 5000, "Positions", errors);
-  if (has("leadTypeId")) changes.leadTypeId = requiredId(body.leadTypeId, "Deal type", errors);
+  if (has("leadTypeId")) changes.leadTypeId = requiredId(body.leadTypeId, "Deal source", errors);
   if (has("statusId")) changes.statusId = requiredId(body.statusId, "Status", errors);
   if (has("statusReasonId")) changes.statusReasonId = optionalId(body.statusReasonId, "Status reason", errors);
   if (has("bdActionId")) changes.bdActionId = optionalId(body.bdActionId, "BD action", errors);
@@ -327,6 +330,7 @@ export function parseLeadFilters(params: URLSearchParams): LeadFilters {
     followUpTo: date("followUpTo"),
     contractSignedFrom: date("contractSignedFrom"),
     contractSignedTo: date("contractSignedTo"),
+    quick: isQuickFilterKey(params.get("quick")) ? (params.get("quick") as QuickFilterKey) : null,
     sort: leadSortKeys.includes(sort as LeadSortKey) ? (sort as LeadSortKey) : "last_activity",
     direction: params.get("direction") === "asc" ? "asc" : "desc",
     page: Number.isInteger(page) && page > 0 ? page : 1,

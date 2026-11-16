@@ -11,12 +11,17 @@ export async function GET(request: Request) {
     const scope = params.get("scope");
     const status = params.get("status");
     const leadId = Number(params.get("leadId"));
+    // PD-29: one person's day for the Schedule an activity agenda. Someone else's tasks need view_team_reports; otherwise it is your own day.
+    const asked = Number(params.get("assigneeId"));
+    const assigneeId = Number.isSafeInteger(asked) && asked > 0 && (asked === user.id || hasPrivilege(user, "view_team_reports")) ? asked : null;
+    const instant = (key: string) => { const value = params.get(key); const date = value ? new Date(value) : null; return date && !Number.isNaN(date.getTime()) ? date : undefined; };
     const filter: TaskFilter = {
-      assigneeId: scope === "all" && hasPrivilege(user, "view_team_reports") ? undefined : user.id,
+      assigneeId: assigneeId ?? (scope === "all" && hasPrivilege(user, "view_team_reports") ? undefined : user.id),
       leadId: Number.isSafeInteger(leadId) && leadId > 0 ? leadId : undefined,
       status: status === "open" || status === "done" ? status : undefined,
+      dueFrom: instant("from"), dueTo: instant("to"),
     };
-    return NextResponse.json({ tasks: await listTasks(filter) });
+    return NextResponse.json({ tasks: await listTasks(filter), assigneeId: filter.assigneeId ?? null });
   } catch (error) {
     return handleRouteError(error, "List tasks");
   }

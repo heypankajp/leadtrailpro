@@ -24,46 +24,49 @@ describe("Contacts first", () => {
   });
   after(async () => { await driver?.quit(); });
 
-  uiTest("a person is added before any deal, together with a new organization", async () => {
+  uiTest("a contact is added before any deal, together with a new organization that is confirmed first", async () => {
     await page.nav("Contacts");
     await page.wait(By.css('div[aria-label="Contacts list"]'));
-    await page.clickButton("Person", { global: true });
-    await page.dialogTitle("Add person");
+    await page.clickButton("Contact", { global: true });
+    await page.dialogTitle("Add contact");
     await page.fill("Name", person);
     await page.fill("Organization", organization);
     await page.fill("Email(s)", `adam.${runId}@northern.example`);
     await page.fill("Phone", "+1 645 697 5476");
-    await page.clickButton("Save person");
+    await page.clickButton("Save contact");
+    // PD-17: the organization is new, so it is created only after the confirmation.
+    await page.waitText(By.css(".confirm-new-note"), "is not an organization yet");
+    await page.clickButton("Create organization and save");
     await page.toast(`${person} added`);
     await page.dialogTitle(person);
-    await page.eyebrow("PERSON");
+    await page.eyebrow("CONTACT");
     await page.wait(onContact('//strong[normalize-space()="No deals yet"]'));
     await page.wait(onContact(`//button[contains(@class,"contact-name") and normalize-space()=${xq(organization)}]`));
   });
 
-  uiTest("a deal is started from the person: the form carries the contact, and the deal links back to it", async () => {
+  uiTest("a deal is started from the contact: the form carries it, and the deal links back to it", async () => {
     await page.clickButton("Deal");
     await page.dialogTitle("Add deal");
-    assert.equal(await (await page.control("Client name")).getAttribute("value"), organization);
-    assert.equal(await (await page.control("Client executive")).getAttribute("value"), person);
+    assert.equal(await (await page.control("Organization")).getAttribute("value"), organization);
+    assert.equal(await (await page.control("Contact")).getAttribute("value"), person);
     assert.equal(await (await page.control("Contact number")).getAttribute("value"), "+1 645 697 5476");
-    await page.clickButton("Save deal");
+    await page.saveDeal();
     await page.toast(`${organization} added to the pipeline`);
     await page.eyebrow("DEAL");
     assert.equal(await (await page.wait(By.css("button.client-executive-name"))).getText(), person);
   });
 
-  uiTest("the organization's page lists its people and deals, and a second deal is added from it without the duplicate guard", async () => {
+  uiTest("the organization's page lists its contacts and deals, and a second deal is added from it without the duplicate guard", async () => {
     await page.click(By.xpath(`.//button[contains(@class,"contact-name") and normalize-space()=${xq(organization)}]`));
     await page.eyebrow("ORGANIZATION");
     await page.dialogTitle(organization);
-    await page.wait(onContact('//summary[contains(normalize-space(.), "People (1)")]'));
+    await page.wait(onContact('//summary[contains(normalize-space(.), "Contacts (1)")]'));
     await page.wait(onContact(`//button[contains(@class,"contact-name") and normalize-space()=${xq(person)}]`));
     await page.clickButton("Deal");
     await page.dialogTitle("Add deal");
-    assert.equal(await (await page.control("Client name")).getAttribute("value"), organization);
+    assert.equal(await (await page.control("Organization")).getAttribute("value"), organization);
     await page.fill("Position(s)", "Second site: forklift operators");
-    await page.clickButton("Save deal");
+    await page.saveDeal();
     await page.toast(`${organization} added to the pipeline`);
     await page.eyebrow("DEAL");
     await page.closeDialog();
@@ -104,14 +107,16 @@ describe("Contacts first", () => {
   });
 
   // SPEC §10.16
-  uiTest("a note is written on a person who has no deal and no organization yet", async () => {
-    await page.click(By.xpath('.//div[@aria-label="Contacts list"]/button[normalize-space()="People"]'), { global: true });
-    await page.clickButton("Person", { global: true });
-    await page.dialogTitle("Add person");
+  uiTest("a note is written on a contact who has no deal yet", async () => {
+    await page.click(By.xpath('.//div[@aria-label="Contacts list"]/button[normalize-space()="Contacts"]'), { global: true });
+    await page.clickButton("Contact", { global: true });
+    await page.dialogTitle("Add contact");
     await page.fill("Name", newcomer);
-    await page.clickButton("Save person");
+    await page.fill("Organization", `Trade Fair Leads ${runId}`);
+    await page.clickButton("Save contact");
+    await page.clickButton("Create organization and save");
     await page.toast(`${newcomer} added`);
-    await page.eyebrow("PERSON");
+    await page.eyebrow("CONTACT");
     await page.clickButton("Add note");
     await page.fill("Note", "Met at the trade fair. Wants a call in January.");
     await page.clickButton("Save note");
@@ -119,16 +124,16 @@ describe("Contacts first", () => {
     await page.wait(onContact('//article[contains(@class,"timeline-entry")]//div[contains(@class,"timeline-body")][contains(normalize-space(.), "trade fair")]'));
   });
 
-  uiTest("a person without deals is filed under another organization", async () => {
+  uiTest("a contact without deals is filed under another organization", async () => {
     await page.clickButton("Edit");
     await page.dialogTitle(`Edit ${newcomer}`);
     await page.fill("Organization", organization);
     await page.clickButton("Save changes");
-    await page.toast("Person updated");
+    await page.toast("Contact updated");
     await page.wait(onContact(`//button[contains(@class,"contact-name") and normalize-space()=${xq(organization)}]`));
   });
 
-  uiTest("a duplicate organization is merged: its people move, its notes stay in the history, and it is gone", async () => {
+  uiTest("a duplicate organization is merged: its contacts move, its notes stay in the history, and it is gone", async () => {
     await page.nav("Contacts");
     await page.click(By.xpath('.//div[@aria-label="Contacts list"]/button[normalize-space()="Organizations"]'), { global: true });
     await page.clickButton("Organization", { global: true });
@@ -141,10 +146,10 @@ describe("Contacts first", () => {
     await page.fill("Summary", "Reception gave the HR manager's name");
     await page.clickButton("Save call");
     await page.toast("Activity recorded");
-    await page.click(By.xpath('.//div[contains(@class,"side-actions")]/button[normalize-space()="Person"]'));
-    await page.dialogTitle("Add person");
+    await page.click(By.xpath('.//div[contains(@class,"side-actions")]/button[normalize-space()="Contact"]'));
+    await page.dialogTitle("Add contact");
     await page.fill("Name", "Elvis Park");
-    await page.clickButton("Save person");
+    await page.clickButton("Save contact");
     await page.toast("Elvis Park added");
     // Open the real organization from the duplicate's person list is not possible, so go through the list.
     await page.nav("Contacts");
@@ -158,7 +163,7 @@ describe("Contacts first", () => {
     await page.click(By.xpath(`.//div[contains(@class,"merge-matches")]//button[.//strong[normalize-space()=${xq(duplicate)}]]`));
     await page.clickButton("Merge");
     await page.toast(`${duplicate} merged into ${organization}`);
-    await page.wait(onContact('//summary[contains(normalize-space(.), "People (3)")]'));
+    await page.wait(onContact('//summary[contains(normalize-space(.), "Contacts (3)")]'));
     await page.wait(onContact('//article[contains(@class,"timeline-entry")]//strong[normalize-space()="Reception gave the HR manager\'s name"]'));
     await page.nav("Contacts");
     await page.click(By.xpath('.//div[@aria-label="Contacts list"]/button[normalize-space()="Organizations"]'), { global: true });
@@ -173,5 +178,23 @@ describe("Contacts first", () => {
     const dot = await page.wait(By.xpath(`//table[contains(@class,"timeline-table")]//tr[.//strong[normalize-space()=${xq(newcomer)}]]//span[contains(@class,"tl-dot")]`));
     assert.equal(await dot.getText(), "1");
     assert.equal(await dot.getAttribute("title"), "1 note");
+  });
+
+  // PD-15: our own suggestion lists in Add deal.
+  uiTest("Add deal suggests organizations as you type, and an email finds the contact and their organization", async () => {
+    await page.openAddDeal();
+    const orgInput = await page.control("Organization");
+    await orgInput.sendKeys(organization.slice(0, -1));
+    const option = await page.wait(By.xpath(`//ul[contains(@class,"suggest-list")]//li[@role="option"][.//strong[normalize-space()=${xq(organization)}]]`));
+    assert.match(await option.getText(), /open deals?/);
+    await page.setValue(orgInput, "");
+    const email = `adam.${runId}@northern.example`;
+    await (await page.control("Email(s)")).sendKeys(`adam.${runId}@`);
+    await page.click(By.xpath(`//ul[contains(@class,"suggest-list")]//li[@role="option"][.//strong[normalize-space()=${xq(email)}]]`));
+    assert.equal(await (await page.control("Organization")).getAttribute("value"), organization);
+    assert.equal(await (await page.control("Contact")).getAttribute("value"), person);
+    assert.equal(await (await page.control("Email(s)")).getAttribute("value"), email);
+    await page.wait(By.css(".open-deals-note"));
+    await page.closeDialog();
   });
 });

@@ -3,6 +3,10 @@ import { parseMessageInput, type Mention, type MessageAttachment } from "@/featu
 export const taskPriorities = ["low", "normal", "medium", "high"] as const;
 export type TaskPriority = (typeof taskPriorities)[number];
 export const taskStatuses = ["open", "done"] as const;
+/** PD-29: what the activity is, as in Pipedrive's Schedule an activity (call, email, visit / meeting, or a plain task). */
+export const taskActivityTypes = ["call", "email", "visit", "task"] as const;
+export type TaskActivityType = (typeof taskActivityTypes)[number];
+export const taskActivityLabels: Record<TaskActivityType, string> = { call: "Call", email: "Email", visit: "Visit", task: "Task" };
 export type TaskStatus = (typeof taskStatuses)[number];
 
 export type ChecklistItem = { text: string; done: boolean };
@@ -42,6 +46,9 @@ export type Task = {
   creatorId: number;
   creatorName: string;
   dueAt: string | null;
+  /** PD-29: the end of the activity's time slot, when one was given. */
+  endsAt: string | null;
+  activityType: TaskActivityType;
   priority: TaskPriority;
   status: TaskStatus;
   checklist: ChecklistItem[];
@@ -60,8 +67,14 @@ export type TaskInput = {
   dueAt: string | null;
   priority: TaskPriority;
   checklist: ChecklistItem[];
+  /** PD-29: optional; a task without them is a plain task with no end time. */
+  activityType?: TaskActivityType;
+  endsAt?: string | null;
+  /** PD-29 "Mark as done": the activity is recorded as already done. */
+  done?: boolean;
 };
 
+export const isTaskActivityType = (value: unknown): value is TaskActivityType => typeof value === "string" && taskActivityTypes.includes(value as TaskActivityType);
 const isPriority = (value: unknown): value is TaskPriority => typeof value === "string" && taskPriorities.includes(value as TaskPriority);
 
 const parseChecklist = (value: unknown, errors: string[]): ChecklistItem[] => {
@@ -103,10 +116,15 @@ export function parseTaskInput(value: unknown): { input: TaskInput; errors: stri
   if (body.leadId !== undefined && body.leadId !== null && body.leadId !== "" && optionalId(body.leadId) === null) errors.push("Deal is not valid.");
   if (body.assigneeId !== undefined && body.assigneeId !== null && body.assigneeId !== "" && optionalId(body.assigneeId) === null) errors.push("Assignee is not valid.");
   const priority = isPriority(body.priority) ? body.priority : "normal";
+  if (body.activityType !== undefined && !isTaskActivityType(body.activityType)) errors.push("Activity type is not valid.");
+  const dueAt = parseDueAt(body.dueAt, errors);
+  const endsAt = parseDueAt(body.endsAt, errors);
+  if (endsAt && (!dueAt || endsAt <= dueAt)) errors.push("The end time must be after the start.");
   return {
     input: {
       leadId: optionalId(body.leadId), title, description, assigneeId: optionalId(body.assigneeId),
-      dueAt: parseDueAt(body.dueAt, errors), priority, checklist: parseChecklist(body.checklist, errors),
+      dueAt, priority, checklist: parseChecklist(body.checklist, errors),
+      activityType: isTaskActivityType(body.activityType) ? body.activityType : "task", endsAt, done: body.done === true,
     },
     errors,
   };
@@ -131,6 +149,8 @@ export function parseTaskPatch(value: unknown): { changes: TaskPatch; errors: st
     if (!id) errors.push("Assignee is required."); else changes.assigneeId = id;
   }
   if (has("dueAt")) changes.dueAt = parseDueAt(body.dueAt, errors);
+  if (has("endsAt")) changes.endsAt = parseDueAt(body.endsAt, errors);
+  if (has("activityType")) { if (isTaskActivityType(body.activityType)) changes.activityType = body.activityType; else errors.push("Activity type is not valid."); }
   if (has("priority")) { if (isPriority(body.priority)) changes.priority = body.priority; else errors.push("Priority is not valid."); }
   if (has("checklist")) changes.checklist = parseChecklist(body.checklist, errors);
   if (has("status")) { if (body.status === "open" || body.status === "done") changes.status = body.status; else errors.push("Status is not valid."); }

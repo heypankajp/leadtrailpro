@@ -19,10 +19,11 @@ export type ContactQuery = { q: string; page: number; pageSize: number };
 
 export type OrganizationInput = { name: string; website: string; address: string; cityId: number | null; industry: string; companySizeId: number | null };
 /** `organizationName` is what the person typed: an existing organization is linked, a new name creates one, empty means none. */
-export type PersonInput = { name: string; organizationName: string; emails: string[]; phone: string; altPhone: string; remark: string };
+/** `createOrganization`: the user confirmed that a new organization of that name may be created (PD-15, PD-17). */
+export type PersonInput = { name: string; organizationName: string; emails: string[]; phone: string; altPhone: string; remark: string; createOrganization?: boolean };
 
 export type Organization = OrganizationInput & { id: number; city: string | null; companySize: string | null; ownerId: number; ownerName: string; createdAt: string | null; createdByName: string };
-export type Person = Omit<PersonInput, "organizationName"> & { id: number; organizationId: number | null; organization: string | null; ownerId: number; ownerName: string; createdAt: string | null; createdByName: string };
+export type Person = Omit<PersonInput, "organizationName" | "createOrganization"> & { id: number; organizationId: number | null; organization: string | null; ownerId: number; ownerName: string; createdAt: string | null; createdByName: string };
 
 /** A deal as it is listed on a contact's page. */
 export type ContactDeal = {
@@ -80,12 +81,14 @@ export function parsePersonInput(value: unknown): { input: PersonInput; errors: 
   const body = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
   const rawEmails = Array.isArray(body.emails) ? body.emails : typeof body.emails === "string" ? body.emails.split(/[,;\s]+/) : [];
   const emails = [...new Set(rawEmails.map((email) => text(email, 254).toLowerCase()).filter(Boolean))];
-  const input: PersonInput = { name: text(body.name, 160), organizationName: text(body.organizationName, 200), emails, phone: text(body.phone, 40), altPhone: text(body.altPhone, 40), remark: text(body.remark, 500) };
+  const input: PersonInput = { name: text(body.name, 160), organizationName: text(body.organizationName, 200), emails, phone: text(body.phone, 40), altPhone: text(body.altPhone, 40), remark: text(body.remark, 500), createOrganization: body.createOrganization === true };
   const errors: string[] = [];
-  if (!input.name) errors.push("Enter the person's name.");
+  if (!input.name) errors.push("Enter the contact's name.");
+  // PD-17: a contact always belongs to an organization.
+  if (!input.organizationName) errors.push("Choose the contact's organization.");
   const bad = emails.filter((email) => !emailPattern.test(email));
   if (bad.length) errors.push(`Not an email address: ${bad.join(", ")}.`);
-  if (emails.length > 10) errors.push("A person can have up to 10 email addresses.");
+  if (emails.length > 10) errors.push("A contact can have up to 10 email addresses.");
   return { input, errors };
 }
 

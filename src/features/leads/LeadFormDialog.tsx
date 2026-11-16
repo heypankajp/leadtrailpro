@@ -1,12 +1,15 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
-import { AlertTriangle, Plus, Save, ShieldCheck } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { AlertTriangle, Building2, Mail, Plus, Save, ShieldCheck, UserRound } from "lucide-react";
 import { ApiError, errorMessage } from "@/lib/api";
 import { entryStageCode, reasonListFor } from "@/features/list-values/model";
 import { useApp } from "@/features/shell/AppContext";
 import { Dialog, ErrorText, Field } from "@/features/shell/components";
+import SuggestInput from "@/features/shell/SuggestInput";
 import { stageChoices } from "@/features/pipeline/model";
+import { fetchOrganization, fetchOrganizations, fetchPeople, fetchPerson } from "@/features/contacts/client";
+import { contactKey, type OrganizationDetail, type OrganizationRow, type PersonRow } from "@/features/contacts/model";
 import { createLead, updateLead } from "./client";
 import { dealCurrency, parseDealValue, type LeadInput, type LeadSummary } from "./model";
 
@@ -25,6 +28,8 @@ type Props = {
 };
 
 type DuplicateNotice = { leadId: number; clientName: string; ownerName: string; statusLabel: string; recordState: string; canOverride: boolean; message: string };
+/** PD-15: what saving would create, waiting for the user's confirmation. */
+type ConfirmNotice = { organization: string | null; contact: string | null };
 
 type FormState = {
   clientName: string; companyUrl: string; address: string; comments: string; clientExecutive: string; contactPhone: string; contactAltPhone: string; contactRemark: string;
@@ -57,8 +62,97 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
     dealValue: "", expectedCloseDate: "",
   });
   const [duplicate, setDuplicate] = useState<DuplicateNotice | null>(null);
+  const [confirm, setConfirm] = useState<ConfirmNotice | null>(null);
+  // "Save anyway" on a similar company is kept when the new organization is then confirmed.
+  const allowSimilarChosen = useRef(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  // PD-15: a new deal starts from an organization. Matching organizations are offered while typing; once the name is an
+  // existing organization, its record fills the empty company fields, its contacts are offered, and its open deals are shown.
+  const [orgRows, setOrgRows] = useState<{ q: string; rows: OrganizationRow[] } | null>(null);
+  const [organization, setOrganization] = useState<OrganizationDetail | null>(null);
+  const lookup = !lead && !contact?.organizationId;
+  const typedOrganization = lookup ? form.clientName.trim() : "";
+  useEffect(() => {
+    if (typedOrganization.length < 2) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      fetchOrganizations(typedOrganization, 1).then(async (page) => {
+        if (cancelled) return;
+        setOrgRows({ q: typedOrganization, rows: page.rows.slice(0, 8) });
+        const exact = page.rows.find((row) => contactKey(row.name) === contactKey(typedOrganization));
+        const detail = exact ? await fetchOrganization(exact.id) : null;
+        if (!cancelled) setOrganization(detail);
+      }).catch(() => { /* suggestions are optional; the server still decides on save */ });
+    }, 250);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [typedOrganization]);
+  const matchedOrganization = organization && contactKey(organization.organization.name) === contactKey(form.clientName) ? organization : null;
+  const matchedPerson = matchedOrganization?.people.find((person) => contactKey(person.name) === contactKey(form.clientExecutive)) ?? null;
+  const openDeals = matchedOrganization?.deals.filter((deal) => deal.recordState === "active") ?? [];
+
+  // Contacts that match a typed name (anyone's while no organization is picked) or a typed email address, with their
+  // organization: picking one fills the contact and the organization at once.
+  const [personRows, setPersonRows] = useState<{ q: string; rows: PersonRow[] } | null>(null);
+  const typedContact = lookup && !matchedOrganization ? form.clientExecutive.trim() : "";
+  const typedEmail = lookup ? (form.clientEmails.split(/[,;\s]+/).pop() ?? "").trim().toLowerCase() : "";
+  const personQuery = typedEmail.length >= 3 ? typedEmail : typedContact.length >= 2 ? typedContact : "";
+  useEffect(() => {
+    if (!personQuery) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      fetchPeople(personQuery, 1).then((page) => { if (!cancelled) setPersonRows({ q: personQuery, rows: page.rows.slice(0, 8) }); }).catch(() => { /* optional */ });
+    }, 250);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [personQuery]);
+  const pickPerson = (row: PersonRow, email?: string | null) => {
+    setForm((current) => {
+      const emails = current.clientEmails.split(/[,;\s]+/).filter(Boolean);
+      if (email) { if (emails.length && emails[emails.length - 1].toLowerCase() === typedEmail) emails.pop(); if (!emails.includes(email)) emails.push(email); }
+      return { ...current, clientName: row.organization ?? current.clientName, clientExecutive: row.name, clientEmails: emails.join(", ") };
+    });
+    setDuplicate(null);
+    setConfirm(null);
+  };
+  const orgSuggestions = orgRows && orgRows.q === typedOrganization ? orgRows.rows.map((row) => ({
+    key: String(row.id), label: row.name, icon: <Building2 size={14} />,
+    detail: [row.city, row.industry, `${row.openDeals} open ${row.openDeals === 1 ? "deal" : "deals"}`, row.people ? `${row.people} ${row.people === 1 ? "contact" : "contacts"}` : null].filter(Boolean).join(" · "),
+  })) : [];
+  const contactSuggestions = matchedOrganization
+    ? matchedOrganization.people
+      .filter((person) => !form.clientExecutive.trim() || contactKey(person.name).includes(contactKey(form.clientExecutive)))
+      .map((person) => ({ key: `p${person.id}`, label: person.name, detail: [person.email, person.phone].filter(Boolean).join(" · ") || undefined, icon: <UserRound size={14} /> }))
+    : personRows && personRows.q === typedContact ? personRows.rows.map((row) => ({ key: `p${row.id}`, label: row.name, detail: [row.organization, row.email].filter(Boolean).join(" · ") || undefined, icon: <UserRound size={14} /> })) : [];
+  const emailSuggestions = personRows && personRows.q === typedEmail && typedEmail.length >= 3
+    ? personRows.rows.map((row) => ({ key: `e${row.id}`, label: row.email ?? row.name, detail: [row.name, row.organization].filter(Boolean).join(" · "), icon: <Mail size={14} /> }))
+    : [];
+
+  // Picking an existing organization or contact fills the fields that are still empty from its record.
+  const matchedOrganizationId = matchedOrganization?.organization.id ?? null;
+  useEffect(() => {
+    if (!matchedOrganization) return;
+    const record = matchedOrganization.organization;
+    setForm((current) => ({
+      ...current,
+      industry: current.industry || record.industry, address: current.address || record.address, companyUrl: current.companyUrl || record.website,
+      cityId: current.cityId || (record.cityId ? String(record.cityId) : ""), companySizeId: current.companySizeId || (record.companySizeId ? String(record.companySizeId) : ""),
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once per organization picked
+  }, [matchedOrganizationId]);
+  const matchedPersonId = matchedPerson?.id ?? null;
+  useEffect(() => {
+    if (!matchedPersonId) return;
+    let cancelled = false;
+    fetchPerson(matchedPersonId).then(({ person }) => {
+      if (cancelled) return;
+      setForm((current) => ({
+        ...current,
+        clientEmails: current.clientEmails || person.emails.join(", "), contactPhone: current.contactPhone || person.phone,
+        contactAltPhone: current.contactAltPhone || person.altPhone, contactRemark: current.contactRemark || person.remark,
+      }));
+    }).catch(() => { /* the contact's details are a convenience */ });
+    return () => { cancelled = true; };
+  }, [matchedPersonId]);
 
   const set = (key: keyof FormState) => (event: { target: { value: string } }) => setForm((current) => ({ ...current, [key]: event.target.value }));
   const idOrNull = (value: string) => (value ? Number(value) : null);
@@ -70,13 +164,15 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
 
   const submit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); void save(false); };
 
-  const save = async (allowSimilar: boolean) => {
+  const save = async (allowSimilar: boolean, confirmed = false) => {
+    allowSimilarChosen.current = allowSimilar;
     // PD-11: the value is optional; what is typed must be an amount.
     const typedValue = parseDealValue(form.dealValue);
     if (typedValue.error) { setError(typedValue.error); return; }
     setSaving(true);
     setError("");
     setDuplicate(null);
+    setConfirm(null);
     const input: LeadInput = {
       clientName: form.clientName, companyUrl: form.companyUrl, address: form.address, comments: form.comments, clientExecutive: form.clientExecutive, contactPhone: form.contactPhone,
       contactAltPhone: form.contactAltPhone, contactRemark: form.contactRemark, clientEmails: form.clientEmails.split(/[,;\s]+/).filter(Boolean), industry: form.industry, positions: form.positions,
@@ -87,12 +183,17 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
       dealValue: typedValue.value, expectedCloseDate: form.expectedCloseDate || null,
     };
     try {
-      const result = lead ? await updateLead(lead.id, input) : await createLead({ ...input, ownerId: can("reassign_leads") ? Number(form.ownerId) : null, opportunityId: opportunityId ?? null, organizationId: contact?.organizationId ?? null, personId: contact?.personId ?? null, allowSimilar });
+      const result = lead ? await updateLead(lead.id, input) : await createLead({
+        ...input, ownerId: can("reassign_leads") ? Number(form.ownerId) : null, opportunityId: opportunityId ?? null,
+        organizationId: contact?.organizationId ?? matchedOrganization?.organization.id ?? null, personId: contact?.personId ?? matchedPerson?.id ?? null,
+        allowSimilar, createOrganization: confirmed, createContact: confirmed,
+      });
       onSaved(result.lead);
     } catch (caught) {
       const apiError = caught instanceof ApiError ? caught : null;
       const found = apiError?.status === 409 && apiError.data.duplicate ? (apiError.data.duplicate as Omit<DuplicateNotice, "canOverride" | "message">) : null;
-      if (apiError && found) setDuplicate({ ...found, canOverride: apiError.data.canOverride === true, message: apiError.message });
+      if (apiError?.status === 409 && apiError.data.code === "confirm_create") setConfirm({ organization: (apiError.data.organization as string | null) ?? null, contact: (apiError.data.contact as string | null) ?? null });
+      else if (apiError && found) setDuplicate({ ...found, canOverride: apiError.data.canOverride === true, message: apiError.message });
       else setError(errorMessage(caught, "Could not save the deal."));
       setSaving(false);
     }
@@ -110,10 +211,46 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
       {/* Pipedrive's add-deal layout: the deal on the left, the person and the organization on the right. */}
       <form className="lead-form deal-form" onSubmit={submit}>
         <div className="deal-form-col">
-          <Field label="Client name" required wide><input value={form.clientName} onChange={(event) => { set("clientName")(event); setDuplicate(null); }} required maxLength={200} placeholder="Company or client name" autoFocus /></Field>
-          <Field label="Client executive" wide><input value={form.clientExecutive} onChange={set("clientExecutive")} maxLength={160} placeholder="Contact person" /></Field>
+          <Field label="Organization" required wide hint={lookup ? "Start typing the company's name: the organizations that match appear in a list. Pick one, or keep typing a new name (you are asked before it is created)." : undefined}>
+            {lookup
+              ? <SuggestInput
+                  value={form.clientName} onChange={(value) => { setForm((current) => ({ ...current, clientName: value })); setDuplicate(null); setConfirm(null); }}
+                  suggestions={orgSuggestions} onPick={(suggestion) => { setForm((current) => ({ ...current, clientName: suggestion.label })); setDuplicate(null); setConfirm(null); }}
+                  loading={!orgRows || orgRows.q !== typedOrganization}
+                  empty={`No organization called “${typedOrganization}” yet: saving adds it after you confirm.`}
+                  required maxLength={200} placeholder="Type to search organizations…" autoFocus
+                />
+              : <input value={form.clientName} onChange={(event) => { set("clientName")(event); setDuplicate(null); setConfirm(null); }} required maxLength={200} placeholder="Company name" autoFocus />}
+          </Field>
+          {openDeals.length > 0 && (
+            <div className="form-note open-deals-note field-wide" role="status">
+              <Building2 size={14} />
+              <div>
+                <p><strong>{matchedOrganization?.organization.name}</strong> already has {openDeals.length === 1 ? "an open deal" : `${openDeals.length} open deals`}. This one is added next to {openDeals.length === 1 ? "it" : "them"}.</p>
+                <ul className="open-deals-list">
+                  {openDeals.slice(0, 3).map((deal) => <li key={deal.id}><button type="button" className="link-button" onClick={() => { openLead(deal.id); onClose(); }}>{deal.clientName}</button> · {deal.ownerName}{deal.stage ? ` · ${deal.stage}` : ""}</li>)}
+                </ul>
+              </div>
+            </div>
+          )}
+          <Field label="Contact" wide hint={!lookup ? undefined : matchedOrganization ? (matchedOrganization.people.length ? `Click or type to pick one of ${matchedOrganization.organization.name}'s contacts, or type a new name.` : `${matchedOrganization.organization.name} has no contacts yet: type a name to add one.`) : "Start typing a name: the contacts that match appear with their organization, and picking one fills both."}>
+            {lookup
+              ? <SuggestInput
+                  value={form.clientExecutive} onChange={(value) => { setForm((current) => ({ ...current, clientExecutive: value })); setConfirm(null); }}
+                  suggestions={contactSuggestions}
+                  onPick={(suggestion) => {
+                    const fromOrganization = matchedOrganization?.people.find((person) => `p${person.id}` === suggestion.key);
+                    const row = personRows?.rows.find((item) => `p${item.id}` === suggestion.key);
+                    if (fromOrganization) { setForm((current) => ({ ...current, clientExecutive: fromOrganization.name })); setConfirm(null); }
+                    else if (row) pickPerson(row);
+                  }}
+                  minChars={matchedOrganization ? 0 : 2}
+                  maxLength={160} placeholder={matchedOrganization ? "Pick or type a contact…" : "Type to search contacts…"}
+                />
+              : <input value={form.clientExecutive} onChange={(event) => { set("clientExecutive")(event); setConfirm(null); }} maxLength={160} placeholder="Contact person" />}
+          </Field>
           <Field label="Pipeline stage" wide hint={lead ? undefined : "Where the deal starts on the board."}>{select("stageId", stageChoices(values.stage, reference.pipelines), lead && !lead.stageId ? "Not set" : "")}</Field>
-          <Field label="Deal type" required>{select("leadTypeId", values.lead_type, "")}</Field>
+          <Field label="Deal source" required>{select("leadTypeId", values.lead_type, "")}</Field>
           <Field label="Status" required>
             <select value={form.statusId} onChange={(event) => setForm((current) => ({ ...current, statusId: event.target.value, statusReasonId: "" }))}>
               {values.status.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
@@ -144,8 +281,17 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
           <Field label="Comments" wide><textarea value={form.comments} onChange={set("comments")} rows={3} maxLength={5000} placeholder="General comments" /></Field>
         </div>
         <div className="deal-form-col deal-form-side">
-          <h3 className="deal-form-heading">PERSON</h3>
-          <Field label="Client email(s)" wide hint="Separate several addresses with commas."><input value={form.clientEmails} onChange={set("clientEmails")} placeholder="name@company.com" /></Field>
+          <h3 className="deal-form-heading">CONTACT</h3>
+          <Field label="Email(s)" wide hint={lookup ? "Separate several addresses with commas. Typing an address also finds the contact who has it, with their organization." : "Separate several addresses with commas."}>
+            {lookup
+              ? <SuggestInput
+                  value={form.clientEmails} onChange={(value) => setForm((current) => ({ ...current, clientEmails: value }))}
+                  suggestions={emailSuggestions} minChars={3}
+                  onPick={(suggestion) => { const row = personRows?.rows.find((item) => `e${item.id}` === suggestion.key); if (row) pickPerson(row, row.email); }}
+                  placeholder="name@company.com"
+                />
+              : <input value={form.clientEmails} onChange={set("clientEmails")} placeholder="name@company.com" />}
+          </Field>
           <Field label="Contact number"><input type="tel" value={form.contactPhone} onChange={set("contactPhone")} maxLength={40} placeholder="+1 (555) 123-4567" /></Field>
           <Field label="Extension or alternate number"><input type="tel" value={form.contactAltPhone} onChange={set("contactAltPhone")} maxLength={40} /></Field>
           <Field label="Contact remark" wide><input value={form.contactRemark} onChange={set("contactRemark")} maxLength={500} placeholder="Best time to call, preferences..." /></Field>
@@ -165,6 +311,22 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
               <div className="duplicate-actions">
                 <button type="button" className="button button-outline button-small" onClick={() => { openLead(duplicate.leadId); onClose(); }}>Open {duplicate.clientName}</button>
                 {duplicate.canOverride && <button type="button" className="button button-outline button-small" onClick={() => void save(true)} disabled={saving}>Save anyway</button>}
+              </div>
+            </div>
+          </div>
+        )}
+        {confirm && (
+          <div className="form-note confirm-new-note" role="alert">
+            <Building2 size={14} />
+            <div>
+              <p>Saving this deal also creates:</p>
+              <ul className="open-deals-list">
+                {confirm.organization && <li>New organization: <strong>{confirm.organization}</strong></li>}
+                {confirm.contact && <li>New contact: <strong>{confirm.contact}</strong>{confirm.organization || matchedOrganization ? ` at ${confirm.organization ?? matchedOrganization?.organization.name}` : ""}</li>}
+              </ul>
+              <div className="duplicate-actions">
+                <button type="button" className="button button-primary button-small" disabled={saving} onClick={() => void save(allowSimilarChosen.current, true)}>Create and add deal</button>
+                <button type="button" className="button button-outline button-small" onClick={() => setConfirm(null)}>Back</button>
               </div>
             </div>
           </div>

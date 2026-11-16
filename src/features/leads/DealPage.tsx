@@ -21,13 +21,13 @@ import RichText from "@/features/shell/RichText";
 import RichTextArea from "@/features/shell/RichTextArea";
 import { useApp } from "@/features/shell/AppContext";
 import { Avatar, Dialog, EmptyState, ErrorText, Field, Loading, PromptDialog, StatusPill, Tabs } from "@/features/shell/components";
-import { createTask, updateTask } from "@/features/tasks/client";
-import NaturalDateField from "@/features/tasks/NaturalDateField";
+import { updateTask } from "@/features/tasks/client";
 import TaskFormDialog from "@/features/tasks/TaskFormDialog";
 import type { Task } from "@/features/tasks/model";
 import UserDirectoryDialog from "@/features/users/UserDirectoryDialog";
 import type { UserSummary } from "@/features/users/model";
 import { attachmentUrl, fetchLead, logActivity, removeAttachment, reviewLead, setLeadState, setLeadTodo, transferLead, updateLead, uploadAttachment, type LeadDetail } from "./client";
+import { activityIcons, ScheduleActivityForm } from "@/features/tasks/ScheduleActivity";
 import LeadFormDialog from "./LeadFormDialog";
 import { activityLabels, formatDealValue, type LeadActivity, type LeadSummary, type LoggableActivityType } from "./model";
 
@@ -154,9 +154,13 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
     <article className="task-card" key={task.id}>
       <button className={`task-checkbox ${task.status === "done" ? "is-done" : ""}`} aria-label={task.status === "done" ? `Reopen ${task.title}` : `Complete ${task.title}`} disabled={!can("manage_tasks")} onClick={() => void toggleTask(task)}><Check size={13} /></button>
       <div className="task-card-content">
-        <strong className={task.status === "done" ? "is-done" : ""}>{task.title}</strong>
-        <small>{task.assigneeName} · {task.dueAt ? formatDateTime(task.dueAt) : "No due date"}{task.checklist.length ? ` · ${task.checklist.filter((item) => item.done).length}/${task.checklist.length} checklist` : ""}{task.commentCount ? ` · ${task.commentCount} comment${task.commentCount === 1 ? "" : "s"}` : ""}</small>
-        <span className={`priority priority-${task.priority}`}>{task.priority} priority</span>
+        {/* PD-29: Pipedrive's focus item: type, title, then priority, overdue, when, who and the contact. */}
+        <strong className={task.status === "done" ? "is-done" : ""}><span className="task-type" title={task.activityType}>{activityIcons[task.activityType]}</span> {task.title}</strong>
+        <div className="task-badges">
+          <span className={`priority priority-${task.priority}`}>{task.priority} priority</span>
+          {task.status !== "done" && task.dueAt && task.dueAt < new Date().toISOString() && <span className="task-overdue">Overdue</span>}
+        </div>
+        <small>{task.dueAt ? formatDateTime(task.dueAt) : "No due date"}{task.endsAt ? `–${new Intl.DateTimeFormat(undefined, { timeStyle: "short" }).format(new Date(task.endsAt))}` : ""} · {task.assigneeName}{lead.clientExecutive ? ` · ${lead.clientExecutive}` : ""}{task.checklist.length ? ` · ${task.checklist.filter((item) => item.done).length}/${task.checklist.length} checklist` : ""}{task.commentCount ? ` · ${task.commentCount} comment${task.commentCount === 1 ? "" : "s"}` : ""}</small>
       </div>
       {can("manage_tasks") && <button className="row-more" aria-label={`Edit ${task.title}`} onClick={() => setDialog({ kind: "task", task })}><Pencil size={15} /></button>}
     </article>
@@ -214,11 +218,7 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
                 await refresh(message ?? "Activity recorded");
                 if (logged && logged.type !== "note" && !logged.taskCreated) offerNextStep(`You logged ${logged.type === "email" ? "an email" : `a ${logged.type}`}.`);
               }}
-              onScheduleFollowUp={async (date, time, note) => {
-                await updateLead(lead.id, { followUpDate: date });
-                await createTask({ leadId: lead.id, title: `Follow up with ${lead.clientExecutive || lead.clientName}`, description: note, assigneeId: lead.ownerId, dueAt: fromLocalInput(`${date}T${time}`), priority: "normal", checklist: [] });
-                await refresh("Follow-up scheduled and added to tasks");
-              }}
+              onScheduled={async (message) => { await refresh(message); }}
             />
 
             <section className="deal-block" aria-label="Focus">
@@ -247,7 +247,6 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
                 tabs={[
                   { id: "timeline", label: "Timeline", count: detail.activities.length },
                   { id: "collaboration", label: "Collaboration", count: detail.messageCount },
-                  { id: "emails", label: "Emails" },
                   { id: "files", label: "Documents", count: documents.length },
                   { id: "profiles", label: "Profiles shared", count: profiles.length },
                   ...(detail.audit.length ? [{ id: "history" as const, label: "Audit", count: detail.audit.length }] : []),
@@ -257,7 +256,6 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
               />
               {tab === "timeline" && <TimelineList activities={detail.activities} />}
               {tab === "collaboration" && <CollaborationTab leadId={lead.id} attachments={detail.attachments} canPost={can("collaborate") && lead.recordState !== "archived"} onChanged={() => { reload(); bumpData(); }} />}
-              {tab === "emails" && <LeadEmails leadId={lead.id} addresses={lead.clientEmails} attachments={detail.attachments} />}
               {(tab === "files" || tab === "profiles") && (
                 <FilesTab key={tab} category={tab === "files" ? "document" : "profile"} files={tab === "files" ? documents : profiles} leadId={lead.id} onChanged={(message) => refresh(message)} />
               )}
@@ -318,8 +316,8 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
   );
 }
 
-/** Asks for the Status Reason that Lost Lead and Disqualified require (LEAD-06). */
-function StatusReasonDialog({ leadName, statusName, options, onConfirm, onClose }: { leadName: string; statusName: string; options: ListValue[]; onConfirm: (statusReasonId: number) => Promise<void>; onClose: () => void }) {
+/** Asks for the Status Reason that Lost Lead and Disqualified require (LEAD-06); also used by the board by status (PD-24). */
+export function StatusReasonDialog({ leadName, statusName, options, onConfirm, onClose }: { leadName: string; statusName: string; options: ListValue[]; onConfirm: (statusReasonId: number) => Promise<void>; onClose: () => void }) {
   const [reasonId, setReasonId] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -414,11 +412,11 @@ function SidePanels({ detail, canEdit, overdue, onQuickUpdate, onTodo }: {
         {/* PD-11: both are optional and only take room once one of them is filled. */}
         {(lead.dealValue !== null && lead.dealValue !== undefined) && <SideRow label="Value"><strong>{formatDealValue(lead.dealValue)}</strong></SideRow>}
         {lead.expectedCloseDate && <SideRow label="Expected close"><strong>{formatDate(lead.expectedCloseDate)}</strong></SideRow>}
-        <SideRow label="Deal type"><strong>{lead.leadType}</strong></SideRow>
+        <SideRow label="Deal source"><strong>{lead.leadType}</strong></SideRow>
         <SideRow label="Deal category"><strong>{lead.leadCategory ?? "Not set"}</strong></SideRow>
       </SidePanel>
 
-      <SidePanel title="Person" icon={<UserRound size={14} />}>
+      <SidePanel title="Contact" icon={<UserRound size={14} />}>
         <SideRow label="Name">{lead.personId && lead.clientExecutive
           ? <button type="button" className="link-button contact-name client-executive-name" onClick={() => openContact("person", lead.personId!)}>{lead.clientExecutive}</button>
           : <strong className="client-executive-name">{lead.clientExecutive || "Not provided"}</strong>}</SideRow>
@@ -452,13 +450,15 @@ function SidePanels({ detail, canEdit, overdue, onQuickUpdate, onTodo }: {
 }
 
 type FollowUpDraft = { key: string; enabled: boolean; title: string; date: string; time: string };
-type ComposerMode = LoggableActivityType | "follow-up";
+/** "emails": the Emails tab (PD-25), the organization's mail; "email" is the form that logs an email by hand inside it. */
+type ComposerMode = LoggableActivityType | "follow-up" | "emails";
 
-/** The box at the top of the right column: write a note, log a call, an email or a visit, or schedule the follow-up. */
-function Composer({ detail, canEdit, onLogged, onScheduleFollowUp }: {
+/** The box at the top of the right column: write a note, log a call or a visit, read and send the emails (PD-25), or schedule the follow-up. */
+function Composer({ detail, canEdit, onLogged, onScheduled }: {
   detail: LeadDetail; canEdit: boolean;
   onLogged: (message?: string, logged?: { type: LoggableActivityType; taskCreated: boolean }) => Promise<void>;
-  onScheduleFollowUp: (date: string, time: string, note: string) => Promise<void>;
+  /** PD-29: an activity was scheduled (or recorded as done) in the Schedule activity form. */
+  onScheduled: (message: string) => Promise<void>;
 }) {
   const { can, reference } = useApp();
   const { lead } = detail;
@@ -467,16 +467,15 @@ function Composer({ detail, canEdit, onLogged, onScheduleFollowUp }: {
   const [body, setBody] = useState("");
   const [occurredAt, setOccurredAt] = useState(toLocalInput(new Date().toISOString()));
   const [taskDraft, setTaskDraft] = useState<FollowUpDraft | null>(null);
-  const [date, setDate] = useState(lead.followUpDate ?? reference.today);
-  const [time, setTime] = useState("09:00");
-  const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const canLog = can("log_activities") && lead.recordState === "active";
   const canNote = can("add_notes") && lead.recordState !== "archived";
   const canSuggest = can("manage_tasks") && lead.recordState === "active";
   const canFollowUp = canEdit && can("manage_tasks") && lead.recordState === "active";
-  const type = mode && mode !== "follow-up" ? mode : null;
+  const type = mode && mode !== "follow-up" && mode !== "emails" ? mode : null;
+  // PD-19: the deal's own addresses and those of every contact of its organization.
+  const emailAddresses = [...new Set([...lead.clientEmails.map((address) => address.toLowerCase()), ...detail.organizationEmails])];
 
   // NOTE-05: a follow-up instruction with a date in the note offers a task; relative periods count from the interaction date.
   const suggestion = useMemo(() => {
@@ -490,7 +489,7 @@ function Composer({ detail, canEdit, onLogged, onScheduleFollowUp }: {
     : null;
   const updateDraft = (changes: Partial<FollowUpDraft>) => { if (draft) setTaskDraft({ ...draft, ...changes }); };
 
-  const open = (next: ComposerMode) => { setMode(next); setSummary(""); setBody(""); setOccurredAt(toLocalInput(new Date().toISOString())); setTaskDraft(null); setNote(""); setError(""); };
+  const open = (next: ComposerMode) => { setMode(next); setSummary(""); setBody(""); setOccurredAt(toLocalInput(new Date().toISOString())); setTaskDraft(null); setError(""); };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -512,16 +511,10 @@ function Composer({ detail, canEdit, onLogged, onScheduleFollowUp }: {
     }
   };
 
-  const schedule = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setBusy(true);
-    setError("");
-    try { await onScheduleFollowUp(date, time, note); setMode(null); setNote(""); } catch (caught) { setError(errorMessage(caught)); } finally { setBusy(false); }
-  };
 
   if (!canLog && !canNote && !canFollowUp) return null;
-  const tabButton = (id: ComposerMode, label: string, icon: ReactNode) => (
-    <button type="button" className={mode === id ? "is-active" : ""} aria-pressed={mode === id} onClick={() => (mode === id ? setMode(null) : open(id))}>{icon} {label}</button>
+  const tabButton = (id: ComposerMode, label: string, icon: ReactNode, active = mode === id) => (
+    <button type="button" className={active ? "is-active" : ""} aria-pressed={active} onClick={() => (active ? setMode(null) : open(id))}>{icon} {label}</button>
   );
 
   return (
@@ -529,11 +522,17 @@ function Composer({ detail, canEdit, onLogged, onScheduleFollowUp }: {
       <div className="composer-tabs log-actions">
         {canNote && tabButton("note", "Add note", <MessageSquare size={14} />)}
         {canLog && tabButton("call", "Log call", <Phone size={14} />)}
-        {canLog && tabButton("email", "Log email", <Mail size={14} />)}
+        {tabButton("emails", "Emails", <Mail size={14} />, mode === "emails" || mode === "email")}
         {canLog && tabButton("visit", "Log visit", <MapPin size={14} />)}
-        {canFollowUp && tabButton("follow-up", "Schedule follow-up", <CalendarCheck2 size={14} />)}
+        {canFollowUp && tabButton("follow-up", "Schedule activity", <CalendarCheck2 size={14} />)}
       </div>
-      {!mode && <p className="composer-hint">Choose what to add: a note, a call, an email or a visit you had{canFollowUp ? ", or the next follow-up" : ""}.</p>}
+      {!mode && <p className="composer-hint">Choose what to add: a note, a call or a visit you had{canFollowUp ? ", or the next follow-up" : ""}. Emails shows the mail with every contact of {lead.clientName}.</p>}
+      {mode === "emails" && (
+        <div className="composer-emails">
+          {canLog && <div className="composer-emails-head"><button type="button" className="button button-outline button-small" onClick={() => open("email")}><Mail size={14} /> Log an email by hand</button><small className="field-hint">For mail sent from outside a connected mailbox.</small></div>}
+          <LeadEmails leadId={lead.id} addresses={emailAddresses} attachments={detail.attachments} />
+        </div>
+      )}
       {type && (
         <form className="lead-form activity-form" onSubmit={submit}>
           {type !== "note" && <Field label="Summary" wide><input value={summary} onChange={(event) => setSummary(event.target.value)} maxLength={500} placeholder={type === "call" ? "Spoke with HR about the Q1 hiring plan" : type === "email" ? "Sent the introduction email" : "On-site meeting with the plant manager"} autoFocus /></Field>}
@@ -561,17 +560,8 @@ function Composer({ detail, canEdit, onLogged, onScheduleFollowUp }: {
           <div className="modal-actions"><button type="button" className="button button-outline" onClick={() => setMode(null)}>Cancel</button><button type="submit" className="button button-primary" disabled={busy}>{busy ? "Saving..." : type === "note" ? "Save note" : `Save ${type}`}</button></div>
         </form>
       )}
-      {mode === "follow-up" && (
-        <form className="lead-form follow-up-form" onSubmit={schedule}>
-          <p className="follow-up-intro field-wide">Set the next step for <strong>{lead.clientName}</strong>. The reminder goes to the owner&apos;s task list.</p>
-          <NaturalDateField label="Type the follow-up date" placeholder="next Tuesday at 2pm, in a week, end of month..." onResolve={(result, resolvedTime) => { setDate(result.date); setTime(resolvedTime); }} />
-          <Field label="Follow-up date" required><input type="date" value={date} min={reference.today} onChange={(event) => setDate(event.target.value)} required autoFocus /></Field>
-          <Field label="Follow-up time" required><input type="time" value={time} onChange={(event) => setTime(event.target.value)} required /></Field>
-          <Field label="What needs to happen?" wide><textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Call back about the revised proposal..." /></Field>
-          <ErrorText message={error} />
-          <div className="modal-actions"><button type="button" className="button button-outline" onClick={() => setMode(null)}>Cancel</button><button type="submit" className="button button-primary" disabled={busy}><CalendarCheck2 size={15} /> {busy ? "Scheduling..." : "Save follow-up"}</button></div>
-        </form>
-      )}
+      {/* PD-29: Pipedrive's Schedule an activity, in place of the old date-and-note follow-up form. */}
+      {mode === "follow-up" && <ScheduleActivityForm deal={lead} canSetFollowUp={canEdit} onCancel={() => setMode(null)} onSaved={async (message) => { setMode(null); await onScheduled(message); }} />}
     </section>
   );
 }

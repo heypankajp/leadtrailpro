@@ -557,7 +557,7 @@ export async function runTrackerImport(options) {
     const ownerId = insertOptions.ownerId;
     if (!lead.manager) decision("Deals with no Sales Manager in any row: assigned to the default owner");
     let leadType = lead.type;
-    if (!leadType) { leadType = "Office"; decision('No deal type in any row: "Office" assumed'); }
+    if (!leadType) { leadType = "Office"; decision('No deal source in any row: "Office" assumed'); }
     let statusCode = lead.status ?? "cold";
     if (!lead.status) decision('No status in any row: "Cold" assumed');
     if (!insertOptions.archived && clientKeys.has(lead.rows[0].key) && statusCode !== "client") { statusCode = "client"; decision('Listed on the Clients sheet: status set to "Client"'); }
@@ -628,7 +628,7 @@ export async function runTrackerImport(options) {
     }
     if (lead.response) change("client_response_id", "client response", existing.clientResponseId, await ensureValue("client_response", lead.response));
     if (lead.city) change("city_id", "city", existing.cityId, await ensureValue("city", lead.city));
-    if (lead.type) change("lead_type_id", "deal type", existing.leadTypeId, await ensureValue("lead_type", lead.type));
+    if (lead.type) change("lead_type_id", "deal source", existing.leadTypeId, await ensureValue("lead_type", lead.type));
     const sheetOwner = lead.manager ? await ownerFor(lead.manager) : null;
     if (sheetOwner) change("owner_id", "owner", existing.ownerId, sheetOwner);
     if (lead.address) change("address", "address", existing.address, lead.address);
@@ -696,7 +696,7 @@ export async function runTrackerImport(options) {
     }
     decision("Companies with no Sales Manager in any row: placed in the leads inbox");
     let leadType = lead.type;
-    if (!leadType) { leadType = "Office"; decision('No deal type in any row: "Office" assumed'); }
+    if (!leadType) { leadType = "Office"; decision('No deal source in any row: "Office" assumed'); }
     const statusCode = lead.status ?? "cold";
     if (!lead.status) decision('No status in any row: "Cold" assumed');
     let firstContact = lead.firstContact;

@@ -38,6 +38,7 @@ export const userPrivileges = [
   { id: "view_team_reports", label: "View team reports" },
   { id: "manage_users", label: "Manage users" },
   { id: "manage_values", label: "Manage list of values" },
+  { id: "manage_stages", label: "Edit pipeline stages" },
   { id: "manage_targets", label: "Manage targets and templates" },
   { id: "manage_settings", label: "Manage settings" },
   { id: "view_audit", label: "View audit history" },
@@ -51,6 +52,8 @@ export const rolePrivileges: Record<SystemRole, UserPrivilege[]> = {
   sales_manager: [
     "view_leads", "create_leads", "edit_leads", "transfer_leads", "reassign_leads", "add_notes", "collaborate", "log_activities",
     "manage_tasks", "plan_trips", "upload_files", "view_reports",
+    // PD-21: Sales Managers rename, add, reorder and delete the stages from the board.
+    "manage_stages",
   ],
   recruiter: ["view_leads", "add_notes", "collaborate"],
 };

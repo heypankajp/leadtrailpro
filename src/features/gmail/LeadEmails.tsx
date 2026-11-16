@@ -14,7 +14,8 @@ import type { LeadEmail } from "./model";
 type Compose = { to: string; cc: string; subject: string; body: string; threadId: string | null; inReplyTo: string | null };
 
 /**
- * Emails tab on the lead (MAIL-01, MAIL-02, MAIL-03): the messages exchanged with the lead's client addresses, read
+ * Emails tab on the deal (MAIL-01, MAIL-02, MAIL-03; in the composer since PD-25): the messages exchanged with the
+ * deal's addresses and those of every contact of its organization (PD-19), as sender, To or Cc, read
  * through the signed-in person's connected Gmail (every connected mailbox for team-report viewers), grouped by
  * thread, with Send email and Reply going out from the person's own mailbox.
  */
@@ -65,7 +66,7 @@ export default function LeadEmails({ leadId, addresses, attachments }: { leadId:
     <section className="lead-emails" aria-label="Recent emails">
       <ErrorText message={statusError} />
       {status && !status.configured && (
-        <div className="form-note note-warning"><Mail size={14} /> Gmail is not configured. Add GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GMAIL_TOKEN_KEY to .env.local and restart the app. Until then, log emails on the Timeline.</div>
+        <div className="form-note note-warning"><Mail size={14} /> Gmail is not configured. Add GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GMAIL_TOKEN_KEY to .env.local and restart the app. Until then, log emails by hand.</div>
       )}
       {status?.configured && (
         <div className="section-actions gmail-controls">
@@ -76,7 +77,7 @@ export default function LeadEmails({ leadId, addresses, attachments }: { leadId:
           {status.allMailboxes && <small className="field-hint">You see messages from every connected mailbox.</small>}
         </div>
       )}
-      {status?.configured && addresses.length === 0 && <p className="no-attachments">Add a client email address to the deal to see messages.</p>}
+      {status?.configured && addresses.length === 0 && <p className="no-attachments">Add an email address to the deal&apos;s contact (or another contact of the organization) to see messages.</p>}
       {status?.configured && addresses.length > 0 && !connected && !status.allMailboxes && <p className="no-attachments">Connect your Gmail to see and answer emails from your own mailbox. Emails that colleagues&apos; connected mailboxes exchanged with this client are listed below.</p>}
       {canLoad && loading && <Loading text="Loading emails..." />}
       <ErrorText message={emailsError} />
@@ -84,7 +85,7 @@ export default function LeadEmails({ leadId, addresses, attachments }: { leadId:
         <>
           {result.failures > 0 && <div className="form-note note-warning"><Mail size={14} /> Some mailboxes could not be read. Those users may need to reconnect Gmail.</div>}
           {threads.length === 0
-            ? <EmptyState icon={<Mail size={22} />} title="No recent emails found" text="Messages to or from the deal's email addresses appear here." />
+            ? <EmptyState icon={<Mail size={22} />} title="No recent emails found" text="Messages with any contact of the organization, as sender, To or Cc, appear here." />
             : (
               <div className="email-list">
                 {threads.map((thread) => (

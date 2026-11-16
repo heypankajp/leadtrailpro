@@ -2,12 +2,13 @@ import { NextResponse } from "next/server";
 import { handleRouteError, jsonError } from "@/lib/http";
 import { recentLeadEmails } from "@/features/gmail/gmail";
 import { getLead } from "@/features/leads/repository";
+import { organizationEmails } from "@/features/contacts/repository";
 import { hasPrivilege, requirePrivilege, requireUser } from "@/features/users/session";
 
 type RouteContext = { params: Promise<{ id: string }> };
 const safeAddress = /^[^\s"'()<>,;\\]+@[^\s"'()<>,;\\]+$/;
 
-/** Recent Gmail messages exchanged with the lead's client email addresses (MAIL-01, MAIL-03). */
+/** Recent Gmail messages exchanged with the deal's client addresses and those of every contact of its organization, as sender, To or Cc (MAIL-01, MAIL-03, PD-19). */
 export async function GET(_request: Request, context: RouteContext) {
   try {
     const user = await requireUser();
@@ -17,7 +18,7 @@ export async function GET(_request: Request, context: RouteContext) {
     if (!Number.isSafeInteger(id) || id < 1) return jsonError(400, "Invalid deal ID.");
     const lead = await getLead(id);
     if (!lead) return jsonError(404, "Deal not found.");
-    const addresses = lead.clientEmails.filter((value) => safeAddress.test(value));
+    const addresses = [...new Set([...lead.clientEmails.map((value) => value.toLowerCase()), ...(await organizationEmails(lead.organizationId))])].filter((value) => safeAddress.test(value));
     // Colleagues see the client thread from any mailbox the watch matched to this lead; team-report viewers see every mailbox.
     const scope = hasPrivilege(user, "view_team_reports") ? "all" : { userId: user.id, leadId: id };
     return NextResponse.json(await recentLeadEmails(addresses, scope));

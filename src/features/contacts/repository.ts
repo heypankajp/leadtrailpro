@@ -185,35 +185,72 @@ export async function deleteOrganization(id: number, actor: UserAccount): Promis
     requireEdit(actor, before.ownerId);
     const deals = await connection.query("SELECT COUNT(*)::int AS count FROM leads WHERE organization_id = ?", [id]);
     if (Number(deals.rows[0]?.count ?? 0) > 0) throw new HttpError(409, "An organization with deals cannot be removed. Archive or move its deals first.");
+    // PD-17: a contact cannot exist without its organization, so the contacts (none of them has a deal here) go with it.
+    const contactDeals = await connection.query("SELECT COUNT(*)::int AS count FROM leads l JOIN persons p ON p.id = l.person_id WHERE p.organization_id = ?", [id]);
+    if (Number(contactDeals.rows[0]?.count ?? 0) > 0) throw new HttpError(409, "A contact of this organization still has deals. Move or merge that contact first.");
+    await connection.query("DELETE FROM persons WHERE organization_id = ?", [id]);
     await connection.query("DELETE FROM organizations WHERE id = ?", [id]);
     await recordAudit(connection, { actorId: actor.id, action: "organization.removed", entityType: "organization", entityId: id, before: { name: before.name }, details: `${actor.name} removed the organization ${before.name} (it had no deals)` });
   });
 }
 
-/** The organization a person is filed under: the one with that name, created when the name is new, or none. */
-async function organizationFor(connection: Queryable, name: string, actor: UserAccount): Promise<number | null> {
-  if (!name) return null;
+/**
+ * The organization a contact is filed under: the one with that name, or a new one once the user has confirmed it
+ * (PD-15, PD-17). Without the confirmation the answer is 409 `confirm_create`, which the form turns into a question.
+ */
+async function organizationFor(connection: Queryable, name: string, actor: UserAccount, confirmed = false): Promise<number> {
+  if (!name) throw new HttpError(400, "Choose the contact's organization.");
   const found = await connection.query("SELECT id FROM organizations WHERE name_key = ?", [contactKey(name)]);
   if (found.rows.length) return Number(found.rows[0].id);
+  if (!confirmed) throw new HttpError(409, `${name} is not an organization yet.`, { code: "confirm_create", organization: name, contact: null });
   const created = await connection.query("INSERT INTO organizations (name, name_key, owner_id, created_by) VALUES (?, ?, ?, ?) RETURNING id", [name, contactKey(name), actor.id, actor.id]);
-  await recordAudit(connection, { actorId: actor.id, action: "organization.created", entityType: "organization", entityId: insertId(created), after: { name }, details: `${actor.name} added the organization ${name} with a person` });
+  await recordAudit(connection, { actorId: actor.id, action: "organization.created", entityType: "organization", entityId: insertId(created), after: { name }, details: `${actor.name} added the organization ${name} with a contact` });
   return insertId(created);
+}
+
+/** PD-19: every email address of every contact of the organization, lower-cased, without repeats. */
+export async function organizationEmails(organizationId: number | null, db: Queryable = getDatabasePool()): Promise<string[]> {
+  if (!organizationId) return [];
+  const { rows } = await db.query("SELECT DISTINCT LOWER(e) AS email FROM persons p, jsonb_array_elements_text(p.emails) e WHERE p.organization_id = ? ORDER BY 1", [organizationId]);
+  return (rows as { email: string }[]).map((row) => row.email).filter(Boolean);
+}
+
+/**
+ * PD-15: the names in a new deal that match no organization, or no contact of that organization, yet. Each of them is
+ * created only after the user confirms it; a deal added from a contact's page passes the ids and needs no confirmation.
+ */
+export async function newContactNames(clientName: string, clientExecutive: string, organizationId: number | null, personId: number | null, db: Queryable = getDatabasePool()): Promise<{ organization: string | null; contact: string | null }> {
+  let orgId = organizationId;
+  let organization: string | null = null;
+  if (!orgId) {
+    const found = await db.query("SELECT id FROM organizations WHERE name_key = ?", [contactKey(clientName)]);
+    if (found.rows.length) orgId = Number(found.rows[0].id);
+    else organization = clientName.trim() || null;
+  }
+  const name = clientExecutive.trim();
+  let contact: string | null = null;
+  if (name && !personId) {
+    if (!orgId) contact = name;
+    else {
+      const found = await db.query("SELECT id FROM persons WHERE organization_id = ? AND name_key = ?", [orgId, contactKey(name)]);
+      if (!found.rows.length) contact = name;
+    }
+  }
+  return { organization, contact };
 }
 
 export async function createPerson(input: PersonInput, actor: UserAccount): Promise<Person> {
   requireCreate(actor);
   return withTransaction(async (connection) => {
-    const organizationId = await organizationFor(connection, input.organizationName, actor);
-    if (organizationId) {
-      const clash = await connection.query("SELECT id FROM persons WHERE organization_id = ? AND name_key = ?", [organizationId, contactKey(input.name)]);
-      if (clash.rows.length) throw new HttpError(409, `${input.name} is already a person at ${input.organizationName}. Open them from the list.`, { personId: Number(clash.rows[0].id) });
-    }
+    const organizationId = await organizationFor(connection, input.organizationName, actor, input.createOrganization);
+    const clash = await connection.query("SELECT id FROM persons WHERE organization_id = ? AND name_key = ?", [organizationId, contactKey(input.name)]);
+    if (clash.rows.length) throw new HttpError(409, `${input.name} is already a contact at ${input.organizationName}. Open them from the list.`, { personId: Number(clash.rows[0].id) });
     const result = await connection.query(
       "INSERT INTO persons (organization_id, name, name_key, emails, phone, alt_phone, remark, owner_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
       [organizationId, input.name, contactKey(input.name), JSON.stringify(input.emails), input.phone, input.altPhone, input.remark, actor.id, actor.id],
     );
     const person = (await findPerson(insertId(result), connection))!;
-    await recordAudit(connection, { actorId: actor.id, action: "person.created", entityType: "person", entityId: person.id, after: { name: person.name, organization: person.organization }, details: `${actor.name} added the person ${person.name}${person.organization ? ` at ${person.organization}` : ""}` });
+    await recordAudit(connection, { actorId: actor.id, action: "person.created", entityType: "person", entityId: person.id, after: { name: person.name, organization: person.organization }, details: `${actor.name} added the contact ${person.name}${person.organization ? ` at ${person.organization}` : ""}` });
     return person;
   });
 }
@@ -226,19 +263,17 @@ export async function updatePerson(id: number, input: PersonInput, actor: UserAc
     requireEdit(actor, before.ownerId);
     if (before.organizationId && contactKey(input.organizationName) === contactKey(before.organization ?? "")) {
       const clash = await connection.query("SELECT id FROM persons WHERE organization_id = ? AND name_key = ? AND id <> ?", [before.organizationId, contactKey(input.name), id]);
-      if (clash.rows.length) throw new HttpError(409, `Another person at ${before.organization} is already called ${input.name}.`);
+      if (clash.rows.length) throw new HttpError(409, `Another contact at ${before.organization} is already called ${input.name}.`);
     }
     // Filing a person under another organization is a correction, allowed while they have no deals. Their deals name the
     // organization they belong to; someone who changed employer is added as a new person there (SPEC §10.16).
     let organizationId = before.organizationId;
     if (contactKey(input.organizationName) !== contactKey(before.organization ?? "")) {
       const deals = await connection.query("SELECT COUNT(*)::int AS count FROM leads WHERE person_id = ?", [id]);
-      if (Number(deals.rows[0]?.count ?? 0) > 0) throw new HttpError(409, `${before.name} has deals with ${before.organization}, so they stay there. If they moved to another company, add them as a new person at that organization.`);
-      organizationId = await organizationFor(connection, input.organizationName, actor);
-      if (organizationId) {
-        const taken = await connection.query("SELECT id FROM persons WHERE organization_id = ? AND name_key = ? AND id <> ?", [organizationId, contactKey(input.name), id]);
-        if (taken.rows.length) throw new HttpError(409, `${input.organizationName} already has a person called ${input.name}.`);
-      }
+      if (Number(deals.rows[0]?.count ?? 0) > 0) throw new HttpError(409, `${before.name} has deals with ${before.organization}, so they stay there. If they moved to another company, add them as a new contact at that organization.`);
+      organizationId = await organizationFor(connection, input.organizationName, actor, input.createOrganization);
+      const taken = await connection.query("SELECT id FROM persons WHERE organization_id = ? AND name_key = ? AND id <> ?", [organizationId, contactKey(input.name), id]);
+      if (taken.rows.length) throw new HttpError(409, `${input.organizationName} already has a contact called ${input.name}.`);
     }
     await connection.query("UPDATE persons SET organization_id = ?, name = ?, name_key = ?, emails = ?, phone = ?, alt_phone = ?, remark = ? WHERE id = ?",
       [organizationId, input.name, contactKey(input.name), JSON.stringify(input.emails), input.phone, input.altPhone, input.remark, id]);

@@ -52,13 +52,21 @@ async function getMessage(accessToken: string, id: string): Promise<WatchMessage
   return parseWatchMessage(await response.json());
 }
 
-/** Active leads whose client emails include any of the addresses (the JSON column is searched as text, then checked exactly). */
+/**
+ * Active leads whose client emails, or the emails of any contact of their organization (PD-19), include any of the
+ * addresses. The JSON columns are searched as text, then the addresses are checked exactly by `matchMessage`.
+ */
 async function findLeads(db: Queryable, addresses: string[]): Promise<WatchLead[]> {
   if (!addresses.length) return [];
-  const clauses = addresses.map(() => "LOWER(l.client_emails::text) LIKE ?");
+  const patterns = addresses.map((address) => `%${address.toLowerCase().replace(/[%_\\]/g, "\\$&")}%`);
+  const own = addresses.map(() => "LOWER(l.client_emails::text) LIKE ?").join(" OR ");
+  const contacts = addresses.map(() => "LOWER(p.emails::text) LIKE ?").join(" OR ");
   const { rows } = await db.query(
-    `SELECT l.id, l.owner_id AS "ownerId", l.client_name AS "clientName", l.client_emails AS "clientEmails" FROM leads l WHERE l.record_state = 'active' AND (${clauses.join(" OR ")})`,
-    addresses.map((address) => `%${address.toLowerCase().replace(/[%_\\]/g, "\\$&")}%`),
+    `SELECT l.id, l.owner_id AS "ownerId", l.client_name AS "clientName",
+       l.client_emails || COALESCE((SELECT jsonb_agg(e) FROM persons p, jsonb_array_elements(p.emails) e WHERE p.organization_id = l.organization_id), '[]'::jsonb) AS "clientEmails"
+     FROM leads l
+     WHERE l.record_state = 'active' AND ((${own}) OR (l.organization_id IS NOT NULL AND EXISTS (SELECT 1 FROM persons p WHERE p.organization_id = l.organization_id AND (${contacts}))))`,
+    [...patterns, ...patterns],
   );
   return (rows as { id: number; ownerId: number; clientName: string; clientEmails: unknown }[]).map((row) => ({
     id: Number(row.id), ownerId: Number(row.ownerId), clientName: row.clientName, clientEmails: parseClientEmails(row.clientEmails),

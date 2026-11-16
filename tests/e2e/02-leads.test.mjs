@@ -25,14 +25,14 @@ describe("Deals", () => {
   uiTest("adds a deal from the action center", async () => {
     await page.clickButton("Add a deal", { global: true });
     await page.dialogTitle("Add deal");
-    await page.fill("Client name", lead.name);
-    await page.fill("Client executive", lead.executive);
+    await page.fill("Organization", lead.name);
+    await page.fill("Contact", lead.executive);
     await page.fill("Contact number", lead.phone);
-    await page.fill("Client email(s)", lead.email);
+    await page.fill("Email(s)", lead.email);
     await page.fill("City", "Toronto");
     await page.fill("Client industry", "Robotics");
     await page.fill("Address", "100 King St W, Toronto");
-    await page.clickButton("Save deal");
+    await page.saveDeal();
     await page.toast(`${lead.name} added to the pipeline`);
     await page.dialogTitle(lead.name);
     await page.eyebrow("DEAL");
@@ -119,18 +119,27 @@ describe("Deals", () => {
     assert.match(await (await page.wait(By.xpath('.//button[@role="tab" and starts-with(normalize-space(.), "Collaboration")]'))).getText(), /1$/, "the tab counts live messages only");
   });
 
-  uiTest("the Emails tab explains that Gmail is not configured", async () => {
-    await page.tab("Emails");
+  uiTest("the Emails tab explains that Gmail is not configured and offers the hand log", async () => {
+    await page.clickButton("Emails");
+    await page.wait(By.xpath('//div[contains(@class,"composer-emails")]//button[normalize-space()="Log an email by hand"]'));
     const note = await page.wait(By.css(".lead-emails .note-warning"));
     assert.match(await note.getText(), /Gmail is not configured/);
   });
 
-  uiTest("schedules a follow-up that becomes a task", async () => {
-    await page.clickButton("Schedule follow-up");
-    await page.fill("What needs to happen?", "Send the proposal draft.");
-    await page.clickButton("Save follow-up");
-    await page.toast("Follow-up scheduled and added to tasks");
-    await page.wait(By.xpath(`//article[contains(@class,"task-card")]//strong[normalize-space()=${xq(`Follow up with ${lead.executive}`)}]`));
+  uiTest("schedules an activity: the type sets the title, and the visit shows in Focus with its time slot and priority (PD-29)", async () => {
+    await page.clickButton("Schedule activity");
+    await page.wait(By.css('div[aria-label="Activity type"]'));
+    assert.equal(await (await page.control("Title")).getAttribute("value"), `Call ${lead.executive}`);
+    await page.click(By.xpath('//div[@aria-label="Activity type"]/button[normalize-space()="Visit"]'));
+    assert.equal(await (await page.control("Title")).getAttribute("value"), `Visit ${lead.executive}`);
+    await page.setValue(await page.control("To"), "10:30");
+    await page.setValue(await page.control("Priority"), "High");
+    await page.fill("Note", "Bring the safety-shoe brochure.");
+    await page.wait(By.xpath('//aside[@aria-label="The day\'s agenda"]//span[contains(@class,"is-draft")]'));
+    await page.clickButton("Save activity");
+    await page.toast("Visit scheduled for");
+    const card = await page.wait(By.xpath(`//article[contains(@class,"task-card")][.//strong[contains(normalize-space(.), ${xq(`Visit ${lead.executive}`)})]]`));
+    assert.match(await card.getText(), /high priority/i);
   });
 
   uiTest("attaches a document", async () => {
@@ -145,7 +154,7 @@ describe("Deals", () => {
   uiTest("edits the deal and changes its status", async () => {
     await page.clickButton("Edit");
     await page.dialogTitle(`Edit ${lead.name}`);
-    await page.fill("Client executive", "Priya Patel-Singh");
+    await page.fill("Contact", "Priya Patel-Singh");
     await page.clickButton("Save changes");
     await page.toast("Deal updated");
     await page.waitText(By.css(".client-executive-name"), "Priya Patel-Singh");
@@ -204,15 +213,15 @@ describe("Deals", () => {
   });
 
   // SPEC §10.13, §10.14: the deal's person and organization are contacts of their own; their pages list the deal.
-  uiTest("Contacts lists the deal's person and organization; their pages open the deal and Back returns", async () => {
+  uiTest("Contacts lists the deal's contact and organization; their pages open the deal and Back returns", async () => {
     await page.nav("Contacts");
     await page.wait(By.css('div[aria-label="Contacts list"]'));
-    await (await page.wait(By.css('input[aria-label="Search people"]'))).sendKeys("Priya Patel-Singh");
+    await (await page.wait(By.css('input[aria-label="Search contacts"]'))).sendKeys("Priya Patel-Singh");
     const person = '//table[contains(@class,"contacts-table")]//tr[.//strong[normalize-space()="Priya Patel-Singh"]]';
     assert.ok((await (await page.wait(By.xpath(person))).getText()).includes(lead.name), "the person's row names the organization");
     await page.click(By.xpath(`${person}//button[contains(@class,"client-cell")]`), { global: true });
     await page.dialogTitle("Priya Patel-Singh");
-    await page.eyebrow("PERSON");
+    await page.eyebrow("CONTACT");
     await page.closeDialog();
     await page.click(By.xpath('.//div[@aria-label="Contacts list"]/button[normalize-space()="Organizations"]'), { global: true });
     await (await page.wait(By.css('input[aria-label="Search organizations"]'))).sendKeys(lead.name);

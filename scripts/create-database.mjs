@@ -1029,6 +1029,62 @@ const migrations = [
       await client.query("CREATE UNIQUE INDEX IF NOT EXISTS uq_list_values_value ON list_values (list_key, COALESCE(pipeline_id, 0), value)");
     },
   },
+  {
+    version: 27,
+    name: "Every contact belongs to an organization (PD-17, SPEC §10.19): persons.organization_id required, one name per organization",
+    async run(client) {
+      // A contact without an organization takes the organization of its most recent deal, unless that organization already has a contact of that name.
+      await client.query(`
+        UPDATE persons p SET organization_id = d.organization_id
+        FROM (SELECT DISTINCT ON (l.person_id) l.person_id, l.organization_id FROM leads l WHERE l.person_id IS NOT NULL AND l.organization_id IS NOT NULL ORDER BY l.person_id, l.last_activity_at DESC, l.id DESC) d
+        WHERE p.id = d.person_id AND p.organization_id IS NULL
+          AND NOT EXISTS (SELECT 1 FROM persons other WHERE other.organization_id = d.organization_id AND other.name_key = p.name_key)`);
+      // The rest go to "Contacts to sort", where an administrator files them with Edit; a name taken there gets the contact's number.
+      const { rows } = await client.query("SELECT COUNT(*)::int AS count FROM persons WHERE organization_id IS NULL");
+      if (Number(rows[0]?.count ?? 0) > 0) {
+        await client.query(`
+          INSERT INTO organizations (name, name_key, owner_id, created_by)
+          SELECT 'Contacts to sort', 'contacts to sort', p.owner_id, p.owner_id FROM persons p WHERE p.organization_id IS NULL ORDER BY p.id LIMIT 1
+          ON CONFLICT DO NOTHING`);
+        await client.query(`
+          UPDATE persons p SET name = CONCAT(p.name, ' (', p.id, ')'), name_key = LOWER(CONCAT(p.name, ' (', p.id, ')'))
+          WHERE p.organization_id IS NULL AND (
+            EXISTS (SELECT 1 FROM persons other JOIN organizations o ON o.id = other.organization_id WHERE o.name_key = 'contacts to sort' AND other.name_key = p.name_key)
+            OR EXISTS (SELECT 1 FROM persons twin WHERE twin.organization_id IS NULL AND twin.name_key = p.name_key AND twin.id < p.id))`);
+        await client.query("UPDATE persons SET organization_id = (SELECT id FROM organizations WHERE name_key = 'contacts to sort') WHERE organization_id IS NULL");
+      }
+      await client.query("ALTER TABLE persons ALTER COLUMN organization_id SET NOT NULL");
+      // Removing an organization removes its contacts (it is only allowed while none of them has a deal).
+      await client.query("ALTER TABLE persons DROP CONSTRAINT IF EXISTS persons_organization_id_fkey");
+      await client.query("ALTER TABLE persons ADD CONSTRAINT persons_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE");
+      await client.query("DROP INDEX IF EXISTS uq_persons_org_name");
+      await client.query("CREATE UNIQUE INDEX uq_persons_org_name ON persons (organization_id, name_key)");
+    },
+  },
+  {
+    version: 28,
+    name: "Deal source (PD-27, SPEC §10.20): the list once called Deal type gains Referral",
+    async run(client) {
+      // The list key stays `lead_type`; only its label changed. Referral goes last, unless an administrator already added it.
+      await client.query(`
+        INSERT INTO list_values (list_key, code, value, sort_order)
+        SELECT 'lead_type', 'referral', 'Referral', COALESCE(MAX(sort_order), 0) + 1 FROM list_values WHERE list_key = 'lead_type'
+        HAVING NOT EXISTS (SELECT 1 FROM list_values WHERE list_key = 'lead_type' AND (LOWER(value) = 'referral' OR code = 'referral'))`);
+    },
+  },
+  {
+    version: 29,
+    name: "Schedule an activity (PD-29, SPEC §10.20): a task's type (call, email, visit, task) and an optional end time",
+    async run(client) {
+      await addColumnIfMissing(client, "tasks", "activity_type", "VARCHAR(16) NOT NULL DEFAULT 'task'");
+      await addColumnIfMissing(client, "tasks", "ends_at", "TIMESTAMP(0) NULL");
+      // Tasks from the next-step prompt and the stage suggestions were named after their activity ("Call Adam", "Email …", "Visit …").
+      await client.query(`
+        UPDATE tasks SET activity_type = CASE
+          WHEN title ILIKE 'call %' THEN 'call' WHEN title ILIKE 'email %' THEN 'email' WHEN title ILIKE 'visit %' THEN 'visit' ELSE 'task' END
+        WHERE activity_type = 'task'`);
+    },
+  },
 ];
 
 if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port > 65535 || !/^[a-z_][a-z0-9_]*$/.test(databaseName)) {

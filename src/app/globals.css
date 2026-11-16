@@ -1500,10 +1500,6 @@ h1 { margin: 9px 0 5px; color: #242941; font-size: 25px; font-weight: 690; lette
 .pipeline-card:hover { border-color: #c6cbe0; box-shadow: 0 3px 8px #1f24401c; }
 .pipeline-card-title strong { color: #262b42; font-size: 13px; }
 .pipeline-card-title small { color: #5a6177; font-size: 11.5px; }
-.deal-activity { width: 20px; height: 20px; flex: 0 0 auto; display: inline-grid; place-items: center; }
-.deal-activity.is-planned { color: #23834f; }
-.deal-activity.is-overdue { color: #cf3b30; }
-.deal-activity.is-none { color: #b87a06; }
 .pipeline-card-meta { justify-content: flex-start; gap: 8px; }
 .pipeline-card .status-pill { font-size: 10.5px; }
 .pipeline-card .pipeline-move { margin-left: auto; opacity: 0; transition: opacity .12s ease; }
@@ -1697,7 +1693,6 @@ h1 { margin: 9px 0 5px; color: #242941; font-size: 25px; font-weight: 690; lette
 .pipeline-card-meta { flex-wrap: wrap; row-gap: 6px; }
 .pipeline-owner { overflow: hidden; text-overflow: ellipsis; }
 .pipeline-card-head .pipeline-move { margin-left: auto; }
-.pipeline-card-head .deal-activity { margin-left: 2px; }
 .pipeline-card-title { flex: 1 1 auto; }
 
 /* Settings → Releases: what the server runs and the pause switch. */
@@ -1709,3 +1704,106 @@ h1 { margin: 9px 0 5px; color: #242941; font-size: 25px; font-weight: 690; lette
 .releases-note.releases-paused { color: #7a4a00; background: #fff6e5; }
 .releases-note.releases-paused svg { color: #b87a06; }
 .releases-actions { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 6px; }
+
+/* Comments of November 16, 2026 (SPEC §10.19). PD-20: the board runs from the menu to the right edge of the window and
+   takes the window's height; each column scrolls on its own and the board's own scrollbar stays at the bottom, in view. */
+.main-content:has(> div:not([hidden]) .pipeline-board) { max-width: none; }
+.pipeline-board { height: calc(100vh - 236px); min-height: 380px; overflow-x: auto; overflow-y: hidden; align-items: stretch; padding-bottom: 10px; }
+.pipeline-column { flex: 1 0 212px; min-width: 212px; min-height: 0; }
+.pipeline-column-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+@media (max-width: 640px) {
+  .pipeline-board { height: auto; overflow-y: visible; }
+  .pipeline-column-body { overflow-y: visible; }
+}
+/* PD-22: the ⇄ button opens the card's menu (drawn over the page so a column's scrolling never cuts it). */
+button.pipeline-move { padding: 0; cursor: pointer; }
+.pipeline-move[aria-expanded="true"] { opacity: 1; border-color: #7180e1; color: #4c5ed9; }
+.card-menu { position: fixed; z-index: 60; right: auto; width: 240px; overflow-y: auto; overscroll-behavior: contain; }
+.card-menu button { font-size: 12px; }
+.card-menu button:disabled { color: #3f4fc9; font-weight: 650; cursor: default; }
+.card-menu-label { padding: 6px 10px 2px; color: #5a6177; font-size: 10.5px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; }
+.card-menu-rule { height: 1px; margin: 4px 2px; background: #eceef4; }
+.card-menu-gap { width: 13px; flex: 0 0 13px; }
+/* PD-21: Edit pipeline. */
+.stage-edit-note { margin: 0 0 10px; font-size: 12px; }
+.stage-edit-head { display: grid; gap: 6px; }
+.stage-edit-head input { width: 100%; min-height: 32px; padding: 0 9px; border: 1px solid #cfd4e6; border-radius: 6px; background: #fff; color: #262b42; font-size: 13px; font-weight: 650; }
+.stage-edit-actions { display: flex; align-items: center; gap: 4px; }
+.stage-edit-actions .icon-button { width: 28px; height: 28px; }
+.stage-edit-actions .stage-delete:hover { color: #b3261e; }
+.stage-edit-count { margin-left: auto; color: #5a6177; font-size: 11.5px; }
+.stage-add-column { background: transparent; border: 1px dashed #c6cbe0; }
+.stage-add-form { display: grid; gap: 8px; padding: 12px; }
+.stage-add-form input { min-height: 32px; padding: 0 9px; border: 1px solid #cfd4e6; border-radius: 6px; font-size: 13px; }
+/* PD-23: the date filter. */
+.date-filter { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; color: #5a6177; font-size: 12px; }
+.date-filter select, .date-filter input { width: auto; min-height: 32px; padding: 0 8px; border: 1px solid #e8eaf0; border-radius: 6px; color: #50566c; background: #fff; font-size: 11px; }
+.date-filter input[type="date"] { min-width: 140px; }
+/* PD-15: the organization's open deals and the confirmation for a new organization or contact in the add-deal dialog. */
+.open-deals-note, .confirm-new-note { align-items: flex-start; }
+.open-deals-note p, .confirm-new-note p { margin: 0 0 4px; }
+.open-deals-list { margin: 0 0 6px; padding-left: 18px; font-size: 12px; }
+.open-deals-list li { margin: 2px 0; }
+.deal-form .confirm-new-note { grid-column: 1 / -1; }
+/* PD-25: the Emails tab of the deal page's composer. */
+.composer-emails { display: grid; gap: 10px; }
+.composer-emails-head { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.composer-emails-head .field-hint { margin: 0; }
+/* PD-29: Schedule an activity, after Pipedrive's form; the day's agenda on the right. */
+.schedule-activity { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 18px; }
+.schedule-activity-main { display: grid; gap: 12px; align-content: start; min-width: 0; }
+.activity-types { display: flex; flex-wrap: wrap; gap: 6px; }
+.activity-types button { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px; border: 1px solid #dfe2ec; border-radius: 6px; background: #fff; color: #4b5166; font-size: 12.5px; cursor: pointer; }
+.activity-types button.is-active { border-color: #4f5fd6; color: #3f4fc9; background: #eceeff; font-weight: 650; }
+.activity-when { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+.activity-links { display: grid; gap: 6px; margin: 0; padding: 10px 12px; border: 1px solid #eceef4; border-radius: 8px; list-style: none; background: #fafbfe; font-size: 12.5px; }
+.activity-links li { display: flex; align-items: center; gap: 8px; color: #5a6177; }
+.activity-links li span { min-width: 90px; }
+.activity-links li strong { color: #2b3048; font-weight: 600; overflow-wrap: anywhere; }
+.activity-actions { align-items: center; }
+.activity-done { margin-right: auto; font-size: 12.5px; }
+.activity-agenda { display: grid; grid-template-rows: auto auto 1fr; gap: 6px; padding: 10px; border: 1px solid #eceef4; border-radius: 8px; background: #fafbfe; min-height: 0; }
+.activity-agenda-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 12.5px; }
+.activity-agenda-owner { color: #5a6177; font-size: 11.5px; }
+.activity-agenda-hours { display: grid; margin: 0; padding: 0; list-style: none; max-height: 420px; overflow-y: auto; }
+.activity-agenda-hours li { display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 6px; min-height: 30px; border-top: 1px solid #eceef4; }
+.activity-hour { padding-top: 4px; color: #5a6177; font-size: 10.5px; }
+.activity-slot { display: grid; gap: 3px; padding: 3px 0; }
+.activity-chip { display: flex; align-items: center; gap: 5px; padding: 3px 6px; border-radius: 4px; color: #2b3048; background: #e6e9fb; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.activity-chip.is-draft { color: #fff; background: #4f5fd6; }
+.activity-chip.is-done { color: #5a6177; background: #eceef4; text-decoration: line-through; }
+.composer .schedule-activity { padding-top: 12px; }
+@media (max-width: 900px) { .schedule-activity { grid-template-columns: minmax(0, 1fr); } }
+/* PD-29: focus items show their type, priority and an overdue badge. */
+.task-type { display: inline-grid; place-items: center; width: 22px; height: 22px; margin-right: 2px; border-radius: 50%; color: #3f4fc9; background: #eceeff; vertical-align: middle; }
+.task-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0; }
+.task-overdue { padding: 1px 7px; border-radius: 4px; color: #fff; background: #cf3b30; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; }
+/* PD-28: a deal is added from its stage: the "+" always shows, and each column head has a "…" menu. */
+.pipeline-column .pipeline-add { opacity: 1; }
+.pipeline-column-head { position: relative; padding-right: 40px; }
+.column-menu { position: absolute; top: 8px; right: 6px; }
+.column-menu-button { width: 28px; height: 28px; }
+.column-menu-list { top: calc(100% + 4px); right: 0; left: auto; z-index: 30; min-width: 250px; }
+.column-menu-list button { font-size: 12px; }
+.stage-edit-head { padding-right: 12px; }
+/* PD-30: the Filter menu with the ready-made and data cleanup filters. */
+.quick-filter { display: inline-flex; align-items: center; gap: 4px; }
+.quick-filter-label { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quick-filter-clear { width: 26px; height: 26px; }
+.quick-filter-menu { top: calc(100% + 6px); right: 0; left: auto; z-index: 40; width: 320px; max-height: 70vh; overflow-y: auto; }
+.quick-filter-menu button { font-size: 12px; text-align: left; }
+.quick-filter-menu button[aria-checked="true"] { color: #3f4fc9; font-weight: 650; }
+.quick-filter-tip { margin: 6px 10px 4px; color: #5a6177; font-size: 11px; line-height: 1.4; }
+.quick-filter-list { font-size: 12px; }
+/* PD-15: our own suggestion list under a field (organization, contact, email in Add deal). */
+.suggest-field { position: relative; }
+.suggest-field > input { width: 100%; }
+.suggest-list { position: absolute; z-index: 50; top: calc(100% + 4px); right: 0; left: 0; max-height: 280px; margin: 0; padding: 4px; overflow-y: auto; border: 1px solid #dfe2ec; border-radius: 8px; list-style: none; background: #fff; box-shadow: 0 14px 30px #20243a24; }
+.suggest-list li { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 6px; color: #3d4359; cursor: pointer; }
+.suggest-list li svg { flex: 0 0 auto; color: #5a6177; }
+.suggest-list li.is-active, .suggest-list li:hover { background: #eceeff; }
+.suggest-text { display: grid; min-width: 0; }
+.suggest-text strong { overflow: hidden; color: #262b42; font-size: 12.5px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.suggest-text small { overflow: hidden; color: #5a6177; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.suggest-list li.suggest-empty { color: #5a6177; font-size: 11.5px; cursor: default; }
+.suggest-list li.suggest-empty:hover { background: transparent; }

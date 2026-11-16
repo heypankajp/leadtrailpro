@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { compareCards, defaultNextStep, nextStepOf, parsePipelineFilters, quietDaysSince, resolveStageForAction, stageAdvances, stageChoices, stagesOfPipeline } from "../../src/features/pipeline/model.ts";
+import { compareCards, defaultNextStep, moveStageOrder, nextStepOf, parsePipelineFilters, quietDaysSince, resolveStageForAction, stageAdvances, stageChoices, stageDeleteProblem, stagesOfPipeline } from "../../src/features/pipeline/model.ts";
 import { defaultPipelineSettings, normalizePipelineSettings } from "../../src/features/settings/model.ts";
 
 const stages = [
@@ -50,9 +50,11 @@ describe("pipeline cards (PIPE-04/06)", () => {
     const e = { id: 5, followUpDate: null, lastActivityAt: "2026-11-09T00:00:00Z", ...base };
     assert.deepEqual([e, d, c, a, b].sort(compareCards).map((card) => card.id), [2, 1, 3, 5, 4]);
   });
+  // Since PD-23 / PD-24 the filters also carry the grouping, the Show more column and the date filter.
+  const plainExtras = { groupBy: "stage", column: null, firstContactFrom: null, firstContactTo: null, followUpFrom: null, followUpTo: null, quick: null };
   test("filters parse the scope, ids, text, and the show-more window", () => {
-    assert.deepEqual(parsePipelineFilters(new URLSearchParams("scope=team&leadTypeId=3&ownerId=7&statusId=2&q=%20acme%20&stageId=4&offset=50")), { scope: "team", leadTypeId: 3, ownerId: 7, statusId: 2, q: "acme", stageId: 4, pipelineId: null, offset: 50 });
-    assert.deepEqual(parsePipelineFilters(new URLSearchParams("scope=other&leadTypeId=x&offset=-5")), { scope: "mine", leadTypeId: null, ownerId: null, statusId: null, q: "", stageId: null, pipelineId: null, offset: 0 });
+    assert.deepEqual(parsePipelineFilters(new URLSearchParams("scope=team&leadTypeId=3&ownerId=7&statusId=2&q=%20acme%20&stageId=4&offset=50")), { scope: "team", leadTypeId: 3, ownerId: 7, statusId: 2, q: "acme", stageId: 4, pipelineId: null, offset: 50, ...plainExtras });
+    assert.deepEqual(parsePipelineFilters(new URLSearchParams("scope=other&leadTypeId=x&offset=-5")), { scope: "mine", leadTypeId: null, ownerId: null, statusId: null, q: "", stageId: null, pipelineId: null, offset: 0, ...plainExtras });
     assert.equal(parsePipelineFilters(new URLSearchParams("pipelineId=2")).pipelineId, 2);
   });
 });
@@ -96,5 +98,44 @@ describe("next step suggestions (PIPE-09)", () => {
     assert.equal(stageAdvances({ sortOrder: 8, pipelineId: 2 }, { sortOrder: 3, pipelineId: 1 }), false);
     assert.equal(stageAdvances({ sortOrder: 1, pipelineId: 2 }, { sortOrder: 3, pipelineId: 1 }), false, "a later default stage does not pull a deal out of another pipeline");
     assert.equal(stageAdvances({ sortOrder: 1, pipelineId: 1 }, { sortOrder: 3, pipelineId: 1 }), true);
+  });
+});
+
+describe("comments of November 16, 2026 (SPEC §10.19)", () => {
+  test("PD-21: a stage moves one place inside its pipeline, never past either end", () => {
+    assert.deepEqual(moveStageOrder([1, 2, 3, 4], 3, "left"), [1, 3, 2, 4]);
+    assert.deepEqual(moveStageOrder([1, 2, 3, 4], 3, "right"), [1, 2, 4, 3]);
+    assert.deepEqual(moveStageOrder([1, 2, 3, 4], 1, "left"), [1, 2, 3, 4]);
+    assert.deepEqual(moveStageOrder([1, 2, 3, 4], 4, "right"), [1, 2, 3, 4]);
+    assert.deepEqual(moveStageOrder([1, 2, 3, 4], 9, "left"), [1, 2, 3, 4]);
+  });
+
+  test("PD-21: deleting a stage needs a stage of the same pipeline for its deals; the entry stage and the last stage stay", () => {
+    const withPipelines = [
+      ...stages.map((stage) => ({ ...stage, pipelineId: 1 })),
+      { id: 7, code: "temp_new", value: "New", sortOrder: 1, active: true, pipelineId: 2 },
+    ];
+    assert.equal(stageDeleteProblem(withPipelines, 3, null, 0), null);
+    assert.match(stageDeleteProblem(withPipelines, 3, null, 4), /Choose the stage that takes the 4 deals of Qualified/);
+    assert.equal(stageDeleteProblem(withPipelines, 3, 2, 4), null);
+    assert.match(stageDeleteProblem(withPipelines, 3, 7, 4), /same pipeline/);
+    assert.match(stageDeleteProblem(withPipelines, 3, 3, 4), /same pipeline/);
+    assert.match(stageDeleteProblem(withPipelines, 1, 2, 0), /where new deals start/);
+    assert.match(stageDeleteProblem(withPipelines, 7, null, 0), /at least one stage/);
+    assert.equal(stageDeleteProblem(withPipelines, 99, null, 0), "Stage not found.");
+  });
+
+  test("PD-23 / PD-24: the board reads the grouping, the Show more column and the date filter; bad dates are ignored", () => {
+    const filters = parsePipelineFilters(new URLSearchParams("groupBy=status&stageId=3&column=12&firstContactFrom=2026-11-01&firstContactTo=2026-11-16&followUpFrom=2026-13-40&followUpTo=yesterday"));
+    assert.equal(filters.groupBy, "status");
+    assert.equal(filters.stageId, 3);
+    assert.equal(filters.column, 12);
+    assert.equal(filters.firstContactFrom, "2026-11-01");
+    assert.equal(filters.firstContactTo, "2026-11-16");
+    assert.equal(filters.followUpFrom, null);
+    assert.equal(filters.followUpTo, null);
+    const plain = parsePipelineFilters(new URLSearchParams(""));
+    assert.equal(plain.groupBy, "stage");
+    assert.equal(plain.column, null);
   });
 });

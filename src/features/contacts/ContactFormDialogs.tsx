@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { Plus, Save } from "lucide-react";
-import { errorMessage } from "@/lib/api";
+import { Building2, Plus, Save } from "lucide-react";
+import { ApiError, errorMessage } from "@/lib/api";
 import { useApp } from "@/features/shell/AppContext";
 import { Dialog, ErrorText, Field } from "@/features/shell/components";
+import SuggestInput from "@/features/shell/SuggestInput";
 import { createOrganization, createPerson, fetchOrganizations, updateOrganization, updatePerson } from "./client";
 import type { Organization, Person } from "./model";
 
@@ -58,8 +59,9 @@ export function OrganizationFormDialog({ organization, onClose, onSaved }: { org
 }
 
 /**
- * Add or edit a person. A new person is filed under the organization typed here: an existing one is linked, a new
- * name creates the organization, and the field may stay empty. `organizationName` fixes it (added from an organization's page).
+ * Add or edit a contact (a `persons` row). A contact always belongs to an organization (PD-17): an existing one is linked,
+ * a new name is created only after the user confirms it (the server answers 409 `confirm_create` until `createOrganization`
+ * is sent). `organizationName` fixes it (added from an organization's page).
  * An existing person keeps their organization once they have deals; `movable` (no deals yet) lets a wrong filing be corrected.
  */
 export function PersonFormDialog({ person, organizationName, movable = false, onClose, onSaved }: { person?: Person; organizationName?: string; movable?: boolean; onClose: () => void; onSaved: (person: Person) => void }) {
@@ -70,6 +72,8 @@ export function PersonFormDialog({ person, organizationName, movable = false, on
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  // PD-15 / PD-17: the organization name that is new and waits for the user's confirmation.
+  const [confirmNew, setConfirmNew] = useState<string | null>(null);
   const set = (key: keyof typeof form) => (event: { target: { value: string } }) => setForm((current) => ({ ...current, [key]: event.target.value }));
 
   // Organizations that match what is being typed, offered as suggestions.
@@ -83,37 +87,54 @@ export function PersonFormDialog({ person, organizationName, movable = false, on
     return () => { cancelled = true; window.clearTimeout(timer); };
   }, [typed]);
 
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const save = async (createOrganization: boolean) => {
     setSaving(true);
     setError("");
-    const input = { name: form.name, organizationName: form.organizationName, emails: form.emails.split(/[,;\s]+/).filter(Boolean), phone: form.phone, altPhone: form.altPhone, remark: form.remark };
+    const input = { name: form.name, organizationName: form.organizationName, emails: form.emails.split(/[,;\s]+/).filter(Boolean), phone: form.phone, altPhone: form.altPhone, remark: form.remark, createOrganization };
     try {
       const result = person ? await updatePerson(person.id, input) : await createPerson(input);
       onSaved(result.person);
     } catch (caught) {
-      setError(errorMessage(caught, "Could not save the person."));
+      const asked = caught instanceof ApiError && caught.status === 409 && caught.data.code === "confirm_create" ? String(caught.data.organization ?? form.organizationName) : null;
+      if (asked) setConfirmNew(asked);
+      else setError(errorMessage(caught, "Could not save the contact."));
       setSaving(false);
     }
   };
+  const submit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); void save(false); };
 
   return (
-    <Dialog title={person ? `Edit ${person.name}` : "Add person"} eyebrow={person ? "PERSON" : undefined} onClose={onClose}>
+    <Dialog title={person ? `Edit ${person.name}` : "Add contact"} eyebrow={person ? "CONTACT" : undefined} onClose={onClose}>
       <form className="lead-form" onSubmit={submit}>
         <Field label="Name" required wide><input value={form.name} onChange={set("name")} required maxLength={160} placeholder="Contact person" autoFocus /></Field>
-        <Field label="Organization" wide hint={fixedOrganization ? (person ? "They have deals with this organization, so they stay there. Someone who changed employer is added as a new person at the new organization." : undefined) : "Type the company's name: an existing organization is linked, a new name is added. May stay empty."}>
-          <input value={form.organizationName} onChange={set("organizationName")} maxLength={200} placeholder="Company name" list="organization-suggestions" disabled={Boolean(fixedOrganization)} />
+        <Field label="Organization" required wide hint={fixedOrganization ? (person ? "They have deals with this organization, so they stay there. Someone who changed employer is added as a new contact at the new organization." : undefined) : "Start typing the company's name: the organizations that match appear in a list. Pick one, or keep typing a new name (you are asked before it is created)."}>
+          {fixedOrganization
+            ? <input value={form.organizationName} maxLength={200} disabled required />
+            : <SuggestInput
+                value={form.organizationName} onChange={(value) => { setForm((current) => ({ ...current, organizationName: value })); setConfirmNew(null); }}
+                suggestions={typed.length >= 2 ? suggestions.map((name) => ({ key: name, label: name })) : []} onPick={(suggestion) => { setForm((current) => ({ ...current, organizationName: suggestion.label })); setConfirmNew(null); }}
+                empty={`No organization called “${typed}” yet: saving adds it after you confirm.`}
+                maxLength={200} placeholder="Type to search organizations…" required
+              />}
         </Field>
-        <datalist id="organization-suggestions">{typed.length >= 2 && suggestions.map((name) => <option key={name} value={name} />)}</datalist>
         <Field label="Email(s)" wide hint="Separate several addresses with commas."><input value={form.emails} onChange={set("emails")} placeholder="name@company.com" /></Field>
         <Field label="Phone"><input type="tel" value={form.phone} onChange={set("phone")} maxLength={40} placeholder="+1 (555) 123-4567" /></Field>
         <Field label="Extension or alternate number"><input type="tel" value={form.altPhone} onChange={set("altPhone")} maxLength={40} /></Field>
         <Field label="Remark" wide><input value={form.remark} onChange={set("remark")} maxLength={500} placeholder="Best time to call, preferences..." /></Field>
-        {person && <p className="dialog-description field-wide">These details are shown on every deal of this person.</p>}
+        {person && <p className="dialog-description field-wide">These details are shown on every deal of this contact.</p>}
+        {confirmNew && (
+          <div className="form-note confirm-new-note field-wide" role="alert">
+            <Building2 size={14} />
+            <div>
+              <p><strong>{confirmNew}</strong> is not an organization yet. Create it and file the contact there?</p>
+              <div className="duplicate-actions"><button type="button" className="button button-primary button-small" disabled={saving} onClick={() => void save(true)}>Create organization and save</button></div>
+            </div>
+          </div>
+        )}
         <div className="field-wide"><ErrorText message={error} /></div>
         <div className="modal-actions">
           <button type="button" className="button button-outline" onClick={onClose}>Cancel</button>
-          <button type="submit" className="button button-primary" disabled={saving}>{person ? <Save size={15} /> : <Plus size={15} />} {saving ? "Saving..." : person ? "Save changes" : "Save person"}</button>
+          <button type="submit" className="button button-primary" disabled={saving}>{person ? <Save size={15} /> : <Plus size={15} />} {saving ? "Saving..." : person ? "Save changes" : "Save contact"}</button>
         </div>
       </form>
     </Dialog>

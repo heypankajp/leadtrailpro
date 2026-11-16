@@ -6,18 +6,18 @@ import { notifyUsers } from "@/features/notifications/repository";
 import { getUser } from "@/features/users/repository";
 import { hasPrivilege } from "@/features/users/model";
 import type { UserAccount } from "@/features/users/model";
-import type { ChecklistItem, Task, TaskInput, TaskPatch, TaskPriority, TaskStatus } from "./model";
+import { isTaskActivityType, type ChecklistItem, type Task, type TaskInput, type TaskPatch, type TaskPriority, type TaskStatus } from "./model";
 
 type Row = {
   id: number; leadId: number | null; leadName: string | null; title: string; description: string | null; assigneeId: number; assigneeName: string;
-  creatorId: number; creatorName: string; dueAt: string | null; priority: string; status: string; checklist: string | ChecklistItem[];
+  creatorId: number; creatorName: string; dueAt: string | null; endsAt: string | null; activityType: string; priority: string; status: string; checklist: string | ChecklistItem[];
   completedAt: string | null; commentCount: number; createdAt: string; updatedAt: string;
 };
 
 const select = `
   SELECT t.id, t.lead_id AS "leadId", l.client_name AS "leadName", t.title, t.description, t.assignee_id AS "assigneeId",
     CONCAT(a.first_name, ' ', a.last_name) AS "assigneeName", t.creator_id AS "creatorId", CONCAT(c.first_name, ' ', c.last_name) AS "creatorName",
-    t.due_at AS "dueAt", t.priority, t.status, t.checklist, t.completed_at AS "completedAt", t.created_at AS "createdAt", t.updated_at AS "updatedAt",
+    t.due_at AS "dueAt", t.ends_at AS "endsAt", t.activity_type AS "activityType", t.priority, t.status, t.checklist, t.completed_at AS "completedAt", t.created_at AS "createdAt", t.updated_at AS "updatedAt",
     (SELECT COUNT(*) FROM task_comments tc WHERE tc.task_id = t.id AND tc.deleted_at IS NULL)::int AS "commentCount"
   FROM tasks t
   JOIN users a ON a.id = t.assignee_id
@@ -43,6 +43,8 @@ const toTask = (row: Row): Task => {
     creatorId: Number(row.creatorId),
     creatorName: row.creatorName,
     dueAt: fromSqlDateTime(row.dueAt),
+    endsAt: fromSqlDateTime(row.endsAt),
+    activityType: isTaskActivityType(row.activityType) ? row.activityType : "task",
     priority: (["low", "normal", "medium", "high"].includes(row.priority) ? row.priority : "normal") as TaskPriority,
     status: (row.status === "done" ? "done" : "open") as TaskStatus,
     checklist: Array.isArray(checklist) ? checklist.filter((item) => item && typeof item.text === "string") : [],
@@ -90,13 +92,16 @@ export async function createTask(input: TaskInput, actor: UserAccount): Promise<
       if (!lead) throw new HttpError(400, "The deal does not exist.");
     }
     const now = new Date();
+    // PD-29: "Mark as done" records an activity that already happened.
+    const done = input.done === true;
     const result = await connection.query(
-      `INSERT INTO tasks (lead_id, title, description, assignee_id, creator_id, due_at, priority, status, checklist, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?) RETURNING id`,
-      [input.leadId, input.title, input.description || null, assigneeId, actor.id, input.dueAt ? toSqlDateTime(new Date(input.dueAt)) : null, input.priority, JSON.stringify(input.checklist), toSqlDateTime(now)],
+      `INSERT INTO tasks (lead_id, title, description, assignee_id, creator_id, due_at, ends_at, activity_type, priority, status, completed_at, checklist, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+      [input.leadId, input.title, input.description || null, assigneeId, actor.id, input.dueAt ? toSqlDateTime(new Date(input.dueAt)) : null, input.endsAt ? toSqlDateTime(new Date(input.endsAt)) : null,
+        input.activityType ?? "task", input.priority, done ? "done" : "open", done ? toSqlDateTime(now) : null, JSON.stringify(input.checklist), toSqlDateTime(now)],
     );
     const task = (await getTask(insertId(result), connection))!;
     if (task.leadId) {
-      await addActivity(connection, { leadId: task.leadId, userId: actor.id, type: "task", summary: `Task created: ${task.title}${task.dueAt ? ` (due ${task.dueAt.slice(0, 10)})` : ""}`, meta: { taskId: task.id, assigneeId }, occurredAt: now });
+      await addActivity(connection, { leadId: task.leadId, userId: actor.id, type: "task", summary: done ? `Done: ${task.title}` : `Task created: ${task.title}${task.dueAt ? ` (due ${task.dueAt.slice(0, 10)})` : ""}`, meta: { taskId: task.id, assigneeId, activityType: task.activityType, done }, occurredAt: now });
     }
     await recordAudit(connection, { actorId: actor.id, action: "task.created", entityType: "task", entityId: task.id, after: auditView(task), details: `${actor.name} created task "${task.title}"` }, now);
     await notifyUsers(connection, { userIds: [task.assigneeId], actorId: actor.id, type: "task_assigned", title: `Task assigned: ${task.title}`, body: `${actor.name} assigned you this task${task.leadName ? ` on ${task.leadName}` : ""}${task.dueAt ? `, due ${task.dueAt.slice(0, 16).replace("T", " ")}` : ""}.`, leadId: task.leadId, taskId: task.id });
@@ -126,6 +131,8 @@ export async function updateTask(id: number, changes: TaskPatch, actor: UserAcco
     if (changes.leadId !== undefined) set("lead_id", changes.leadId);
     if (changes.assigneeId !== undefined) set("assignee_id", changes.assigneeId);
     if (changes.dueAt !== undefined) set("due_at", changes.dueAt ? toSqlDateTime(new Date(changes.dueAt)) : null);
+    if (changes.endsAt !== undefined) set("ends_at", changes.endsAt ? toSqlDateTime(new Date(changes.endsAt)) : null);
+    if (changes.activityType !== undefined) set("activity_type", changes.activityType);
     if (changes.priority !== undefined) set("priority", changes.priority);
     if (changes.checklist !== undefined) set("checklist", JSON.stringify(changes.checklist));
     const now = new Date();

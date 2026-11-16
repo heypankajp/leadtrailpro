@@ -91,17 +91,24 @@ export function outsideAddresses(message: WatchMessage, teamAddresses: Set<strin
   return [...new Set([...extractAddresses(message.from), ...extractAddresses(message.to), ...extractAddresses(message.cc)])].filter((address) => !teamAddresses.has(address));
 }
 
-/** The leads a message belongs to, with direction and whether the client wrote it. */
+/**
+ * The leads a message belongs to, with direction and whether the client wrote it. A lead's addresses include those of
+ * every contact of its organization (PD-19), so one message can belong to several deals of a company; each owner is
+ * notified once per message.
+ */
 export function matchMessage(message: WatchMessage, mailbox: string, leads: WatchLead[], teamAddresses: Set<string>, options: { notify: boolean }): WatchMatch[] {
   const outside = new Set(outsideAddresses(message, teamAddresses));
   if (!outside.size) return [];
   const direction = messageDirection(message, mailbox);
   const senders = new Set(extractAddresses(message.from));
+  const notified = new Set<number>();
   return leads.flatMap((lead) => {
     const addresses = lead.clientEmails.map((address) => address.trim().toLowerCase()).filter(Boolean);
     if (!addresses.some((address) => outside.has(address))) return [];
     const clientReplied = direction === "received" && addresses.some((address) => senders.has(address));
-    return [{ lead, message, direction, clientReplied, notify: options.notify && clientReplied }];
+    const notify = options.notify && clientReplied && !notified.has(lead.ownerId);
+    if (notify) notified.add(lead.ownerId);
+    return [{ lead, message, direction, clientReplied, notify }];
   });
 }
 

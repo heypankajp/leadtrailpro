@@ -64,14 +64,14 @@ export default function ContactsTimeline() {
                     <td><span className="muted-cell">{relativeTime(row.lastContactAt, "No contact in 12 months")}</span></td>
                   </tr>
                 ))}
-                {!data.rows.length && <tr><td colSpan={data.months.length + 2} className="empty-state">{debouncedQ ? "No people match this search." : "No people yet."}</td></tr>}
+                {!data.rows.length && <tr><td colSpan={data.months.length + 2} className="empty-state">{debouncedQ ? "No contacts match this search." : "No contacts yet."}</td></tr>}
               </tbody>
             </table>
           </div>
         )}
         {data && (
           <div className="table-footer">
-            <span>Showing <strong>{data.rows.length}</strong> of <strong>{data.total}</strong> people · calls, emails, visits and notes per month{loading ? " · refreshing" : ""}</span>
+            <span>Showing <strong>{data.rows.length}</strong> of <strong>{data.total}</strong> contacts · calls, emails, visits and notes per month{loading ? " · refreshing" : ""}</span>
             <Pagination page={data.page} pageSize={data.pageSize} total={data.total} onPage={setPage} />
           </div>
         )}

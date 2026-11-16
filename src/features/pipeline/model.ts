@@ -2,6 +2,7 @@
 import { entryStageCode } from "../list-values/model.ts";
 import { addWorkingDays } from "../../lib/natural-dates.ts";
 import type { PipelineSettings, StageFollowUpActivity } from "../settings/model.ts";
+import { isQuickFilterKey, type QuickFilterKey } from "../leads/quick-filters.ts";
 
 /**
  * Pipeline board rules (PIPE-*, SPEC §10.11). A stage is a `stage` list value; the ordered list is the board's columns.
@@ -51,6 +52,16 @@ export type PipelineFilters = {
   offset: number;
   /** PD-09: the pipeline shown; null = the default one. */
   pipelineId: number | null;
+  /** PD-24: columns by stage (the default) or by status. On the status board `stageId` is a filter and `column` the status column of Show more. */
+  groupBy: PipelineGroupBy;
+  column: number | null;
+  /** PD-23: first contact date (when the deal was created) or follow-up date, from and to, inclusive. */
+  firstContactFrom: string | null;
+  firstContactTo: string | null;
+  followUpFrom: string | null;
+  followUpTo: string | null;
+  /** PD-30: a ready-made or data cleanup filter; Lost and Won bring their closed deals onto the board. */
+  quick: QuickFilterKey | null;
 };
 
 export function parsePipelineFilters(params: URLSearchParams): PipelineFilters {
@@ -68,6 +79,10 @@ export function parsePipelineFilters(params: URLSearchParams): PipelineFilters {
     stageId: id("stageId"),
     pipelineId: id("pipelineId"),
     offset: Number.isInteger(offset) && offset > 0 ? Math.min(offset, 10_000) : 0,
+    groupBy: params.get("groupBy") === "status" ? "status" : "stage",
+    column: id("column"),
+    ...parsePipelineDates(params),
+    quick: isQuickFilterKey(params.get("quick")) ? (params.get("quick") as QuickFilterKey) : null,
   };
 }
 
@@ -81,6 +96,10 @@ export type PipelineCard = {
   statusId: number;
   statusCode: string;
   statusLabel: string;
+  /** The reason that goes with Lost and Disqualified, so a move on the status board can be undone. */
+  statusReasonId: number | null;
+  /** TODO-02: the To Do list the deal is on, for the card's actions menu. */
+  todoListId: number | null;
   bdActionId: number | null;
   bdAction: string | null;
   ownerId: number;
@@ -102,7 +121,8 @@ export type PipelineCard = {
 
 /** `valueTotal`: the sum of the values of every deal in the stage (not only the cards loaded), 0 when none has a value. */
 export type PipelineStage = StageValue & { count: number; valueTotal: number; leads: PipelineCard[] };
-export type PipelineBoard = { scope: PipelineScope; total: number; stages: PipelineStage[] };
+/** `stages` are the board's columns: stages, or on the status board (PD-24) the statuses. */
+export type PipelineBoard = { scope: PipelineScope; groupBy: PipelineGroupBy; total: number; stages: PipelineStage[] };
 
 export type NextStep = { kind: "task" | "follow_up"; date: string; title: string | null };
 
@@ -170,4 +190,48 @@ export function stagesOfPipeline<Stage extends { pipelineId?: number | null }>(s
   const fallback = pipelines.find((pipeline) => pipeline.isDefault)?.id ?? null;
   const wanted = pipelineId ?? fallback;
   return stages.filter((stage) => (stage.pipelineId ?? fallback) === wanted);
+}
+
+// ---- Editing the stages from the board (PD-21, SPEC §10.19) ----
+
+/** The order of a pipeline's stages after one of them moves a place left or right; unchanged at either end. */
+export function moveStageOrder(orderedIds: readonly number[], id: number, direction: "left" | "right"): number[] {
+  const ids = [...orderedIds];
+  const index = ids.indexOf(id);
+  const target = direction === "left" ? index - 1 : index + 1;
+  if (index < 0 || target < 0 || target >= ids.length) return ids;
+  [ids[index], ids[target]] = [ids[target], ids[index]];
+  return ids;
+}
+
+/**
+ * Whether a stage may be deleted, and where its deals go: `null` when allowed, else the reason. The entry stage (where
+ * new deals start) and the last active stage of a pipeline stay; a stage with deals needs another active stage of the
+ * same pipeline to take them.
+ */
+export function stageDeleteProblem(stages: readonly StageValue[], id: number, moveTo: number | null, dealCount: number): string | null {
+  const stage = stages.find((item) => item.id === id);
+  if (!stage) return "Stage not found.";
+  if (stage.code === entryStageCode) return `${stage.value} is where new deals start, so it cannot be deleted. Rename it instead.`;
+  const others = stages.filter((item) => item.id !== id && item.active && (item.pipelineId ?? null) === (stage.pipelineId ?? null));
+  if (!others.length) return "A pipeline needs at least one stage.";
+  if (dealCount === 0) return null;
+  if (moveTo === null) return `Choose the stage that takes the ${dealCount === 1 ? "deal" : `${dealCount} deals`} of ${stage.value}.`;
+  if (!others.some((item) => item.id === moveTo)) return "Choose another active stage of the same pipeline.";
+  return null;
+}
+
+// ---- The board by status (PD-24) and the date filter (PD-23) ----
+
+export type PipelineGroupBy = "stage" | "status";
+export const pipelineDateFields = ["first_contact", "follow_up"] as const;
+export type PipelineDateField = (typeof pipelineDateFields)[number];
+const isoDate = (value: string | null) => (value && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`)) ? value : null);
+
+/** The date part of the board's filters, read from the query string (the deal list's own parameter names). */
+export function parsePipelineDates(params: URLSearchParams): Pick<PipelineFilters, "firstContactFrom" | "firstContactTo" | "followUpFrom" | "followUpTo"> {
+  return {
+    firstContactFrom: isoDate(params.get("firstContactFrom")), firstContactTo: isoDate(params.get("firstContactTo")),
+    followUpFrom: isoDate(params.get("followUpFrom")), followUpTo: isoDate(params.get("followUpTo")),
+  };
 }

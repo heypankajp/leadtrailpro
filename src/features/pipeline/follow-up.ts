@@ -21,7 +21,7 @@ export async function createStageFollowUp(lead: LeadSummary, actor: UserAccount)
   const step = defaultNextStep(lead.stageCode, settings.pipeline, today, settings.holidays.map((holiday) => holiday.date), { executive: lead.clientExecutive, client: lead.clientName });
   const task = await createTask({
     leadId: lead.id, title: step.title, description: `Suggested next step after reaching ${lead.stage ?? "the stage"}.`, assigneeId: lead.ownerId,
-    dueAt: zonedDateTimeToUtc(step.date, 9, 0).toISOString(), priority: "normal", checklist: [],
+    dueAt: zonedDateTimeToUtc(step.date, 9, 0).toISOString(), priority: "normal", checklist: [], activityType: step.activity,
   }, actor);
   if (!lead.followUpDate || lead.followUpDate < step.date) await updateLead(lead.id, { followUpDate: step.date }, actor);
   return task;
