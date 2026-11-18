@@ -17,7 +17,7 @@ describe("Administration and reports", () => {
   after(async () => { await driver?.quit(); });
 
   uiTest("adds a value to the list of values", async () => {
-    await page.nav("List of values");
+    await page.nav("List of Values");
     await page.heading("List of values");
     await page.click(By.xpath('.//nav[contains(@class,"values-nav")]//button[starts-with(normalize-space(.), "City")]'), { global: true });
     const value = `Testville ${runId}`;
@@ -69,7 +69,7 @@ describe("Administration and reports", () => {
     await page.heading("Settings");
     assert.equal(await page.selectedText(await page.wait(By.css('select[aria-label="Rule 7 status"]'))), "Hot");
     assert.equal(await (await page.wait(By.css('input[aria-label="Rule 7 days"]'))).getAttribute("value"), "3");
-    await page.nav("Action center");
+    await page.nav("Action Center");
     await page.waitText(By.xpath('//section[contains(@class,"reminder-panel")][.//h2[normalize-space()="Needs attention"]]//p'), "7 rules by status, BD action, or stage");
     await page.nav("Settings");
     await page.heading("Settings");
@@ -92,7 +92,7 @@ describe("Administration and reports", () => {
   });
 
   uiTest("a set-password link from the stub outbox resets the password", async () => {
-    await page.nav("User management");
+    await page.nav("User Management");
     await page.heading("User management");
     await page.click(By.css(`button[aria-label="Email a set-password link to ${admin.name}"]`), { global: true });
     await page.toast("set-password link was emailed");
@@ -169,7 +169,7 @@ describe("Administration and reports", () => {
   });
 
   uiTest("creates a target template", async () => {
-    await page.nav("Targets & templates");
+    await page.nav("Targets & Templates");
     await page.heading("Targets & templates");
     await page.clickButton("New template", { global: true });
     await page.dialogTitle("New target template");
@@ -222,13 +222,13 @@ describe("Administration and reports", () => {
   });
 
   uiTest("action center metrics link to the reports page", async () => {
-    await page.nav("Action center");
+    await page.nav("Action Center");
     await page.click(By.css('button[aria-label="View Calls made report"]'), { global: true });
     await page.heading("Insights");
   });
 
   uiTest("creates an API token, sees it once, and revokes it", async () => {
-    await page.nav("API access");
+    await page.nav("API Access");
     await page.heading("API access");
     await page.clickButton("Create token", { global: true });
     const name = `Token ${runId}`;
@@ -244,7 +244,7 @@ describe("Administration and reports", () => {
   });
 
   uiTest("opens the tracker import page", async () => {
-    await page.nav("Tracker import");
+    await page.nav("Tracker Import");
     await page.heading("Tracker import");
     await page.wait(By.xpath("//h2[normalize-space()='Sales Managers in the sheet']"));
     await page.wait(By.xpath("//button[normalize-space()='Preview']"));

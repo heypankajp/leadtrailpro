@@ -19,7 +19,7 @@ describe("Team, roles, and deal ownership", () => {
   after(async () => { await driver?.quit(); });
 
   uiTest("admin creates a sales manager account", async () => {
-    await page.nav("User management");
+    await page.nav("User Management");
     await page.heading("User management");
     await page.clickButton("Add user", { global: true });
     await page.dialogTitle("Add user");
@@ -45,7 +45,7 @@ describe("Team, roles, and deal ownership", () => {
     await page.clickButton("Create task");
     await page.toast("Task created");
     // Back to User management, where the next test edits the account.
-    await page.nav("User management");
+    await page.nav("User Management");
     await page.heading("User management");
   });
 
@@ -88,7 +88,7 @@ describe("Team, roles, and deal ownership", () => {
     await page.signIn(manager);
     const labels = await Promise.all((await driver.findElements(By.css("nav.side-nav .nav-item > span"))).map((element) => element.getText()));
     assert.ok(labels.includes("Pipeline") && labels.includes("Leads") && labels.includes("Contacts"), "sales managers see Pipeline, Leads and Contacts");
-    assert.ok(!labels.includes("User management"), "sales managers cannot manage users");
+    assert.ok(!labels.includes("User Management"), "sales managers cannot manage users");
     await page.deals("board");
     assert.equal((await driver.findElements(By.css('.view-switch button[aria-label="Queued for approval"]'))).length, 0, "sales managers cannot review queued deals");
   });
@@ -160,7 +160,7 @@ describe("Team, roles, and deal ownership", () => {
   });
 
   uiTest("terminating the manager reassigns their deals", async () => {
-    await page.nav("User management");
+    await page.nav("User Management");
     await page.heading("User management");
     await page.click(By.css(`button[aria-label="Terminate ${manager.name}"]`), { global: true });
     await page.dialogTitle(`Terminate ${manager.name}`);

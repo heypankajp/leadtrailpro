@@ -1,16 +1,18 @@
 "use client";
 
 import { useCallback, useState, type FormEvent } from "react";
-import { Compass, MapPin, Search, ShieldCheck } from "lucide-react";
+import { Compass, MapPinned, Search, ShieldCheck } from "lucide-react";
 import { errorMessage } from "@/lib/api";
-import { formatDateTime } from "@/lib/format";
 import { useAsyncData } from "@/lib/useAsyncData";
 import { useApp } from "@/features/shell/AppContext";
 import JobsUsageCard from "@/features/jobs/JobsUsageCard";
 import MapsUsageCard from "@/features/maps/MapsUsageCard";
-import { EmptyState, ErrorText, Field, Loading } from "@/features/shell/components";
+import { EmptyState, ErrorText, Field, Loading, Pagination } from "@/features/shell/components";
+import { fetchVisitTrips } from "@/features/visit-trips/client";
+import type { VisitTripPage } from "@/features/visit-trips/model";
+import TripTable from "@/features/visit-trips/TripTable";
 import { createTrip, fetchTrips } from "./client";
-import { maxRadius, maxTripResults, radiusLabel, type RadiusType, type SalesTrip, type TripProviderStatus } from "./model";
+import { maxRadius, maxTripResults, type RadiusType, type SalesTrip, type TripProviderStatus } from "./model";
 
 type FormState = { title: string; address: string; radiusType: RadiusType; radius: string; businessTypeId: string; maxResults: string };
 
@@ -18,7 +20,11 @@ type FormState = { title: string; address: string; radiusType: RadiusType; radiu
 export default function TripsPage() {
   const { reference, navigate, notify, dataVersion, can } = useApp();
   const fetcher = useCallback(() => fetchTrips(), []);
-  const { data, error } = useAsyncData<{ trips: SalesTrip[]; provider: TripProviderStatus }>(fetcher, dataVersion);
+  const { data } = useAsyncData<{ trips: SalesTrip[]; provider: TripProviderStatus }>(fetcher, dataVersion);
+  // Recent Planned Trips: ten to a page.
+  const [recentPage, setRecentPage] = useState(1);
+  const recentFetcher = useCallback(() => fetchVisitTrips({ recent: true, page: recentPage, pageSize: 10 }), [recentPage]);
+  const recent = useAsyncData<VisitTripPage>(recentFetcher, dataVersion);
   const businessTypes = reference.listValues.business_type;
   const [form, setForm] = useState<FormState>(() => ({
     title: "", address: "", radiusType: "km", radius: "15", businessTypeId: String(businessTypes.find((type) => type.code === "any")?.id ?? ""), maxResults: "25",
@@ -78,30 +84,23 @@ export default function TripsPage() {
       </section>
 
       <section className="panel">
-        <div className="panel-heading"><div><h2>{teamWide ? "Planned trips" : "Your trips"}</h2><p>Open a trip to filter, sort, shortlist, export, or print its companies.</p></div></div>
-        <ErrorText message={error} />
-        {!data && !error && <Loading text="Loading trips..." />}
-        {data && data.trips.length === 0 && <EmptyState icon={<Compass size={22} />} title="No trips yet" text="Plan one with the form above." />}
-        {data && data.trips.length > 0 && (
-          <div className="table-scroll">
-            <table className="lead-table trips-table">
-              <thead><tr><th>TRIP</th><th>ADDRESS</th><th>RADIUS</th><th>BUSINESS TYPE</th><th>COMPANIES</th><th>LAST RUN</th>{teamWide && <th>PLANNED BY</th>}<th><span className="sr-only">Actions</span></th></tr></thead>
-              <tbody>
-                {data.trips.map((trip) => (
-                  <tr key={trip.id}>
-                    <td><button className="client-cell trip-open" onClick={() => navigate("trips", trip.id)}><span><strong>{trip.title}</strong></span></button></td>
-                    <td><span className="muted-cell"><MapPin size={12} /> {trip.address}</span></td>
-                    <td>{radiusLabel(trip)}</td>
-                    <td>{trip.businessType ?? "Any"}</td>
-                    <td>{trip.resultCount}</td>
-                    <td><span className="muted-cell">{formatDateTime(trip.lastRunAt)}</span></td>
-                    {teamWide && <td>{trip.ownerName}</td>}
-                    <td><button className="text-button" onClick={() => navigate("trips", trip.id)}>Open</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        {/* Review of November 18, 2026: the same list as Sales Trips (planner trips and trips planned for To Do deals),
+            the most recently planned first, as many as List of values → Recent Planned Trips says, ten to a page. */}
+        <div className="panel-heading">
+          <div><h2>Recent Planned Trips</h2><p>The latest trips{teamWide ? "" : " you can see"}, from the planner and from the To Do list. Open one to work on it; every trip is under Sales Trips.</p></div>
+          <button className="button button-outline button-small" onClick={() => navigate("sales-trips")}><MapPinned size={14} /> All Sales Trips</button>
+        </div>
+        <ErrorText message={recent.error} />
+        {!recent.data && !recent.error && <Loading text="Loading trips..." />}
+        {recent.data && recent.data.trips.length === 0 && <EmptyState icon={<Compass size={22} />} title="No trips yet" text="Plan one with the form above." />}
+        {recent.data && recent.data.trips.length > 0 && (
+          <>
+            <TripTable trips={recent.data.trips} today={reference.today} onOpen={(trip) => navigate(trip.kind === "planner" ? "trips" : "sales-trips", trip.id)} />
+            <div className="table-footer">
+              <span>Showing <strong>{recent.data.trips.length}</strong> of the <strong>{recent.data.total}</strong> most recent trips</span>
+              <Pagination page={recent.data.page} pageSize={recent.data.pageSize} total={recent.data.total} onPage={setRecentPage} />
+            </div>
+          </>
         )}
       </section>
     </>

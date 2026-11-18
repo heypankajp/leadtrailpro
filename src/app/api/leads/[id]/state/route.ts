@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { asString, handleRouteError, jsonError, readJsonBody, requireSameOrigin } from "@/lib/http";
+import { asOptionalId, asString, handleRouteError, jsonError, readJsonBody, requireSameOrigin } from "@/lib/http";
 import { setLeadState } from "@/features/leads/repository";
 import { requirePrivilege, requireUser } from "@/features/users/session";
 
@@ -16,7 +16,10 @@ export async function POST(request: Request, context: RouteContext) {
     if (!Number.isSafeInteger(id) || id < 1) return jsonError(400, "Invalid deal ID.");
     const body = await readJsonBody(request);
     if (body?.state !== "active" && body?.state !== "archived") return jsonError(400, "State must be active or archived.");
-    const lead = await setLeadState(id, body.state, asString(body.reason, 500), user);
+    // Review of November 18, 2026: an archive names its Archival reason; the reason text is the optional notes.
+    const archiveReasonId = asOptionalId(body.archiveReasonId);
+    if (body.state === "archived" && archiveReasonId === null) return jsonError(400, "Choose the archival reason.");
+    const lead = await setLeadState(id, body.state, asString(body.reason, 500), user, undefined, archiveReasonId);
     return NextResponse.json({ lead });
   } catch (error) {
     return handleRouteError(error, "Change deal state");

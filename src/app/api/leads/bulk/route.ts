@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { asString, handleRouteError, jsonError, readJsonBody, requireSameOrigin } from "@/lib/http";
+import { asOptionalId, asString, handleRouteError, jsonError, readJsonBody, requireSameOrigin } from "@/lib/http";
 import { bulkReassign, bulkSetStage, bulkSetState, bulkSetTodo } from "@/features/leads/repository";
 import { requirePrivilege, requireUser } from "@/features/users/session";
 
@@ -14,7 +14,9 @@ export async function POST(request: Request) {
     const reason = asString(body?.reason, 500);
     if (body?.action === "archive" || body?.action === "restore") {
       requirePrivilege(user, "archive_leads", "You do not have permission to archive or restore deals.");
-      const count = await bulkSetState(ids, body.action === "archive" ? "archived" : "active", reason, user);
+      const archiveReasonId = asOptionalId(body?.archiveReasonId);
+      if (body.action === "archive" && archiveReasonId === null) return jsonError(400, "Choose the archival reason.");
+      const count = await bulkSetState(ids, body.action === "archive" ? "archived" : "active", reason, user, archiveReasonId);
       return NextResponse.json({ ok: true, count });
     }
     if (body?.action === "reassign") {

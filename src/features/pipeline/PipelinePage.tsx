@@ -152,6 +152,19 @@ export default function PipelinePage({ groupBy = "stage" }: { groupBy?: Pipeline
     }
   };
 
+  /** Review of November 18, 2026: Convert to Client from the card menu. The deal leaves the board and is listed under Clients. */
+  const clientStatus = reference.listValues.status.find((status) => status.code === "client") ?? null;
+  const convertToClient = async (card: PipelineCard) => {
+    if (!clientStatus) return;
+    try {
+      await updateLead(card.id, { statusId: clientStatus.id, statusReasonId: null });
+      notify(`${card.clientName} is now a client`);
+      bumpData();
+    } catch (caught) {
+      notify(errorMessage(caught, "Could not convert the deal."), "error");
+    }
+  };
+
   const undoLast = () => {
     if (!lastMove) return;
     const card = findCard(lastMove.leadId);
@@ -239,7 +252,14 @@ export default function PipelinePage({ groupBy = "stage" }: { groupBy?: Pipeline
           )}
           <span className="board-total" role="status">{board ? `${board.total} ${board.total === 1 ? "deal" : "deals"}` : ""}</span>
           {/* PD-30: ready-made and data cleanup filters; the list view does the clean-up with its bulk actions. */}
-          <QuickFilterMenu value={filters.quick} onChange={(quick) => update({ quick })} />
+          {/* Review of November 18, 2026: Followup in the Filter menu sets the date filter to the follow-up date. */}
+          <QuickFilterMenu
+            value={filters.quick} onChange={(quick) => update({ quick })}
+            followUp={{
+              from: filters.dateField === "follow_up" ? filters.dateFrom : "", to: filters.dateField === "follow_up" ? filters.dateTo : "",
+              onChange: (from, to) => update(from ? { dateField: "follow_up", dateFrom: from, dateTo: to } : { dateFrom: "", dateTo: "" }),
+            }}
+          />
           {filters.quick && <button className="text-button quick-filter-list" onClick={() => navigate("deals", "list", { quick: filters.quick!, scope: scope === "team" ? "everyone" : "mine" })}><List size={13} /> Open in the list</button>}
         </div>
         {showFilters && (
@@ -327,13 +347,12 @@ export default function PipelinePage({ groupBy = "stage" }: { groupBy?: Pipeline
                             <strong>{card.clientName}</strong>
                             <small>{card.clientExecutive || "No contact yet"}{card.city ? ` · ${card.city}` : ""}</small>
                           </button>
-                          {/* PD-22: one menu for moving, following up, To Do and archiving; it shows on hover or focus. */}
+                          {/* PD-22: one menu for following up, To Do, converting to a client and archiving; it shows on hover or focus. */}
                           {!editable && (
                             <CardActions
                               card={card}
-                              stages={(byStatus ? pipelineStages : columns.filter((item) => item.active || item.id === card.stageId)).map((item) => ({ id: item.id, value: item.value }))}
                               canEdit={canMove(card)}
-                              onMove={(stageId) => void move(card, stageId)}
+                              onConvert={clientStatus && card.statusCode !== "client" ? () => void convertToClient(card) : null}
                               onChanged={(message) => { notify(message); bumpData(); }}
                             />
                           )}

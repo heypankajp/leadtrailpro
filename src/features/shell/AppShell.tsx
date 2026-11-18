@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
-  AlertCircle, BellRing, Building2, CalendarCheck2, Check, ChevronDown, CircleDollarSign, Compass, Contact, FileSpreadsheet, KeyRound, LayoutDashboard, ListChecks, LogOut, Map, Menu,
+  AlertCircle, BellRing, Building2, CalendarCheck2, Check, ChevronDown, CircleDollarSign, Compass, Contact, FileSpreadsheet, Handshake, MapPinned, KeyRound, LayoutDashboard, ListChecks, LogOut, Map, Menu,
   PanelLeftClose, PanelLeftOpen, Plus, Radar, Search, Settings2, ShieldCheck, SlidersHorizontal, Target, TrendingUp, UsersRound,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -30,6 +30,8 @@ import TaskFormDialog from "@/features/tasks/TaskFormDialog";
 import TasksPage from "@/features/tasks/TasksPage";
 import TripResultsPage from "@/features/trips/TripResultsPage";
 import TripsPage from "@/features/trips/TripsPage";
+import SalesTripPage from "@/features/visit-trips/SalesTripPage";
+import SalesTripsPage from "@/features/visit-trips/SalesTripsPage";
 import type { SystemRole, UserAccount, UserPrivilege } from "@/features/users/model";
 import { hasPrivilege } from "@/features/users/model";
 import { AppContext, useHashRoute, type AppContextValue, type Route, type ToastTone } from "./AppContext";
@@ -43,11 +45,15 @@ const navigation: { title: string; items: NavItem[] }[] = [
   {
     title: "",
     items: [
-      { id: "home", label: "Action center", icon: LayoutDashboard },
+      { id: "home", label: "Action Center", icon: LayoutDashboard },
       { id: "deals", label: "Pipeline", icon: CircleDollarSign, privilege: "view_leads", count: "queued" },
       { id: "leads", label: "Leads", icon: Radar, privilege: "view_leads", count: "leads", hideForRecruiter: true },
       { id: "contacts", label: "Contacts", icon: Contact, privilege: "view_leads" },
       { id: "activities", label: "Activities", icon: CalendarCheck2, count: "tasks" },
+      // Review of November 18, 2026: the trips planned for the deals on the To be visited list.
+      { id: "sales-trips", label: "Sales Trips", icon: MapPinned, privilege: "view_leads", hideForRecruiter: true },
+      // Review of November 18, 2026: the deals converted to clients have their own entry, before Insights.
+      { id: "clients", label: "Clients", icon: Handshake, privilege: "view_leads" },
       { id: "insights", label: "Insights", icon: TrendingUp, privilege: "view_reports" },
     ],
   },
@@ -55,36 +61,36 @@ const navigation: { title: string; items: NavItem[] }[] = [
     title: "TOOLS",
     items: [
       { id: "todo", label: "To Do", icon: ListChecks, privilege: "view_leads", count: "todo", hideForRecruiter: true },
-      { id: "trips", label: "Sales trip planner", icon: Compass, privilege: "plan_trips" },
-      { id: "lead-generation", label: "Lead generation", icon: Building2, privilege: "create_leads", preview: true },
-      { id: "planner", label: "Road visit planner", icon: Map, privilege: "create_leads", preview: true },
+      { id: "trips", label: "Sales Trip Planner", icon: Compass, privilege: "plan_trips" },
+      { id: "lead-generation", label: "Lead Generation", icon: Building2, privilege: "create_leads", preview: true },
+      { id: "planner", label: "Road Visit Planner", icon: Map, privilege: "create_leads", preview: true },
     ],
   },
   {
     title: "MANAGE",
     items: [
-      { id: "targets", label: "Targets & templates", icon: Target, privilege: "manage_targets" },
-      { id: "admin", label: "User management", icon: UsersRound, privilege: "manage_users" },
-      { id: "values", label: "List of values", icon: Settings2, privilege: "manage_values" },
-      { id: "devices", label: "Device authorization", icon: ShieldCheck, privilege: "manage_settings" },
+      { id: "targets", label: "Targets & Templates", icon: Target, privilege: "manage_targets" },
+      { id: "admin", label: "User Management", icon: UsersRound, privilege: "manage_users" },
+      { id: "values", label: "List of Values", icon: Settings2, privilege: "manage_values" },
+      { id: "devices", label: "Device Authorization", icon: ShieldCheck, privilege: "manage_settings" },
       { id: "settings", label: "Settings", icon: SlidersHorizontal, privilege: "manage_settings" },
-      { id: "import", label: "Tracker import", icon: FileSpreadsheet, privilege: "manage_settings" },
-      { id: "api", label: "API access", icon: KeyRound, privilege: "manage_settings" },
+      { id: "import", label: "Tracker Import", icon: FileSpreadsheet, privilege: "manage_settings" },
+      { id: "api", label: "API Access", icon: KeyRound, privilege: "manage_settings" },
     ],
   },
 ];
 
 const pageTitles: Record<string, string> = {
-  home: "Action center", deals: "Pipeline", leads: "Leads", contacts: "Contacts", activities: "Activities", insights: "Insights", todo: "To Do",
-  "lead-generation": "Lead generation", trips: "Sales trip planner", planner: "Road visit planner",
-  targets: "Targets & templates", admin: "User management", values: "List of values", devices: "Device authorization", settings: "Settings",
-  import: "Tracker import", api: "API access",
+  home: "Action Center", deals: "Pipeline", leads: "Leads", contacts: "Contacts", activities: "Activities", clients: "Clients", insights: "Insights", todo: "To Do",
+  "sales-trips": "Sales Trips", "lead-generation": "Lead Generation", trips: "Sales Trip Planner", planner: "Road Visit Planner",
+  targets: "Targets & Templates", admin: "User Management", values: "List of Values", devices: "Device Authorization", settings: "Settings",
+  import: "Tracker Import", api: "API Access",
 };
 
 // Addresses from before the Pipedrive naming (bookmarks, old emails) keep working.
 const routeAliases: Record<string, { view: string; param?: string }> = {
   pipeline: { view: "deals", param: "board" }, "all-leads": { view: "deals", param: "list" }, cold: { view: "deals", param: "cold" }, warm: { view: "deals", param: "warm" },
-  hot: { view: "deals", param: "hot" }, client: { view: "deals", param: "client" }, queued: { view: "deals", param: "queued" }, archive: { view: "deals", param: "archive" },
+  hot: { view: "deals", param: "hot" }, client: { view: "clients" }, queued: { view: "deals", param: "queued" }, archive: { view: "deals", param: "archive" },
   opportunities: { view: "leads" }, tasks: { view: "activities" }, reports: { view: "insights" }, lead: { view: "deal" },
 };
 const canonicalRoute = (route: Route): Route => {
@@ -242,9 +248,11 @@ export default function AppShell({ user, setUser, signOut, passwordSignIn }: { u
   const renderContent = () => {
     if (view === "deals") return can("view_leads") ? <DealsPage key={base.query.toString()} mode={base.param} /> : <NoAccess />;
     if (view === "todo") return <LeadListPage view="todo" />;
+    if (view === "sales-trips") return can("view_leads") ? (base.param && /^\d+$/.test(base.param) ? <SalesTripPage key={base.param} tripId={Number(base.param)} /> : <SalesTripsPage />) : <NoAccess />;
     if (view === "leads") return can("view_leads") ? <OpportunitiesPage /> : <NoAccess />;
     if (view === "contacts") return can("view_leads") ? <ContactsPage key={base.param ?? "people"} tab={base.param === "organizations" || base.param === "timeline" ? base.param : "people"} /> : <NoAccess />;
     if (view === "activities") return <TasksPage />;
+    if (view === "clients") return can("view_leads") ? <LeadListPage key={base.query.toString()} view="client" /> : <NoAccess />;
     if (view === "insights") return can("view_reports") ? <ReportsPage /> : <NoAccess />;
     if (adminTabs.includes(view as AdminTab)) return <AdminPage tab={view as AdminTab} />;
     if (view === "lead-generation") return <LeadGenerationPage />;

@@ -26,6 +26,7 @@ import TaskFormDialog from "@/features/tasks/TaskFormDialog";
 import type { Task } from "@/features/tasks/model";
 import UserDirectoryDialog from "@/features/users/UserDirectoryDialog";
 import type { UserSummary } from "@/features/users/model";
+import ArchiveDialog from "./ArchiveDialog";
 import { attachmentUrl, fetchLead, logActivity, removeAttachment, reviewLead, setLeadState, setLeadTodo, transferLead, updateLead, uploadAttachment, type LeadDetail } from "./client";
 import { activityIcons, ScheduleActivityForm } from "@/features/tasks/ScheduleActivity";
 import LeadFormDialog from "./LeadFormDialog";
@@ -203,7 +204,7 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
         {lead.recordState !== "archived" && (
           <StageBar lead={lead} canMove={canEdit} onMoved={(message, task, moved) => { void refresh(message); if (!task) offerNextStep("You moved the deal to a new stage.", moved); }} />
         )}
-        {lead.stateReason && <div className="form-note state-note"><History size={14} /> {lead.stateReason}</div>}
+        {(lead.archiveReason || lead.stateReason) && <div className="form-note state-note"><History size={14} /> {[lead.archiveReason, lead.stateReason].filter(Boolean).join(": ")}</div>}
 
         <div className="deal-columns">
           <aside className="deal-side" aria-label="Deal details">
@@ -289,7 +290,7 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
         <PromptDialog title={`Transfer to ${dialog.user.name}`} eyebrow="OWNERSHIP" label="Reason (optional)" confirmLabel="Transfer deal" onClose={() => setDialog(null)} onConfirm={async (reason) => { await transferLead(lead.id, dialog.user.id, reason); setDialog(null); await refresh(`${lead.clientName} transferred to ${dialog.user.name}`); }} />
       )}
       {dialog?.kind === "archive" && (
-        <PromptDialog title={`Archive ${lead.clientName}`} eyebrow="ARCHIVE" label="Reason (optional)" confirmLabel="Archive deal" onClose={() => setDialog(null)} onConfirm={async (reason) => { await setLeadState(lead.id, "archived", reason); setDialog(null); await refresh("Deal archived"); }} />
+        <ArchiveDialog title={`Archive ${lead.clientName}`} onClose={() => setDialog(null)} onConfirm={async (reasonId, notes) => { await setLeadState(lead.id, "archived", notes, reasonId); setDialog(null); await refresh("Deal archived"); }} />
       )}
       {dialog?.kind === "restore" && (
         <PromptDialog title={`Restore ${lead.clientName}`} eyebrow="ARCHIVE" label="Note (optional)" confirmLabel="Restore deal" onClose={() => setDialog(null)} onConfirm={async (reason) => { await setLeadState(lead.id, "active", reason); setDialog(null); await refresh("Deal restored"); }} />

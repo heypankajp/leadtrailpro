@@ -68,13 +68,13 @@ describe("Accessibility", () => {
     await page.nav("Settings");
     await page.heading("Settings");
     await audit("settings");
-    await page.nav("List of values");
+    await page.nav("List of Values");
     await page.heading("List of values");
     await audit("list of values");
-    await page.nav("User management");
+    await page.nav("User Management");
     await page.heading("User management");
     await audit("user management");
-    await page.nav("Sales trip planner");
+    await page.nav("Sales Trip Planner");
     await page.heading("Sales trip planner");
     await audit("sales trip planner");
   });

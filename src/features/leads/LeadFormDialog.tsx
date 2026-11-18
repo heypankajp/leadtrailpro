@@ -7,9 +7,9 @@ import { entryStageCode, reasonListFor } from "@/features/list-values/model";
 import { useApp } from "@/features/shell/AppContext";
 import { Dialog, ErrorText, Field } from "@/features/shell/components";
 import SuggestInput from "@/features/shell/SuggestInput";
-import { stageChoices } from "@/features/pipeline/model";
-import { fetchOrganization, fetchOrganizations, fetchPeople, fetchPerson } from "@/features/contacts/client";
-import { contactKey, type OrganizationDetail, type OrganizationRow, type PersonRow } from "@/features/contacts/model";
+import StagePicker from "@/features/pipeline/StagePicker";
+import { fetchOrganization, fetchOrganizations, fetchPerson } from "@/features/contacts/client";
+import { contactKey, type OrganizationDetail, type OrganizationRow } from "@/features/contacts/model";
 import { createLead, updateLead } from "./client";
 import { dealCurrency, parseDealValue, type LeadInput, type LeadSummary } from "./model";
 
@@ -87,45 +87,47 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
     }, 250);
     return () => { cancelled = true; window.clearTimeout(timer); };
   }, [typedOrganization]);
-  const matchedOrganization = organization && contactKey(organization.organization.name) === contactKey(form.clientName) ? organization : null;
+  // A deal started from an organization's page (+ Deal) comes with that organization: its record is loaded at once, so
+  // its contacts are offered in the Contact field like those of an organization picked by name.
+  const fixedOrganizationId = !lead ? contact?.organizationId ?? null : null;
+  useEffect(() => {
+    if (!fixedOrganizationId) return;
+    let cancelled = false;
+    fetchOrganization(fixedOrganizationId).then((detail) => { if (!cancelled) setOrganization(detail); }).catch(() => { /* the lookup is a convenience */ });
+    return () => { cancelled = true; };
+  }, [fixedOrganizationId]);
+  const matchedOrganization = organization && (fixedOrganizationId ? organization.organization.id === fixedOrganizationId : contactKey(organization.organization.name) === contactKey(form.clientName)) ? organization : null;
+  // Contacts are looked up on every new deal, whether the organization was typed or came with the page it was started from.
+  const contactLookup = !lead;
   const matchedPerson = matchedOrganization?.people.find((person) => contactKey(person.name) === contactKey(form.clientExecutive)) ?? null;
   const openDeals = matchedOrganization?.deals.filter((deal) => deal.recordState === "active") ?? [];
 
-  // Contacts that match a typed name (anyone's while no organization is picked) or a typed email address, with their
-  // organization: picking one fills the contact and the organization at once.
-  const [personRows, setPersonRows] = useState<{ q: string; rows: PersonRow[] } | null>(null);
-  const typedContact = lookup && !matchedOrganization ? form.clientExecutive.trim() : "";
-  const typedEmail = lookup ? (form.clientEmails.split(/[,;\s]+/).pop() ?? "").trim().toLowerCase() : "";
-  const personQuery = typedEmail.length >= 3 ? typedEmail : typedContact.length >= 2 ? typedContact : "";
-  useEffect(() => {
-    if (!personQuery) return;
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      fetchPeople(personQuery, 1).then((page) => { if (!cancelled) setPersonRows({ q: personQuery, rows: page.rows.slice(0, 8) }); }).catch(() => { /* optional */ });
-    }, 250);
-    return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [personQuery]);
-  const pickPerson = (row: PersonRow, email?: string | null) => {
+  // Review of November 18, 2026: a contact belongs to an organization, so contacts are looked up only inside the
+  // organization picked above (by name or by a typed email address). Until an organization is chosen there is no lookup.
+  const people = matchedOrganization?.people ?? [];
+  const typedEmail = contactLookup ? (form.clientEmails.split(/[,;\s]+/).pop() ?? "").trim().toLowerCase() : "";
+  const pickContact = (name: string, email?: string | null) => {
     setForm((current) => {
       const emails = current.clientEmails.split(/[,;\s]+/).filter(Boolean);
       if (email) { if (emails.length && emails[emails.length - 1].toLowerCase() === typedEmail) emails.pop(); if (!emails.includes(email)) emails.push(email); }
-      return { ...current, clientName: row.organization ?? current.clientName, clientExecutive: row.name, clientEmails: emails.join(", ") };
+      return { ...current, clientExecutive: name, clientEmails: emails.join(", ") };
     });
-    setDuplicate(null);
     setConfirm(null);
   };
   const orgSuggestions = orgRows && orgRows.q === typedOrganization ? orgRows.rows.map((row) => ({
     key: String(row.id), label: row.name, icon: <Building2 size={14} />,
     detail: [row.city, row.industry, `${row.openDeals} open ${row.openDeals === 1 ? "deal" : "deals"}`, row.people ? `${row.people} ${row.people === 1 ? "contact" : "contacts"}` : null].filter(Boolean).join(" · "),
   })) : [];
-  const contactSuggestions = matchedOrganization
-    ? matchedOrganization.people
-      .filter((person) => !form.clientExecutive.trim() || contactKey(person.name).includes(contactKey(form.clientExecutive)))
-      .map((person) => ({ key: `p${person.id}`, label: person.name, detail: [person.email, person.phone].filter(Boolean).join(" · ") || undefined, icon: <UserRound size={14} /> }))
-    : personRows && personRows.q === typedContact ? personRows.rows.map((row) => ({ key: `p${row.id}`, label: row.name, detail: [row.organization, row.email].filter(Boolean).join(" · ") || undefined, icon: <UserRound size={14} /> })) : [];
-  const emailSuggestions = personRows && personRows.q === typedEmail && typedEmail.length >= 3
-    ? personRows.rows.map((row) => ({ key: `e${row.id}`, label: row.email ?? row.name, detail: [row.name, row.organization].filter(Boolean).join(" · "), icon: <Mail size={14} /> }))
+  const contactSuggestions = people
+    .filter((person) => !form.clientExecutive.trim() || contactKey(person.name).includes(contactKey(form.clientExecutive)))
+    .map((person) => ({ key: `p${person.id}`, label: person.name, detail: [person.email, person.phone].filter(Boolean).join(" · ") || undefined, icon: <UserRound size={14} /> }));
+  const emailSuggestions = typedEmail.length >= 3
+    ? people
+      .filter((person) => person.email && person.email.toLowerCase().includes(typedEmail))
+      .map((person) => ({ key: `e${person.id}`, label: person.email ?? person.name, detail: person.name, icon: <Mail size={14} /> }))
     : [];
+  // The contact is chosen after the organization: the field waits until a name is typed there.
+  const organizationChosen = !contactLookup || form.clientName.trim().length > 0;
 
   // Picking an existing organization or contact fills the fields that are still empty from its record.
   const matchedOrganizationId = matchedOrganization?.organization.id ?? null;
@@ -233,23 +235,21 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
               </div>
             </div>
           )}
-          <Field label="Contact" wide hint={!lookup ? undefined : matchedOrganization ? (matchedOrganization.people.length ? `Click or type to pick one of ${matchedOrganization.organization.name}'s contacts, or type a new name.` : `${matchedOrganization.organization.name} has no contacts yet: type a name to add one.`) : "Start typing a name: the contacts that match appear with their organization, and picking one fills both."}>
-            {lookup
+          <Field label="Contact" wide hint={!contactLookup ? undefined : matchedOrganization ? (matchedOrganization.people.length ? `Click or type to pick one of ${matchedOrganization.organization.name}'s contacts, or type a new name.` : `${matchedOrganization.organization.name} has no contacts yet: type a name to add one.`) : organizationChosen ? "A new organization has no contacts yet: type a name. The organization is created first and the contact is added inside it." : "Choose the organization first: contacts are looked up inside it."}>
+            {contactLookup
               ? <SuggestInput
                   value={form.clientExecutive} onChange={(value) => { setForm((current) => ({ ...current, clientExecutive: value })); setConfirm(null); }}
                   suggestions={contactSuggestions}
                   onPick={(suggestion) => {
-                    const fromOrganization = matchedOrganization?.people.find((person) => `p${person.id}` === suggestion.key);
-                    const row = personRows?.rows.find((item) => `p${item.id}` === suggestion.key);
-                    if (fromOrganization) { setForm((current) => ({ ...current, clientExecutive: fromOrganization.name })); setConfirm(null); }
-                    else if (row) pickPerson(row);
+                    const person = people.find((item) => `p${item.id}` === suggestion.key);
+                    if (person) pickContact(person.name);
                   }}
-                  minChars={matchedOrganization ? 0 : 2}
-                  maxLength={160} placeholder={matchedOrganization ? "Pick or type a contact…" : "Type to search contacts…"}
+                  minChars={0} disabled={!organizationChosen}
+                  maxLength={160} placeholder={!organizationChosen ? "Choose the organization first" : matchedOrganization ? "Pick or type a contact…" : "Type the contact's name"}
                 />
               : <input value={form.clientExecutive} onChange={(event) => { set("clientExecutive")(event); setConfirm(null); }} maxLength={160} placeholder="Contact person" />}
           </Field>
-          <Field label="Pipeline stage" wide hint={lead ? undefined : "Where the deal starts on the board."}>{select("stageId", stageChoices(values.stage, reference.pipelines), lead && !lead.stageId ? "Not set" : "")}</Field>
+          <StagePicker value={form.stageId} onChange={(stageId) => setForm((current) => ({ ...current, stageId }))} hint={lead ? undefined : "Where the deal starts on the board: click an arrow."} />
           <Field label="Deal source" required>{select("leadTypeId", values.lead_type, "")}</Field>
           <Field label="Status" required>
             <select value={form.statusId} onChange={(event) => setForm((current) => ({ ...current, statusId: event.target.value, statusReasonId: "" }))}>
@@ -282,12 +282,12 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
         </div>
         <div className="deal-form-col deal-form-side">
           <h3 className="deal-form-heading">CONTACT</h3>
-          <Field label="Email(s)" wide hint={lookup ? "Separate several addresses with commas. Typing an address also finds the contact who has it, with their organization." : "Separate several addresses with commas."}>
-            {lookup
+          <Field label="Email(s)" wide hint={contactLookup ? "Separate several addresses with commas. Typing an address also finds the organization's contact who has it." : "Separate several addresses with commas."}>
+            {contactLookup
               ? <SuggestInput
                   value={form.clientEmails} onChange={(value) => setForm((current) => ({ ...current, clientEmails: value }))}
                   suggestions={emailSuggestions} minChars={3}
-                  onPick={(suggestion) => { const row = personRows?.rows.find((item) => `e${item.id}` === suggestion.key); if (row) pickPerson(row, row.email); }}
+                  onPick={(suggestion) => { const person = people.find((item) => `e${item.id}` === suggestion.key); if (person) pickContact(person.name, person.email); }}
                   placeholder="name@company.com"
                 />
               : <input value={form.clientEmails} onChange={set("clientEmails")} placeholder="name@company.com" />}
@@ -321,8 +321,8 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
             <div>
               <p>Saving this deal also creates:</p>
               <ul className="open-deals-list">
-                {confirm.organization && <li>New organization: <strong>{confirm.organization}</strong></li>}
-                {confirm.contact && <li>New contact: <strong>{confirm.contact}</strong>{confirm.organization || matchedOrganization ? ` at ${confirm.organization ?? matchedOrganization?.organization.name}` : ""}</li>}
+                {confirm.organization && <li>{confirm.contact ? "First, the new organization" : "New organization"}: <strong>{confirm.organization}</strong></li>}
+                {confirm.contact && <li>{confirm.organization ? "Then, inside it, the new contact" : "New contact"}: <strong>{confirm.contact}</strong>{!confirm.organization && matchedOrganization ? ` at ${matchedOrganization.organization.name}` : ""}</li>}
               </ul>
               <div className="duplicate-actions">
                 <button type="button" className="button button-primary button-small" disabled={saving} onClick={() => void save(allowSimilarChosen.current, true)}>Create and add deal</button>

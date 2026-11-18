@@ -2,25 +2,25 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Archive, ArrowRightLeft, CalendarCheck2, Check, ListChecks, X } from "lucide-react";
+import { Archive, ArrowRightLeft, CalendarCheck2, Check, Handshake, ListChecks, X } from "lucide-react";
 import { errorMessage } from "@/lib/api";
 import { setLeadState, setLeadTodo } from "@/features/leads/client";
 import { ScheduleActivityDialog } from "@/features/tasks/ScheduleActivity";
 import { useApp } from "@/features/shell/AppContext";
-import { PromptDialog } from "@/features/shell/components";
+import ArchiveDialog from "@/features/leads/ArchiveDialog";
 import type { PipelineCard } from "./model";
 
-type Choice = { id: number; value: string };
-
 /**
- * The ⇄ button on a board card (PD-22, SPEC §10.19): one menu for what is done to a deal without opening it. Move to
- * stage, Add follow-up, Add to To Do list ("To be visited" is where the team parks a deal for a visit), and Archive.
+ * The ⇄ button on a board card (PD-22, SPEC §10.19): one menu for what is done to a deal without opening it. Since the
+ * review of November 18, 2026 it holds Add follow-up, Add to To Do list ("To be visited" is where the team parks a deal
+ * for a visit), Convert to Client and Archive; a deal changes stage by dragging its card or from the deal page.
  * Each action needs the same rights as on the deal page. The menu is drawn over the page (fixed), so a column's own
  * scrolling never cuts it off.
  */
-export default function CardActions({ card, stages, canEdit, onMove, onChanged }: {
-  card: PipelineCard; stages: Choice[]; canEdit: boolean;
-  onMove: (stageId: number) => void;
+export default function CardActions({ card, canEdit, onConvert, onChanged }: {
+  card: PipelineCard; canEdit: boolean;
+  /** Makes the deal a client (status Client); null when it already is one. */
+  onConvert: (() => void) | null;
   onChanged: (message: string) => void;
 }) {
   const { can, reference, notify } = useApp();
@@ -80,22 +80,12 @@ export default function CardActions({ card, stages, canEdit, onMove, onChanged }
 
   return (
     <>
-      <button ref={button} type="button" className="pipeline-move" aria-label={`Actions for ${card.clientName}`} title="Move, follow up, To Do, archive" aria-haspopup="menu" aria-expanded={Boolean(open)} onClick={toggle}>
+      <button ref={button} type="button" className="pipeline-move" aria-label={`Actions for ${card.clientName}`} title="Follow up, To Do, convert to client, archive" aria-haspopup="menu" aria-expanded={Boolean(open)} onClick={toggle}>
         <ArrowRightLeft size={13} />
       </button>
       {open && createPortal(
         <div ref={menu} className="menu-dropdown card-menu" role="menu" aria-label={`Actions for ${card.clientName}`} style={{ top: open.top ?? "auto", bottom: open.bottom ?? "auto", left: open.left, maxHeight: open.maxHeight }}>
-          {canEdit && stages.length > 1 && (
-            <>
-              <div className="card-menu-label">Move to stage</div>
-              {stages.map((stage) => (
-                <button key={stage.id} role="menuitem" disabled={stage.id === card.stageId} onClick={() => run(() => onMove(stage.id))}>
-                  {stage.id === card.stageId ? <Check size={13} /> : <span className="card-menu-gap" />} {stage.value}
-                </button>
-              ))}
-            </>
-          )}
-          {canFollowUp && <><div className="card-menu-rule" /><button role="menuitem" onClick={() => run(() => setDialog("follow-up"))}><CalendarCheck2 size={13} /> Add follow-up</button></>}
+          {canFollowUp && <button role="menuitem" onClick={() => run(() => setDialog("follow-up"))}><CalendarCheck2 size={13} /> Add follow-up</button>}
           {canEdit && todoLists.length > 0 && (
             <>
               <div className="card-menu-rule" />
@@ -108,6 +98,7 @@ export default function CardActions({ card, stages, canEdit, onMove, onChanged }
               {card.todoListId && <button role="menuitem" onClick={() => run(() => void changeTodo(null))}><X size={13} /> Take off To Do</button>}
             </>
           )}
+          {canEdit && onConvert && <><div className="card-menu-rule" /><button role="menuitem" onClick={() => run(onConvert)}><Handshake size={13} /> Convert to Client</button></>}
           {canArchive && <><div className="card-menu-rule" /><button role="menuitem" onClick={() => run(() => setDialog("archive"))}><Archive size={13} /> Archive</button></>}
         </div>,
         document.body,
@@ -115,11 +106,10 @@ export default function CardActions({ card, stages, canEdit, onMove, onChanged }
       {/* PD-29: Add follow-up opens the Schedule an activity form. */}
       {dialog === "follow-up" && <ScheduleActivityDialog deal={card} canSetFollowUp={canEdit} onClose={() => setDialog(null)} onSaved={(message) => { setDialog(null); onChanged(`${message} · ${card.clientName}`); }} />}
       {dialog === "archive" && (
-        <PromptDialog
-          title={`Archive ${card.clientName}`} eyebrow="ARCHIVE" label="Reason (optional)" confirmLabel="Archive deal"
-          description="The deal leaves the board. It can be restored from the archive."
+        <ArchiveDialog
+          title={`Archive ${card.clientName}`}
           onClose={() => setDialog(null)}
-          onConfirm={async (reason) => { await setLeadState(card.id, "archived", reason); setDialog(null); onChanged(`${card.clientName} archived`); }}
+          onConfirm={async (reasonId, notes) => { await setLeadState(card.id, "archived", notes, reasonId); setDialog(null); onChanged(`${card.clientName} archived`); }}
         />
       )}
     </>

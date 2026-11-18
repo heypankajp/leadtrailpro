@@ -3,14 +3,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { errorMessage } from "@/lib/api";
 import { useAsyncData } from "@/lib/useAsyncData";
-import { ChevronDown, Filter, Kanban, ListChecks, Plus, Search, SlidersHorizontal, UserRound, X } from "lucide-react";
+import { ChevronDown, Filter, Kanban, ListChecks, MapPinned, Plus, Search, SlidersHorizontal, UserRound, X } from "lucide-react";
 import { reasonListFor } from "@/features/list-values/model";
 import { useApp } from "@/features/shell/AppContext";
 import { Dialog, ErrorText, Field, Loading, Pagination, PromptDialog } from "@/features/shell/components";
 import { entryStageCode } from "@/features/list-values/model";
 import { stageChoices } from "@/features/pipeline/model";
 import UserDirectoryDialog from "@/features/users/UserDirectoryDialog";
+import { AddToTripDialog } from "@/features/visit-trips/TripDialogs";
 import type { UserSummary } from "@/features/users/model";
+import ArchiveDialog from "./ArchiveDialog";
 import { bulkLeads, fetchLeads, fetchTodoCounts, reviewLead, setLeadState, type LeadQuery } from "./client";
 import { todoTabs, type TodoCounts, type TodoScope } from "./todo-model";
 import LeadTable from "./LeadTable";
@@ -28,7 +30,7 @@ const titles: Record<LeadListView, { title: string; eyebrow: string; blurb: stri
   cold: { title: "Cold deals", eyebrow: "BY STATUS", blurb: "Prospects that still need a first conversation." },
   warm: { title: "Warm deals", eyebrow: "BY STATUS", blurb: "Conversations that are moving." },
   hot: { title: "Hot deals", eyebrow: "BY STATUS", blurb: "Close to signing. Keep the momentum." },
-  client: { title: "Clients", eyebrow: "BY STATUS", blurb: "Signed clients and ongoing accounts." },
+  client: { title: "Clients", eyebrow: "SIGNED CLIENTS", blurb: "Deals converted to clients: signed clients and ongoing accounts." },
   queued: { title: "Queued deals", eyebrow: "ADMIN REVIEW", blurb: "Historical first-contact dates waiting for approval before they enter the pipeline." },
   archive: { title: "Archive", eyebrow: "DEAL HISTORY", blurb: "Archived and rejected deals. Search and filter independently, restore any time." },
 };
@@ -52,7 +54,7 @@ const emptyFilters: Filters = {
 
 /** A deal list. On the Deals page (`embedded`) the heading, the view switch and the "+ Deal" button come from DealsPage. */
 export default function LeadListPage({ view, embedded = false }: { view: LeadListView; embedded?: boolean }) {
-  const { reference, can, route, openLead, openNewLead, notify, dataVersion, bumpData } = useApp();
+  const { reference, can, route, navigate, openLead, openNewLead, notify, dataVersion, bumpData } = useApp();
   // The shell keys this page by view and URL query, so initial filters come straight from the route.
   const [filters, setFilters] = useState<Filters>(() => {
     const sort = route.query.get("sort");
@@ -64,8 +66,10 @@ export default function LeadListPage({ view, embedded = false }: { view: LeadLis
     const quick = route.query.get("quick");
     return { ...emptyFilters, stageId: numericParam("stageId"), statusId: numericParam("statusId"), quick: isQuickFilterKey(quick) ? quick : null, q: route.query.get("q") ?? "", sort: leadSortKeys.includes(sort as LeadSortKey) ? (sort as LeadSortKey) : fallbackSort, direction: direction === "asc" || (!direction && view === "todo") ? "asc" : "desc" };
   });
-  // TODO-04: the To Do page shows the person's own leads or everyone's, one list or all of them.
-  const [todoScope, setTodoScope] = useState<TodoScope>("mine");
+  // TODO-04: the To Do page shows the person's own leads or everyone's, one list or all of them. It opens on everyone's
+  // (review of November 18, 2026): a deal someone put on "To be visited" from the team board was owned by a colleague,
+  // so "My deals" hid it and the list looked empty.
+  const [todoScope, setTodoScope] = useState<TodoScope>("everyone");
   const [todoTab, setTodoTab] = useState<number | null>(null);
   const [debouncedQ, setDebouncedQ] = useState(filters.q);
   const [page, setPage] = useState(1);
@@ -79,6 +83,7 @@ export default function LeadListPage({ view, embedded = false }: { view: LeadLis
     | { kind: "reassign-reason"; ids: number[]; user: UserSummary }
     | { kind: "stage"; ids: number[] }
     | { kind: "todo"; ids: number[] }
+    | { kind: "trip"; ids: number[] }
     | null
   >(null);
   // TODO-03: bulk move to a To Do list; "" takes the leads off their list.
@@ -125,7 +130,7 @@ export default function LeadListPage({ view, embedded = false }: { view: LeadLis
   const canSelect = view === "queued" ? false : can("archive_leads") || can("reassign_leads") || can("edit_leads");
   const title = titles[view];
 
-  const runBulk = async (ids: number[], action: "archive" | "restore" | "reassign" | "stage" | "todo", options: { ownerId?: number; reason?: string; stageId?: number; todoListId?: number | null }) => {
+  const runBulk = async (ids: number[], action: "archive" | "restore" | "reassign" | "stage" | "todo", options: { ownerId?: number; reason?: string; stageId?: number; todoListId?: number | null; archiveReasonId?: number }) => {
     const result = await bulkLeads(ids, action, options);
     setDialog(null);
     setSelected([]);
@@ -202,7 +207,7 @@ export default function LeadListPage({ view, embedded = false }: { view: LeadLis
             <button className={`button button-outline button-small ${showFilters || activeFilterCount ? "is-active" : ""}`} onClick={() => setShowFilters((open) => !open)}>
               <Filter size={14} /> Filters{activeFilterCount ? ` (${activeFilterCount})` : ""}
             </button>
-            {(view === "leads" || view === "all-leads") && <QuickFilterMenu value={filters.quick} onChange={(quick) => update({ quick })} />}
+            {(view === "leads" || view === "all-leads") && <QuickFilterMenu value={filters.quick} onChange={(quick) => update({ quick })} followUp={{ from: filters.followUpFrom, to: filters.followUpTo, onChange: (followUpFrom, followUpTo) => update({ followUpFrom, followUpTo }) }} />}
           </div>
 
           {showFilters && (
@@ -246,6 +251,8 @@ export default function LeadListPage({ view, embedded = false }: { view: LeadLis
               {view !== "archive" && can("edit_leads") && <button onClick={() => { setBulkStageId(String(reference.listValues.stage.find((stage) => stage.code === entryStageCode)?.id ?? reference.listValues.stage[0]?.id ?? "")); setDialog({ kind: "stage", ids: selected }); }}><Kanban size={13} /> Move to stage</button>}
               {view !== "archive" && can("edit_leads") && <button onClick={() => { setBulkTodoId(String(todoTab ?? todoLists.find((list) => list.active)?.id ?? "")); setDialog({ kind: "todo", ids: selected }); }}><ListChecks size={13} /> Move to To Do</button>}
               {view === "todo" && can("edit_leads") && <button onClick={() => void runBulk(selected, "todo", { todoListId: null }).catch((caught: unknown) => notify(errorMessage(caught), "error"))}>Take off To Do</button>}
+              {/* Review of November 18, 2026: plan a sales trip for the deals to visit. */}
+              {view === "todo" && can("plan_trips") && <button onClick={() => setDialog({ kind: "trip", ids: selected })}><MapPinned size={13} /> Add to sales trip</button>}
               <button className="bulk-clear" onClick={() => setSelected([])}>Clear selection</button>
             </div>
           )}
@@ -294,8 +301,18 @@ export default function LeadListPage({ view, embedded = false }: { view: LeadLis
           }}
         />
       )}
+      {dialog?.kind === "trip" && (
+        <AddToTripDialog
+          leadIds={dialog.ids} onClose={() => setDialog(null)}
+          onDone={(message, trip) => { setDialog(null); setSelected([]); bumpData(); notify(message); navigate("sales-trips", trip.id); }}
+        />
+      )}
       {dialog?.kind === "archive" && (
-        <PromptDialog title={`Archive ${dialog.ids.length === 1 ? "deal" : `${dialog.ids.length} deals`}`} eyebrow="ARCHIVE" label="Reason (optional)" confirmLabel="Archive" onClose={() => setDialog(null)} onConfirm={(reason) => runBulk(dialog.ids, "archive", { reason })} />
+        <ArchiveDialog
+          title={`Archive ${dialog.ids.length === 1 ? "deal" : `${dialog.ids.length} deals`}`} confirmLabel="Archive"
+          description={dialog.ids.length === 1 ? undefined : "The deals leave the board with this reason and these notes. They can be restored from the archive."}
+          onClose={() => setDialog(null)} onConfirm={(archiveReasonId, notes) => runBulk(dialog.ids, "archive", { reason: notes, archiveReasonId })}
+        />
       )}
       {dialog?.kind === "restore" && (
         <PromptDialog

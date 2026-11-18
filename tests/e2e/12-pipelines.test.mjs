@@ -29,7 +29,7 @@ describe("Several pipelines", () => {
   });
 
   uiTest("an administrator adds a pipeline and gives it a stage whose name the default pipeline also uses", async () => {
-    await page.nav("List of values");
+    await page.nav("List of Values");
     await page.heading("List of values");
     await page.click(By.xpath('.//nav[contains(@class,"values-nav")]//button[starts-with(normalize-space(.), "Pipeline stage")]'), { global: true });
     await (await page.wait(By.css('input[aria-label="New pipeline name"]'))).sendKeys(pipeline);

@@ -28,7 +28,7 @@ describe("Sales trip planner", () => {
     await page.toast("added to the pipeline");
     await page.closeDialog();
 
-    await page.nav("Sales trip planner");
+    await page.nav("Sales Trip Planner");
     await page.heading("Sales trip planner");
     await page.fill("Trip title", tripTitle);
     await page.fill("Address", "Mississauga, ON");

@@ -1807,3 +1807,99 @@ button.pipeline-move { padding: 0; cursor: pointer; }
 .suggest-text small { overflow: hidden; color: #5a6177; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .suggest-list li.suggest-empty { color: #5a6177; font-size: 11.5px; cursor: default; }
 .suggest-list li.suggest-empty:hover { background: transparent; }
+
+/* Review of November 18, 2026: the add-deal form's Pipeline stage as green arrows (one per stage), after Pipedrive's. */
+.stage-picker-field { display: grid; gap: 7px; color: #666c80; font-size: 9px; font-weight: 600; }
+.stage-picker-pipeline { justify-self: start; min-width: 200px; }
+/* A rounded bar cut into arrows: each arrow's point sits in the next one's notch with a thin white gap between them,
+   the first has no notch and the last ends flat, so the bar keeps its rounded ends. */
+.stage-picker { display: flex; height: 34px; overflow: hidden; border-radius: 8px; background: #fff; }
+.stage-picker button { flex: 1 1 0; min-width: 0; margin-left: -7px; padding: 0; border: 0; border-radius: 0; background: #e3e3e3; cursor: pointer; clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%, 10px 50%); transition: background-color .12s ease; }
+.stage-picker button:first-child { margin-left: 0; clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%); }
+.stage-picker button:last-child { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 10px 50%); }
+.stage-picker button:only-child { clip-path: none; }
+.stage-picker button:hover { background: #d2d2d2; }
+/* Each filled arrow carries its own shade (--stage-green), light green at the first stage to dark green at the last. */
+.stage-picker button.is-on { background: var(--stage-green, #2b8049); }
+.stage-picker button.is-on:hover { background: var(--stage-green, #2b8049); filter: brightness(.9); }
+.stage-picker button:focus-visible { outline: none; background: #9aa3b8; }
+.stage-picker button.is-on:focus-visible { background: var(--stage-green, #2b8049); filter: brightness(.75); }
+.stage-picker-name { color: #4a5066; font-size: 11px; font-weight: 600; }
+
+/* Sales Trips (review of November 18, 2026): the list's date and period filters, the trip page and the deal picker. */
+.trip-toolbar { flex-wrap: wrap; row-gap: 8px; }
+.trip-table td { vertical-align: middle; }
+.trip-table .trip-title { font-size: 13px; font-weight: 650; text-align: left; }
+.trip-date { display: block; color: #262b42; font-weight: 600; white-space: nowrap; }
+.trip-when { display: block; margin-top: 2px; color: #8a90a2; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .3px; }
+.trip-today .trip-when { color: #2b8049; }
+.trip-past .trip-date, .trip-past .trip-title { opacity: .7; }
+.trip-heading { align-items: flex-end; }
+.trip-back { display: inline-flex; align-items: center; gap: 5px; margin-bottom: 8px; font-size: 12px; }
+.trip-meta { display: flex; flex-wrap: wrap; gap: 16px; }
+.trip-meta span { display: inline-flex; align-items: center; gap: 6px; }
+.trip-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.trip-stop { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #e8f3ec; color: #2b8049; font-size: 11px; font-weight: 700; }
+.trip-contact { display: grid; gap: 2px; color: #262b42; font-size: 12px; }
+.trip-contact small { display: inline-flex; align-items: center; gap: 4px; color: #5a6177; font-size: 11px; }
+.trip-new-link { display: inline-flex; align-items: center; gap: 6px; justify-self: start; font-size: 12px; }
+.trip-pick-list { display: grid; max-height: 46vh; margin: 0; padding: 0; overflow-y: auto; border: 1px solid #eceef4; border-radius: 8px; list-style: none; }
+.trip-pick-list li + li { border-top: 1px solid #eceef4; }
+.trip-pick-list label { display: flex; align-items: center; gap: 10px; padding: 9px 12px; cursor: pointer; }
+.trip-pick-list label:hover { background: #f7f8fb; }
+.trip-pick-list label span { display: grid; min-width: 0; }
+.trip-pick-list strong { color: #262b42; font-size: 12.5px; }
+.trip-pick-list small { overflow: hidden; color: #5a6177; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.trip-pick-empty { padding: 14px 12px; color: #5a6177; font-size: 12px; }
+@media (max-width: 720px) {
+  .trip-heading { align-items: flex-start; }
+}
+
+/* By Period (review of November 18, 2026): the date-range picker, in the app's indigo. */
+.period-picker { position: relative; display: inline-flex; align-items: center; gap: 4px; }
+.period-trigger { display: inline-flex; align-items: center; gap: 7px; min-height: 34px; padding: 0 10px; border: 1px solid #e3e6ee; border-radius: 8px; background: #fff; color: #596078; font-size: 12px; font-weight: 600; cursor: pointer; }
+.period-trigger:hover { background: #f8f9fc; }
+.period-trigger.is-set { border-color: #c9cff7; color: #4352c9; background: #f0f1ff; }
+.period-trigger:focus-visible, .period-day:focus-visible { outline: 2px solid #586be3; outline-offset: 2px; }
+.period-clear { width: 26px; height: 26px; }
+.period-popover { position: fixed; z-index: 80; width: 272px; max-width: calc(100vw - 16px); padding: 10px; border: 1px solid #e8eaf0; border-radius: 11px; background: #fff; box-shadow: 0 16px 38px #20243a24; }
+.period-head { display: grid; gap: 1px; padding: 6px 9px; border-radius: 8px; background: #f0f1ff; }
+.period-head strong { color: #4352c9; font-size: 12px; }
+.period-head span { overflow: hidden; color: #5a6177; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.period-month { display: flex; align-items: center; justify-content: space-between; margin: 8px 0 2px; }
+.period-month .icon-button { width: 28px; height: 28px; }
+.period-month strong { color: #20243a; font-size: 12.5px; }
+.period-grid { display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 2px; }
+.period-weekday { padding: 2px 0 4px; color: #8b91a5; font-size: 10px; font-weight: 650; text-align: center; }
+.period-day { position: relative; z-index: 0; height: 30px; padding: 0; border: 0; background: transparent; color: #20243a; font-size: 11.5px; font-weight: 550; cursor: pointer; }
+.period-day.is-outside { color: #c3c7d4; }
+.period-day:hover::after { content: ""; position: absolute; inset: 2px 4px; z-index: -1; border-radius: 8px; background: #f3f4f9; }
+/* The band between the two days of a range, running under them. */
+.period-day.in-range::before, .period-day.range-start::before, .period-day.range-end::before { content: ""; position: absolute; inset: 3px 0; z-index: -1; background: #e9ecff; }
+.period-day.range-start::before { left: 50%; }
+.period-day.range-end::before { right: 50%; }
+.period-day.range-start.range-end::before { display: none; }
+.period-day.is-today::after { content: ""; position: absolute; inset: 2px 4px; z-index: -1; border: 1px solid #8f9bec; border-radius: 8px; background: #f7f8ff; }
+.period-day.is-edge { color: #fff; font-weight: 700; }
+.period-day.is-edge::after, .period-day.is-edge:hover::after { content: ""; position: absolute; inset: 2px 4px; z-index: -1; border: 0; border-radius: 8px; background: #586be3; }
+.period-hint { margin: 6px 0 0; color: #5a6177; font-size: 10.5px; }
+.period-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid #eceef4; }
+@media (max-width: 720px) {
+  .period-picker { width: 100%; }
+  .period-trigger { flex: 1 1 auto; }
+}
+/* Deleting a sales trip: what happens to its deals. */
+.trip-delete-options { display: grid; gap: 8px; margin: 0; padding: 0; border: 0; }
+.trip-delete-option { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid #e3e6ee; border-radius: 9px; background: #fff; cursor: pointer; }
+.trip-delete-option:hover { background: #f8f9fc; }
+.trip-delete-option.is-active { border-color: #c9cff7; background: #f0f1ff; }
+.trip-delete-option input { margin-top: 2px; accent-color: #586be3; }
+.trip-delete-option span { display: grid; gap: 2px; }
+.trip-delete-option strong { color: #20243a; font-size: 12.5px; }
+.trip-delete-option small { color: #5a6177; font-size: 11.5px; line-height: 1.4; }
+/* Followup in the Filter menu: the period picked shows next to the Filter button. */
+.follow-up-chip { display: inline-flex; align-items: center; gap: 2px; margin-left: 6px; }
+.follow-up-chip .period-trigger { min-height: 31px; font-size: 11px; }
+/* Sales Trips: which kind of trip a row is (planned for To Do deals, or made in the Sales Trip Planner). */
+.trip-kind { display: flex; align-items: center; gap: 4px; max-width: 360px; margin-top: 3px; overflow: hidden; color: #8b91a5; font-size: 10.5px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.trip-kind-planner { color: #4352c9; }

@@ -34,6 +34,7 @@ export default function LeadTable({ leads, selected, today, view, canSelect, can
             <th>STAGE</th>
             <th>LAST BD ACTION</th>
             <th>{view === "archive" ? "REASON" : "FOLLOW-UP"}</th>
+            {view === "archive" && <th>NOTES</th>}
             <th>FIRST CONTACT</th>
             <th>OWNER</th>
             <th><span className="sr-only">Actions</span></th>
@@ -58,10 +59,12 @@ export default function LeadTable({ leads, selected, today, view, canSelect, can
                 <td><span className="muted-cell stage-cell">{lead.stage ?? "—"}</span></td>
                 <td><span className="action-cell">{lead.bdAction ?? "—"}</span><small className="activity-time">{relativeTime(lead.lastActivityAt)}</small></td>
                 <td>
+                  {/* Review of November 18, 2026: the archive shows the Archival reason and the notes typed with it. */}
                   {view === "archive"
-                    ? <span className="muted-cell reason-cell">{lead.stateReason || "—"}</span>
+                    ? <span className="reason-cell">{lead.archiveReason ?? "—"}</span>
                     : <span className={dueToday ? "due-today" : overdue ? "overdue" : "muted-cell"}>{(dueToday || overdue) && <Clock3 size={13} />}{formatDate(lead.followUpDate, "—")}</span>}
                 </td>
+                {view === "archive" && <td><span className="muted-cell reason-cell">{lead.stateReason || "—"}</span></td>}
                 <td><span className="muted-cell">{formatDate(lead.firstContactDate)}</span></td>
                 <td><span className="owner-cell"><span className="mini-avatar">{lead.ownerName.split(" ").map((part) => part[0]).join("").slice(0, 2)}</span>{lead.ownerName}</span></td>
                 <td>
@@ -76,7 +79,7 @@ export default function LeadTable({ leads, selected, today, view, canSelect, can
               </tr>
             );
           })}
-          {!leads.length && <tr><td colSpan={canSelect ? 9 : 8} className="empty-state">No deals match these filters.</td></tr>}
+          {!leads.length && <tr><td colSpan={(canSelect ? 9 : 8) + (view === "archive" ? 1 : 0)} className="empty-state">No deals match these filters.</td></tr>}
         </tbody>
       </table>
     </div>

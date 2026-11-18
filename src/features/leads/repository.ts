@@ -46,7 +46,7 @@ export const leadSelect = `
     l.client_executive AS "clientExecutive", l.contact_phone AS "contactPhone", l.contact_alt_phone AS "contactAltPhone",
     l.contact_remark AS "contactRemark", l.client_emails AS "clientEmails", l.industry, COALESCE(l.positions, '') AS positions,
     l.first_contact_date AS "firstContactDate", l.follow_up_date AS "followUpDate", l.contract_signed_date AS "contractSignedDate",
-    l.record_state AS "recordState", l.state_reason AS "stateReason", l.last_activity_at AS "lastActivityAt",
+    l.record_state AS "recordState", l.state_reason AS "stateReason", l.archive_reason_id AS "archiveReasonId", ar.value AS "archiveReason", l.last_activity_at AS "lastActivityAt",
     l.last_client_email_at AS "lastClientEmailAt", l.last_team_email_at AS "lastTeamEmailAt",
     l.created_at AS "createdAt", l.updated_at AS "updatedAt", l.organization_id AS "organizationId", l.person_id AS "personId",
     l.deal_value AS "dealValue", l.expected_close_date AS "expectedCloseDate"
@@ -63,6 +63,7 @@ export const leadSelect = `
   LEFT JOIN list_values ci ON ci.id = l.city_id
   LEFT JOIN list_values sg ON sg.id = l.stage_id
   LEFT JOIN list_values td ON td.id = l.todo_list_id
+  LEFT JOIN list_values ar ON ar.id = l.archive_reason_id
 `;
 
 const parseEmails = (value: string | string[]): string[] => {
@@ -89,6 +90,8 @@ export function toLead(row: LeadRow): LeadSummary {
     stageId: row.stageId === null ? null : Number(row.stageId),
     todoListId: row.todoListId === null ? null : Number(row.todoListId),
     todoSince: fromSqlDateTime(row.todoSince),
+    archiveReasonId: row.archiveReasonId === null || row.archiveReasonId === undefined ? null : Number(row.archiveReasonId),
+    archiveReason: row.archiveReason ?? null,
     clientResponseId: row.clientResponseId === null ? null : Number(row.clientResponseId),
     leadCategoryId: row.leadCategoryId === null ? null : Number(row.leadCategoryId),
     companySizeId: row.companySizeId === null ? null : Number(row.companySizeId),
@@ -113,7 +116,7 @@ export function leadAuditView(lead: LeadSummary): Record<string, unknown> {
     leadCategory: lead.leadCategory, companySize: lead.companySize, city: lead.city,
     firstContactDate: lead.firstContactDate, followUpDate: lead.followUpDate, contractSignedDate: lead.contractSignedDate,
     dealValue: lead.dealValue ?? null, expectedCloseDate: lead.expectedCloseDate ?? null,
-    owner: lead.ownerName, recordState: lead.recordState, stateReason: lead.stateReason,
+    owner: lead.ownerName, recordState: lead.recordState, stateReason: lead.stateReason, archiveReason: lead.archiveReason,
   };
 }
 
@@ -745,37 +748,47 @@ export async function reviewQueuedLead(id: number, approve: boolean, comment: st
   });
 }
 
-export async function setLeadState(id: number, state: "active" | "archived", reason: string, actor: UserAccount, db?: Queryable): Promise<LeadSummary> {
+/**
+ * Archives or restores a deal. `reason` is the free-text note (the Archival notes when archiving); `archiveReasonId` is the
+ * Archival reason picked from its List of values (review of November 18, 2026). Restoring clears the reason.
+ */
+export async function setLeadState(id: number, state: "active" | "archived", reason: string, actor: UserAccount, db?: Queryable, archiveReasonId: number | null = null): Promise<LeadSummary> {
   const run = async (connection: Queryable) => {
     const lead = await getLead(id, connection);
     if (!lead) throw new HttpError(404, "Deal not found.");
     if (lead.recordState === state) return lead;
     if (lead.recordState === "queued") throw new HttpError(400, "Approve or reject the queued deal instead.");
+    const reasonId = state === "archived" ? archiveReasonId : null;
+    if (reasonId !== null) await assertListValue(connection, "archival_reason", reasonId, { label: "Archival reason" });
+    const reasonName = reasonId === null ? "" : (await getListValue(reasonId, connection))?.value ?? "";
+    // "Not Hiring: called twice, no openings until spring" on the timeline and in the audit log.
+    const said = [reasonName, reason].filter(Boolean).join(": ");
     const now = new Date();
     await connection.query(
-      "UPDATE leads SET record_state = ?, state_reason = ?, state_changed_by = ?, state_changed_at = ? WHERE id = ?",
-      [state, reason || null, actor.id, toSqlDateTime(now), id],
+      "UPDATE leads SET record_state = ?, state_reason = ?, archive_reason_id = ?, state_changed_by = ?, state_changed_at = ? WHERE id = ?",
+      [state, reason || null, reasonId, actor.id, toSqlDateTime(now), id],
     );
     await addActivity(connection, {
-      leadId: id, userId: actor.id, type: "state_change", summary: state === "archived" ? `Deal archived${reason ? ` — ${reason}` : ""}` : `Deal restored${reason ? ` — ${reason}` : ""}`,
+      leadId: id, userId: actor.id, type: "state_change", summary: state === "archived" ? `Deal archived${said ? ` — ${said}` : ""}` : `Deal restored${said ? ` — ${said}` : ""}`,
       valueCode: state, occurredAt: now,
     });
     await recordAudit(connection, {
       actorId: actor.id, action: state === "archived" ? "lead.archived" : "lead.restored", entityType: "lead", entityId: id,
-      before: { recordState: lead.recordState }, after: { recordState: state, reason }, details: `${actor.name} ${state === "archived" ? "archived" : "restored"} ${lead.clientName}${reason ? `: ${reason}` : ""}`,
+      before: { recordState: lead.recordState, archiveReason: lead.archiveReason }, after: { recordState: state, archiveReason: reasonName || null, reason },
+      details: `${actor.name} ${state === "archived" ? "archived" : "restored"} ${lead.clientName}${said ? `: ${said}` : ""}`,
     }, now);
     return (await getLead(id, connection))!;
   };
   return db ? run(db) : withTransaction(run);
 }
 
-export async function bulkSetState(ids: number[], state: "active" | "archived", reason: string, actor: UserAccount): Promise<number> {
+export async function bulkSetState(ids: number[], state: "active" | "archived", reason: string, actor: UserAccount, archiveReasonId: number | null = null): Promise<number> {
   return withTransaction(async (connection) => {
     let count = 0;
     for (const id of ids) {
       const before = await getLead(id, connection);
       if (!before || before.recordState === state || before.recordState === "queued") continue;
-      await setLeadState(id, state, reason, actor, connection);
+      await setLeadState(id, state, reason, actor, connection, archiveReasonId);
       count += 1;
     }
     return count;

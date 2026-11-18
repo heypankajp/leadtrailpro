@@ -1085,6 +1085,60 @@ const migrations = [
         WHERE activity_type = 'task'`);
     },
   },
+  {
+    version: 30,
+    name: "Archival reason (review of November 18, 2026): the archival_reason values, and the reason an archived deal carries next to its notes",
+    async run(client) {
+      const reasons = [
+        ["approach_later", "Approach Later"], ["not_interested", "Not Interested"], ["do_not_use_agency", "Do not use Agency"],
+        ["no_response", "No Response"], ["not_hiring", "Not Hiring"], ["inactive_deal", "Inactive Deal"], ["other", "Other"],
+      ];
+      for (const [index, [code, value]] of reasons.entries()) {
+        await client.query("INSERT INTO list_values (list_key, code, value, sort_order) VALUES ('archival_reason', $1, $2, $3) ON CONFLICT DO NOTHING", [code, value, index + 1]);
+      }
+      // The notes stay in state_reason, where the archive has always kept what was typed.
+      await addColumnIfMissing(client, "leads", "archive_reason_id", "INTEGER NULL REFERENCES list_values(id) ON DELETE SET NULL");
+    },
+  },
+  {
+    version: 31,
+    name: "Sales Trips (review of November 18, 2026): a trip with a title, a date and an owner, and the To be visited deals it visits",
+    async run(client) {
+      // `sales_trips` is the Sales Trip Planner's (map searches); these are the visits planned from the To Do list.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS visit_trips (
+          id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          title VARCHAR(160) NOT NULL,
+          trip_date DATE NOT NULL,
+          owner_id INTEGER NOT NULL,
+          created_by INTEGER NOT NULL,
+          created_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW},
+          updated_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW},
+          CONSTRAINT fk_visit_trips_owner FOREIGN KEY (owner_id) REFERENCES users(id),
+          CONSTRAINT fk_visit_trips_creator FOREIGN KEY (created_by) REFERENCES users(id)
+        )
+      `);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_visit_trips_date ON visit_trips (trip_date, owner_id)");
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS visit_trip_deals (
+          trip_id INTEGER NOT NULL,
+          lead_id INTEGER NOT NULL,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          added_by INTEGER NULL,
+          added_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW},
+          PRIMARY KEY (trip_id, lead_id),
+          CONSTRAINT fk_visit_trip_deals_trip FOREIGN KEY (trip_id) REFERENCES visit_trips(id) ON DELETE CASCADE,
+          CONSTRAINT fk_visit_trip_deals_lead FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE,
+          CONSTRAINT fk_visit_trip_deals_user FOREIGN KEY (added_by) REFERENCES users(id) ON DELETE SET NULL
+        )
+      `);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_visit_trip_deals_lead ON visit_trip_deals (lead_id)");
+      // The To Do list the deal was on when it joined the trip, so deleting the trip can send it back there.
+      await addColumnIfMissing(client, "visit_trip_deals", "from_todo_list_id", "INTEGER NULL REFERENCES list_values(id) ON DELETE SET NULL");
+      // How many trips "Recent Planned Trips" shows on the planner's page; an administrator renames the value to change it.
+      await client.query("INSERT INTO list_values (list_key, code, value, sort_order) VALUES ('recent_trips_limit', 'count', '30', 1) ON CONFLICT DO NOTHING");
+    },
+  },
 ];
 
 if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port > 65535 || !/^[a-z_][a-z0-9_]*$/.test(databaseName)) {

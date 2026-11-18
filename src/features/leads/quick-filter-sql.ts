@@ -1,10 +1,7 @@
-import { fromSqlDateTime, toSqlDateTime, type Queryable } from "@/lib/db";
+import { toSqlDateTime, type Queryable } from "@/lib/db";
 import { todayYmd } from "@/lib/dates";
 import { entryStageCode } from "@/features/list-values/model";
-import { quietDaysSince } from "@/features/pipeline/model";
-import { resolveInactivityDays } from "@/features/settings/model";
-import { getSettings } from "@/features/settings/repository";
-import { monthsBefore, quickFilterStatusCodes, type QuickFilterKey } from "./quick-filters";
+import { listedQuarters, monthsBefore, quarterBefore, quarterOffset, quarterRange, quickFilterStatusCodes, type QuickFilterKey } from "./quick-filters";
 
 /**
  * The SQL of a ready-made or data cleanup filter (PD-30) over `leads l`, for the board and the list. Statuses are read
@@ -19,9 +16,14 @@ export async function quickFilterClause(db: Queryable, key: QuickFilterKey): Pro
   if (statuses.exclude.length) { parts.push("l.status_id NOT IN (SELECT id FROM list_values WHERE list_key = 'status' AND code = ANY(?::text[]))"); params.push(statuses.exclude); }
   const today = todayYmd();
   const yearAgo = toSqlDateTime(new Date(`${monthsBefore(today, 12)}T00:00:00Z`));
+  const offset = quarterOffset(key);
+  if (offset !== null) {
+    const range = quarterRange(quarterBefore(today, offset));
+    parts.push("l.first_contact_date >= ?::date AND l.first_contact_date < ?::date");
+    params.push(range.from, range.until);
+  }
   switch (key) {
-    case "old_3m": parts.push("l.first_contact_date < ?::date"); params.push(monthsBefore(today, 3)); break;
-    case "quiet": parts.push("l.id = ANY(?::int[])"); params.push(await quietLeadIds(db)); break;
+    case "older": parts.push("l.first_contact_date < ?::date"); params.push(quarterRange(quarterBefore(today, listedQuarters - 1)).from); break;
     case "first_stage_stale":
       parts.push("(l.stage_id IS NULL OR l.stage_id IN (SELECT id FROM list_values WHERE list_key = 'stage' AND code = ?)) AND l.last_activity_at < ?");
       params.push(entryStageCode, yearAgo);
@@ -44,21 +46,4 @@ export async function quickFilterClause(db: Queryable, key: QuickFilterKey): Pro
     default: break;
   }
   return { clause: parts.length ? `(${parts.join(" AND ")})` : "TRUE", params };
-}
-
-/** Active, open deals past their needs-attention limit (the board's "Quiet" mark). */
-async function quietLeadIds(db: Queryable): Promise<number[]> {
-  const settings = await getSettings(db);
-  const { rows } = await db.query(
-    `SELECT l.id, l.status_id AS "statusId", l.bd_action_id AS "bdActionId", l.stage_id AS "stageId", l.last_activity_at AS "lastActivityAt"
-     FROM leads l JOIN list_values st ON st.id = l.status_id
-     WHERE l.record_state = 'active' AND st.code NOT IN ('client', 'lost', 'disqualified')`,
-  );
-  const now = new Date();
-  return (rows as { id: number; statusId: number; bdActionId: number | null; stageId: number | null; lastActivityAt: string }[])
-    .filter((row) => {
-      const limit = resolveInactivityDays({ statusId: Number(row.statusId), bdActionId: row.bdActionId === null ? null : Number(row.bdActionId), stageId: row.stageId === null ? null : Number(row.stageId) }, settings.reminders);
-      return quietDaysSince(fromSqlDateTime(row.lastActivityAt) ?? row.lastActivityAt, now) > limit;
-    })
-    .map((row) => Number(row.id));
 }

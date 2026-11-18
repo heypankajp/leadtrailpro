@@ -94,7 +94,7 @@ describe("Pipeline board (PIPE-*)", () => {
     await addLead(page, { name: quiet });
     await page.toast(`${quiet} added to the pipeline`);
     await page.closeDialog();
-    await page.nav("Action center");
+    await page.nav("Action Center");
     const panel = '//section[contains(@class,"reminder-panel")][.//h2[normalize-space()="No next step"]]';
     await page.wait(By.xpath(`${panel}//strong[normalize-space()=${xq(quiet)}]`));
     assert.equal((await driver.findElements(By.xpath(`${panel}//strong[normalize-space()=${xq(name)}]`))).length, 0, "a deal with an open task is not listed");

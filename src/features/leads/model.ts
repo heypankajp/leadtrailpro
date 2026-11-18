@@ -71,7 +71,11 @@ export type LeadSummary = LeadInput & {
   companySize: string | null;
   city: string | null;
   recordState: LeadRecordState;
+  /** The notes typed when the deal was archived (or restored, or reviewed). */
   stateReason: string | null;
+  /** Review of November 18, 2026: the Archival reason picked when the deal was archived; null while it is not archived. */
+  archiveReasonId: number | null;
+  archiveReason: string | null;
   lastActivityAt: string;
   /** MAIL-01 mailbox watch: when a client address last wrote to a connected mailbox, and when the team last emailed the client. */
   lastClientEmailAt: string | null;

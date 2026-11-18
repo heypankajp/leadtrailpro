@@ -55,7 +55,7 @@ describe("Leads inbox", () => {
   });
 
   uiTest("Add deal: a near-match name meets the duplicate guard, and the exact organization shows its open deals (PD-15)", async () => {
-    await page.nav("Action center");
+    await page.nav("Action Center");
     await page.openAddDeal();
     await page.fill("Organization", "Lakeshore Bakery Co");
     await page.saveDeal();
@@ -117,7 +117,7 @@ describe("Leads inbox cards from the sales tracker", () => {
   after(async () => { await driver?.quit(); });
 
   uiTest("the tracker import places a company with no Sales Manager in the inbox", async () => {
-    await page.nav("Tracker import");
+    await page.nav("Tracker Import");
     await page.heading("Tracker import");
     const fileInput = await page.wait(By.css('input[type="file"]'), { visible: false });
     await fileInput.sendKeys(workbookPath);
