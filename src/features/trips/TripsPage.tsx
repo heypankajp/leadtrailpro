@@ -12,7 +12,8 @@ import { fetchVisitTrips } from "@/features/visit-trips/client";
 import type { VisitTripPage } from "@/features/visit-trips/model";
 import TripTable from "@/features/visit-trips/TripTable";
 import { createTrip, fetchTrips } from "./client";
-import { maxRadius, maxTripResults, type RadiusType, type SalesTrip, type TripProviderStatus } from "./model";
+import { listNumber } from "@/features/list-values/model";
+import { maxRadiusFor, type RadiusType, type SalesTrip, type TripProviderStatus } from "./model";
 
 type FormState = { title: string; address: string; radiusType: RadiusType; radius: string; businessTypeId: string; maxResults: string };
 
@@ -26,6 +27,8 @@ export default function TripsPage() {
   const recentFetcher = useCallback(() => fetchVisitTrips({ recent: true, page: recentPage, pageSize: 10 }), [recentPage]);
   const recent = useAsyncData<VisitTripPage>(recentFetcher, dataVersion);
   const businessTypes = reference.listValues.business_type;
+  // List of Values → Sales Trip Planner: the largest radius in km and the most results a search may ask for.
+  const limits = { radiusKm: listNumber("trip_max_radius_km", reference.listValues.trip_max_radius_km), results: listNumber("trip_max_results", reference.listValues.trip_max_results) };
   const [form, setForm] = useState<FormState>(() => ({
     title: "", address: "", radiusType: "km", radius: "15", businessTypeId: String(businessTypes.find((type) => type.code === "any")?.id ?? ""), maxResults: "25",
   }));
@@ -63,7 +66,7 @@ export default function TripsPage() {
       {provider?.name === "google" && <JobsUsageCard compact />}
 
       <section className="panel trip-panel">
-        <div className="panel-heading"><div><h2>New trip</h2><p>Up to {maxTripResults} companies within a distance or a driving time of the address.</p></div></div>
+        <div className="panel-heading"><div><h2>New trip</h2><p>Up to {limits.results} companies within {limits.radiusKm} km or a driving time of the address.</p></div></div>
         <form className="lead-form trip-form" onSubmit={submit}>
           <Field label="Trip title" required><input value={form.title} onChange={set("title")} required maxLength={120} placeholder="e.g. Mississauga industrial park, Thursday" autoFocus /></Field>
           <Field label="Address" required wide><input value={form.address} onChange={set("address")} required maxLength={500} placeholder="Starting or target address or neighbourhood" /></Field>
@@ -73,9 +76,9 @@ export default function TripsPage() {
               <option value="minutes">Driving minutes</option>
             </select>
           </Field>
-          <Field label={form.radiusType === "km" ? "Radius (km)" : "Radius (minutes)"} required><input type="number" min={1} max={maxRadius[form.radiusType]} value={form.radius} onChange={set("radius")} required /></Field>
+          <Field label={form.radiusType === "km" ? "Radius (km)" : "Radius (minutes)"} required><input type="number" min={1} max={maxRadiusFor(form.radiusType, limits)} value={form.radius} onChange={set("radius")} required /></Field>
           <Field label="Business type"><select value={form.businessTypeId} onChange={set("businessTypeId")}>{businessTypes.map((type) => <option key={type.id} value={type.id}>{type.value}</option>)}</select></Field>
-          <Field label="Number of results" required hint={`Whole number, maximum ${maxTripResults}.`}><input type="number" min={1} max={maxTripResults} step={1} value={form.maxResults} onChange={set("maxResults")} required /></Field>
+          <Field label="Number of results" required hint={`Whole number, maximum ${limits.results}.`}><input type="number" min={1} max={limits.results} step={1} value={form.maxResults} onChange={set("maxResults")} required /></Field>
           <ErrorText message={formError} />
           <div className="modal-actions field-wide">
             <button type="submit" className="button button-primary" disabled={busy || (provider ? !provider.configured : false)}><Search size={15} /> {busy ? "Searching..." : "Search companies"}</button>

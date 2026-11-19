@@ -1139,6 +1139,15 @@ const migrations = [
       await client.query("INSERT INTO list_values (list_key, code, value, sort_order) VALUES ('recent_trips_limit', 'count', '30', 1) ON CONFLICT DO NOTHING");
     },
   },
+  {
+    version: 32,
+    name: "Sales Trip Planner settings (request of November 18, 2026): the largest radius in km and the most results a search may ask for, in List of Values",
+    async run(client) {
+      // One value each, renamed to change it; the planner used 200 km and 50 results before these existed.
+      await client.query("INSERT INTO list_values (list_key, code, value, sort_order) VALUES ('trip_max_radius_km', 'count', '50', 1) ON CONFLICT DO NOTHING");
+      await client.query("INSERT INTO list_values (list_key, code, value, sort_order) VALUES ('trip_max_results', 'count', '50', 1) ON CONFLICT DO NOTHING");
+    },
+  },
 ];
 
 if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port > 65535 || !/^[a-z_][a-z0-9_]*$/.test(databaseName)) {

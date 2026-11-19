@@ -4,8 +4,14 @@ import { isValidYmd } from "@/lib/dates";
 
 export const radiusTypes = ["km", "minutes"] as const;
 export type RadiusType = (typeof radiusTypes)[number];
-export const maxTripResults = 50;
-export const maxRadius: Record<RadiusType, number> = { km: 200, minutes: 180 };
+/**
+ * The planner's limits. The distance and the number of results come from List of Values → Sales Trip Planner (Max Radius
+ * (km), Number of Results (max)); the driving time stays at 180 minutes. These are the values used when nothing is set.
+ */
+export type TripLimits = { radiusKm: number; results: number };
+export const defaultTripLimits: TripLimits = { radiusKm: 50, results: 50 };
+export const maxDriveMinutes = 180;
+export const maxRadiusFor = (radiusType: RadiusType, limits: TripLimits): number => (radiusType === "km" ? limits.radiusKm : maxDriveMinutes);
 
 export const exportScopes = ["all", "filtered", "shortlisted", "planned"] as const;
 export type ExportScope = (typeof exportScopes)[number];
@@ -32,7 +38,7 @@ export type TripProviderStatus = { configured: boolean; name: string; jobsConfig
 
 export const newActionLabel = "New / Not in CRM";
 
-export function parseTripInput(value: unknown): { input: TripInput; errors: string[] } {
+export function parseTripInput(value: unknown, limits: TripLimits = defaultTripLimits): { input: TripInput; errors: string[] } {
   const errors: string[] = [];
   const body = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
   const text = (key: string, max: number, label: string, required: boolean) => {
@@ -46,10 +52,10 @@ export function parseTripInput(value: unknown): { input: TripInput; errors: stri
   const radiusType: RadiusType = body.radiusType === "minutes" ? "minutes" : "km";
   const radius = Number(body.radius);
   if (!Number.isFinite(radius) || radius <= 0) errors.push("Radius must be a positive number.");
-  else if (radius > maxRadius[radiusType]) errors.push(`Radius must be ${maxRadius[radiusType]} ${radiusType === "km" ? "km" : "minutes"} or less.`);
+  else if (radius > maxRadiusFor(radiusType, limits)) errors.push(`Radius must be ${maxRadiusFor(radiusType, limits)} ${radiusType === "km" ? "km" : "minutes"} or less.`);
   const maxResults = Number(body.maxResults);
   if (!Number.isInteger(maxResults) || maxResults < 1) errors.push("Number of results must be a whole number of at least 1.");
-  else if (maxResults > maxTripResults) errors.push(`Number of results cannot exceed ${maxTripResults}.`);
+  else if (maxResults > limits.results) errors.push(`Number of results cannot exceed ${limits.results}.`);
   let businessTypeId: number | null = null;
   if (body.businessTypeId !== undefined && body.businessTypeId !== null && body.businessTypeId !== "") {
     const id = Number(body.businessTypeId);

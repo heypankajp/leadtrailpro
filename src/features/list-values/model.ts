@@ -1,4 +1,4 @@
-export const listKeys = ["lead_type", "status", "bd_action", "stage", "client_response", "lead_category", "company_size", "city", "lost_reason", "disqualified_reason", "business_type", "opportunity_reason", "todo_list", "archival_reason", "recent_trips_limit"] as const;
+export const listKeys = ["lead_type", "status", "bd_action", "stage", "client_response", "lead_category", "company_size", "city", "lost_reason", "disqualified_reason", "business_type", "opportunity_reason", "todo_list", "archival_reason", "recent_trips_limit", "trip_max_radius_km", "trip_max_results"] as const;
 export type ListKey = (typeof listKeys)[number];
 
 // Title Case, as the left list of the List of Values page shows them (review of November 18, 2026).
@@ -18,13 +18,40 @@ export const listKeyLabels: Record<ListKey, string> = {
   todo_list: "To Do List",
   archival_reason: "Archival Reason",
   recent_trips_limit: "Recent Planned Trips (How Many)",
+  trip_max_radius_km: "Max Radius (km)",
+  trip_max_results: "Number of Results (max)",
 };
 
 /**
  * Lists whose values can be renamed but not added to or deactivated: the Recent Planned Trips number (one value). The
  * Disqualified reasons were fixed by LEAD-06 until the review of November 18, 2026, which opened them to new values.
  */
-export const fixedListKeys: readonly ListKey[] = ["recent_trips_limit"];
+export const fixedListKeys: readonly ListKey[] = ["recent_trips_limit", "trip_max_radius_km", "trip_max_results"];
+
+/**
+ * Lists that hold one whole number, with the range it must stay in and the number used when the value is not usable.
+ * Max Radius (km) stops at 200; Google biases a search to 50 km around the address at most. Number of Results stops at 60:
+ * Google returns three pages of 20 companies at most.
+ */
+export const numericListBounds: Partial<Record<ListKey, { min: number; max: number; fallback: number }>> = {
+  recent_trips_limit: { min: 1, max: 500, fallback: 30 },
+  trip_max_radius_km: { min: 1, max: 200, fallback: 50 },
+  trip_max_results: { min: 1, max: 60, fallback: 50 },
+};
+
+/** The number a single-number list holds, inside its range, or its fallback. */
+export function listNumber(key: ListKey, values: readonly { value: string; active: boolean }[] | undefined): number {
+  const bounds = numericListBounds[key];
+  if (!bounds) return 0;
+  const number = Number(String(values?.find((item) => item.active)?.value ?? "").trim());
+  return Number.isInteger(number) && number >= bounds.min && number <= bounds.max ? number : bounds.fallback;
+}
+
+/**
+ * The Sales Trip Planner's settings, shown together on one List of Values page (request of November 18, 2026) instead of
+ * one entry each in the list of lists.
+ */
+export const tripPlannerListKeys: readonly ListKey[] = ["trip_max_radius_km", "trip_max_results", "recent_trips_limit", "business_type"];
 
 export type ListValue = {
   id: number;

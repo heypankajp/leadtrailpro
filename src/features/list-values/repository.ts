@@ -1,7 +1,7 @@
 import { getDatabasePool, insertId, withTransaction, type Queryable } from "@/lib/db";
 import { HttpError } from "@/lib/http";
 import { recordAudit } from "@/features/audit/repository";
-import { entryStageCode, fixedListKeys, isListKey, listKeys, slugify, statusCodes } from "./model";
+import { entryStageCode, fixedListKeys, isListKey, listKeys, numericListBounds, slugify, statusCodes } from "./model";
 import type { ListKey, ListValue, ListValuesByKey } from "./model";
 
 type Row = { id: number; listKey: string; code: string; value: string; sortOrder: number; active: number | boolean; stageId: number | null; pipelineId?: number | null };
@@ -86,6 +86,11 @@ export async function updateListValue(id: number, changes: { value?: string; act
     if (changes.value !== undefined) {
       const trimmed = changes.value.trim();
       if (!trimmed || trimmed.length > 120) throw new HttpError(400, "Enter a value between 1 and 120 characters.");
+      // The Sales Trip Planner's numbers (and Recent Planned Trips) must stay whole numbers inside their range.
+      const bounds = numericListBounds[existing.listKey];
+      if (bounds && !(/^\d+$/.test(trimmed) && Number(trimmed) >= bounds.min && Number(trimmed) <= bounds.max)) {
+        throw new HttpError(400, `Enter a whole number from ${bounds.min} to ${bounds.max}.`);
+      }
       if (trimmed !== existing.value) {
         assignments.push("value = ?"); params.push(trimmed); before.value = existing.value; after.value = trimmed;
       }

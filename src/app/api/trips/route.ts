@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { handleRouteError, jsonError, readJsonBody, requireSameOrigin } from "@/lib/http";
 import { mapsBudgetNote } from "@/features/maps/repository";
 import { parseTripInput } from "@/features/trips/model";
+import { tripLimits } from "@/features/trips/repository";
 import { tripProviderStatus } from "@/features/trips/providers";
 import { createTrip, listTrips } from "@/features/trips/repository";
 import { requirePrivilege, requireUser } from "@/features/users/session";
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
     requireSameOrigin(request);
     const user = await requireUser();
     requirePrivilege(user, "plan_trips", "You do not have permission to plan sales trips.");
-    const { input, errors } = parseTripInput(await readJsonBody(request));
+    const { input, errors } = parseTripInput(await readJsonBody(request), await tripLimits());
     if (errors.length) return jsonError(400, errors.join(" "));
     return NextResponse.json(await createTrip(input, user), { status: 201 });
   } catch (error) {

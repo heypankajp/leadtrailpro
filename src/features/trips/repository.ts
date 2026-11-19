@@ -8,11 +8,12 @@ import { MapsBudgetError } from "@/features/maps/model";
 import { getSettings } from "@/features/settings/repository";
 import { recordAudit } from "@/features/audit/repository";
 import { assertListValue, getListValue } from "@/features/list-values/repository";
+import { listNumber, type ListKey } from "@/features/list-values/model";
 import { hasPrivilege } from "@/features/users/model";
 import type { UserAccount } from "@/features/users/model";
 import { actionFor, matchLead } from "./matching";
 import { getTripProvider, type CompanyCandidate } from "./providers";
-import type { ExportScope, JobListing, SalesTrip, TripInput, TripResult } from "./model";
+import type { ExportScope, JobListing, SalesTrip, TripInput, TripLimits, TripResult } from "./model";
 
 // ---- Row mapping ----
 
@@ -62,6 +63,13 @@ const toResult = (row: ResultRow): TripResult => ({
 // ---- Access ----
 
 const canSeeTrip = (viewer: UserAccount, trip: SalesTrip) => trip.ownerId === viewer.id || hasPrivilege(viewer, "view_team_reports");
+
+/** The planner's limits from List of Values → Sales Trip Planner (Max Radius (km), Number of Results (max)). */
+export async function tripLimits(db: Queryable = getDatabasePool()): Promise<TripLimits> {
+  const { rows } = await db.query("SELECT list_key AS \"listKey\", value, is_active AS active FROM list_values WHERE list_key IN ('trip_max_radius_km', 'trip_max_results') ORDER BY sort_order, id");
+  const of = (key: ListKey) => (rows as { listKey: string; value: string; active: boolean }[]).filter((row) => row.listKey === key);
+  return { radiusKm: listNumber("trip_max_radius_km", of("trip_max_radius_km")), results: listNumber("trip_max_results", of("trip_max_results")) };
+}
 
 export async function listTrips(viewer: UserAccount, db: Queryable = getDatabasePool()): Promise<SalesTrip[]> {
   const teamWide = hasPrivilege(viewer, "view_team_reports");

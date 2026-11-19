@@ -4,13 +4,23 @@ import { useCallback, useState, type FormEvent } from "react";
 import { ArrowDown, ArrowUp, Check, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { errorMessage } from "@/lib/api";
 import { useAsyncData } from "@/lib/useAsyncData";
-import { entryStageCode, fixedListKeys, listKeyLabels, listKeys, statusCodes, type ListKey, type ListValue, type ListValuesByKey } from "@/features/list-values/model";
+import { entryStageCode, fixedListKeys, listKeyLabels, listKeys, statusCodes, tripPlannerListKeys, type ListKey, type ListValue, type ListValuesByKey } from "@/features/list-values/model";
 import { recomputeStages } from "@/features/pipeline/client";
 import { useApp } from "@/features/shell/AppContext";
 import { Dialog, ErrorText, Loading } from "@/features/shell/components";
 import { createListValue, fetchListValues, reorderListValues, updateListValue, createPipeline, updatePipeline } from "./client";
 import { stagesOfPipeline } from "@/features/pipeline/model";
 import DeleteStageDialog from "./DeleteStageDialog";
+import TripPlannerSettings from "./TripPlannerSettings";
+
+/** The tabs of List of Values → Sales Trip Planner, in order; the first one opens. */
+type PlannerTab = "business_type" | "trip_max_radius_km" | "trip_max_results" | "recent_trips_limit";
+const plannerTabs: { id: PlannerTab; label: string }[] = [
+  { id: "business_type", label: "Business Type" },
+  { id: "trip_max_radius_km", label: "Max Radius" },
+  { id: "trip_max_results", label: "Max Results" },
+  { id: "recent_trips_limit", label: "Recent Trips Size" },
+];
 
 export default function ListValuesPanel() {
   const { notify, refreshReference, reference, can } = useApp();
@@ -19,7 +29,13 @@ export default function ListValuesPanel() {
   const [pipelineId, setPipelineId] = useState<number | null>(null);
   const pipeline = pipelines.find((item) => item.id === pipelineId) ?? pipelines.find((item) => item.isDefault) ?? null;
   const [newPipeline, setNewPipeline] = useState("");
-  const [listKey, setListKey] = useState<ListKey>("bd_action");
+  // A list, or "trip_planner": the Sales Trip Planner's settings and its Business Type list on one page.
+  const [view, setView] = useState<ListKey | "trip_planner">("bd_action");
+  const listKey: ListKey = view === "trip_planner" ? "business_type" : view;
+  const plannerPage = view === "trip_planner";
+  // The Sales Trip Planner page in four tabs (request of November 18, 2026); Business Type opens first.
+  const [plannerTab, setPlannerTab] = useState<PlannerTab>("business_type");
+  const showList = !plannerPage || plannerTab === "business_type";
   const fetcher = useCallback(() => fetchListValues(true).then((result) => result.listValues), []);
   const { data: values, error, reload } = useAsyncData<ListValuesByKey>(fetcher);
   const [newValue, setNewValue] = useState("");
@@ -135,10 +151,22 @@ export default function ListValuesPanel() {
       <div className="page-heading"><div><div className="eyebrow">ADMINISTRATION</div><h1>List of values</h1><p>Maintain the dropdown values used across deals. Renames update every existing record; deactivate instead of deleting values that are in use.</p></div></div>
       <div className="values-layout">
         <nav className="panel values-nav" aria-label="Lists">
-          {listKeys.map((key) => <button key={key} className={key === listKey ? "is-active" : ""} onClick={() => { setListKey(key); setEditing(null); }}>{listKeyLabels[key]}<span>{values ? values[key].length : ""}</span></button>)}
+          {listKeys.filter((key) => !tripPlannerListKeys.includes(key)).map((key) => <button key={key} className={key === view ? "is-active" : ""} onClick={() => { setView(key); setEditing(null); }}>{listKeyLabels[key]}<span>{values ? values[key].length : ""}</span></button>)}
+          <button className={plannerPage ? "is-active" : ""} onClick={() => { setView("trip_planner"); setEditing(null); }}>Sales Trip Planner<span>{values ? values.business_type.length : ""}</span></button>
         </nav>
         <section className="panel values-panel">
-          <div className="panel-heading"><div><h2>{listKeyLabels[listKey]}{listKey === "stage" && pipelines.length > 1 && pipeline ? `: ${pipeline.name}` : ""}</h2><p>{current.filter((item) => item.active).length} active · {current.filter((item) => !item.active).length} inactive</p></div></div>
+          {plannerPage && (
+            <>
+              <div className="panel-heading"><div><h2>Sales Trip Planner</h2><p>The business types its searches offer and the planner&apos;s limits.</p></div></div>
+              <div className="todo-tabs planner-tabs" role="tablist" aria-label="Sales Trip Planner settings">
+                {plannerTabs.map((tab) => (
+                  <button key={tab.id} type="button" role="tab" aria-selected={plannerTab === tab.id} className={plannerTab === tab.id ? "is-active" : ""} onClick={() => { setPlannerTab(tab.id); setEditing(null); }}>{tab.label}</button>
+                ))}
+              </div>
+              {plannerTab !== "business_type" && values && <TripPlannerSettings values={values} only={plannerTab} onSaved={after} />}
+            </>
+          )}
+          {showList && <div className={`panel-heading ${plannerPage ? "planner-list-count" : ""}`}><div>{!plannerPage && <h2>{listKeyLabels[listKey]}{listKey === "stage" && pipelines.length > 1 && pipeline ? `: ${pipeline.name}` : ""}</h2>}<p>{current.filter((item) => item.active).length} active · {current.filter((item) => !item.active).length} inactive</p></div></div>}
           {listKey === "stage" && (
             <div className="pipelines-bar">
               <div className="scope-toggle" role="group" aria-label="Pipeline">
@@ -162,12 +190,12 @@ export default function ListValuesPanel() {
               <button className="button button-outline button-small" onClick={() => setRecomputeOpen(true)}><RefreshCw size={13} /> Recompute stages from BD actions</button>
             </div>
           )}
-          {fixed
-            ? <p className="field-hint values-fixed-note">One value: the number of trips Recent Planned Trips shows on the Sales Trip Planner (1 to 500). Rename it to change the number.</p>
+          {!showList ? null : fixed
+            ? <p className="field-hint values-fixed-note">This list holds one value: rename it to change it.</p>
             : <form className="values-add" onSubmit={add}><input value={newValue} onChange={(event) => setNewValue(event.target.value)} maxLength={120} placeholder={`New ${listKeyLabels[listKey].toLowerCase()} value`} required /><button className="button button-primary button-small" type="submit"><Plus size={14} /> Add value</button></form>}
           <ErrorText message={error} />
           {!values && !error && <Loading />}
-          {values && (
+          {values && showList && (
             <div className="table-scroll">
               <table className="lead-table values-table">
                 <thead><tr><th>ORDER</th><th>VALUE</th><th>CODE</th>{listKey === "bd_action" && <th>STAGE</th>}<th>STATUS</th><th><span className="sr-only">Actions</span></th></tr></thead>
