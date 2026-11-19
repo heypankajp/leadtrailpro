@@ -50,7 +50,7 @@ export async function assertListValue(db: Queryable, listKey: ListKey, id: numbe
 export async function createListValue(listKey: ListKey, value: string, actorId: number, pipelineId: number | null = null): Promise<ListValue> {
   const trimmed = value.trim();
   if (!trimmed || trimmed.length > 120) throw new HttpError(400, "Enter a value between 1 and 120 characters.");
-  if (fixedListKeys.includes(listKey)) throw new HttpError(400, "This list is fixed by the requirement: its values can be renamed but not added to.");
+  if (fixedListKeys.includes(listKey)) throw new HttpError(400, "This list holds a single value: rename it instead of adding one.");
   return withTransaction(async (connection) => {
     const { rows: maxRows } = await connection.query(`SELECT COALESCE(MAX(sort_order), 0) AS "maxOrder" FROM list_values WHERE list_key = ?`, [listKey]);
     const sortOrder = Number((maxRows as { maxOrder: number }[])[0].maxOrder) + 1;
@@ -95,7 +95,7 @@ export async function updateListValue(id: number, changes: { value?: string; act
         throw new HttpError(400, "The core statuses (Cold, Warm, Hot, Client, Lost, Disqualified) cannot be deactivated. Rename them instead.");
       }
       if (!changes.active && fixedListKeys.includes(existing.listKey)) {
-        throw new HttpError(400, "These values are fixed by the requirement and cannot be deactivated. Rename them instead.");
+        throw new HttpError(400, "This value cannot be deactivated. Rename it instead.");
       }
       if (!changes.active && existing.listKey === "stage" && existing.code === entryStageCode) {
         throw new HttpError(400, "New Deal is the entry stage of the pipeline and cannot be deactivated. Rename it instead.");

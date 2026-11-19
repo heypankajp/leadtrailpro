@@ -196,14 +196,16 @@ describe("Deals", () => {
     await page.dialogTitle(lead.name);
     await page.clickButton("Archive");
     await page.dialogTitle(`Archive ${lead.name}`);
-    await page.fill("Reason (optional)", "Duplicate record");
+    await page.fill("Archival reason", "Other");
+    await page.fill("Archival notes (optional)", "Duplicate record");
     await page.clickButton("Archive deal");
     await page.toast("Deal archived");
     await page.eyebrow("ARCHIVED DEAL");
     await page.closeDialog();
     await page.deals("archive");
     const row = await page.waitLeadRow(lead.name);
-    assert.match(await row.getText(), /Duplicate record/);
+    // PD-34: the Archive shows the reason and the notes.
+    assert.match(await row.getText(), /Other[\s\S]*Duplicate record/);
     await row.findElement(By.xpath('.//button[normalize-space()="Restore"]')).click();
     await page.dialogTitle("Restore deal");
     await page.clickButton("Restore");

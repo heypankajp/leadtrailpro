@@ -31,7 +31,7 @@ describe("Several pipelines", () => {
   uiTest("an administrator adds a pipeline and gives it a stage whose name the default pipeline also uses", async () => {
     await page.nav("List of Values");
     await page.heading("List of values");
-    await page.click(By.xpath('.//nav[contains(@class,"values-nav")]//button[starts-with(normalize-space(.), "Pipeline stage")]'), { global: true });
+    await page.click(By.xpath('.//nav[contains(@class,"values-nav")]//button[starts-with(normalize-space(.), "Pipeline Stage")]'), { global: true });
     await (await page.wait(By.css('input[aria-label="New pipeline name"]'))).sendKeys(pipeline);
     // The menu entry is also called "Pipeline" (PD-26), so the button is found inside its form.
     await page.click(By.xpath('//form[contains(@class,"pipeline-new")]//button[normalize-space()="Pipeline"]'), { global: true });
@@ -39,14 +39,16 @@ describe("Several pipelines", () => {
     await page.wait(By.xpath('//table[contains(@class,"values-table")]//tr[.//*[normalize-space()="New"]]'));
     await (await page.wait(By.css('form.values-add:not(.pipeline-new) input'))).sendKeys("Qualified");
     await page.clickButton("Add value", { global: true });
-    await page.toast('Added "Qualified" to Pipeline stage');
+    await page.toast('Added "Qualified" to Pipeline Stage');
     assert.equal((await driver.findElements(By.xpath('//table[contains(@class,"values-table")]//tbody/tr'))).length, 2, "the list shows this pipeline's two stages only");
   });
 
   uiTest("a deal is added to the new pipeline and shows on its board, not on the default one", async () => {
     await page.openAddDeal();
     await page.fill("Organization", deal);
-    await page.fill("Pipeline stage", `${pipeline}: New`);
+    // PD-31: with several pipelines the add-deal dialog asks for the pipeline, and its first stage is chosen.
+    await page.setValue(await page.wait(By.css('section[role="dialog"] select[aria-label="Pipeline"]')), pipeline);
+    assert.equal(await page.stagePicked(), "New");
     await page.saveDeal();
     await page.toast(`${deal} added to the pipeline`);
     // The stage bar of the deal has its pipeline's two steps.
@@ -60,7 +62,7 @@ describe("Several pipelines", () => {
   });
 
   uiTest("the deal moves through its own pipeline's stages", async () => {
-    assert.deepEqual(await page.cardStages(deal), ["New", "Qualified"]);
+    assert.deepEqual(await page.boardStages(), ["New", "Qualified"]);
     await page.moveCard(deal, "Qualified");
     await page.toast(`${deal} moved to Qualified`);
     await page.dialogTitle(`What's next for ${deal}?`);

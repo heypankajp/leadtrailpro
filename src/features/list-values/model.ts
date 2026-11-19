@@ -1,26 +1,30 @@
 export const listKeys = ["lead_type", "status", "bd_action", "stage", "client_response", "lead_category", "company_size", "city", "lost_reason", "disqualified_reason", "business_type", "opportunity_reason", "todo_list", "archival_reason", "recent_trips_limit"] as const;
 export type ListKey = (typeof listKeys)[number];
 
+// Title Case, as the left list of the List of Values page shows them (review of November 18, 2026).
 export const listKeyLabels: Record<ListKey, string> = {
-  lead_type: "Deal source",
+  lead_type: "Deal Source",
   status: "Status",
-  bd_action: "BD action",
-  stage: "Pipeline stage",
-  client_response: "Client response",
-  lead_category: "Deal category",
-  company_size: "Company size",
+  bd_action: "BD Action",
+  stage: "Pipeline Stage",
+  client_response: "Client Response",
+  lead_category: "Deal Category",
+  company_size: "Company Size",
   city: "City",
-  lost_reason: "Lost deal reason",
-  disqualified_reason: "Disqualified reason",
-  business_type: "Business type (sales trips)",
-  opportunity_reason: "Not relevant reason (leads)",
-  todo_list: "To Do list",
-  archival_reason: "Archival reason",
-  recent_trips_limit: "Recent Planned Trips (how many)",
+  lost_reason: "Lost Deal Reason",
+  disqualified_reason: "Lead Disqualified Reason",
+  business_type: "Business Type (Sales Trips)",
+  opportunity_reason: "Not Relevant Reason (Leads)",
+  todo_list: "To Do List",
+  archival_reason: "Archival Reason",
+  recent_trips_limit: "Recent Planned Trips (How Many)",
 };
 
-/** Lists whose values are fixed by the requirement (LEAD-06): they can be renamed but not added to or deactivated. */
-export const fixedListKeys: readonly ListKey[] = ["disqualified_reason", "recent_trips_limit"];
+/**
+ * Lists whose values can be renamed but not added to or deactivated: the Recent Planned Trips number (one value). The
+ * Disqualified reasons were fixed by LEAD-06 until the review of November 18, 2026, which opened them to new values.
+ */
+export const fixedListKeys: readonly ListKey[] = ["recent_trips_limit"];
 
 export type ListValue = {
   id: number;

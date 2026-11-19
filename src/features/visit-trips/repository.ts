@@ -38,7 +38,7 @@ export function canManageTrip(user: UserAccount, trip: Pick<VisitTrip, "ownerId"
   return trip.ownerId === user.id || trip.createdById === user.id || hasPrivilege(user, "reassign_leads");
 }
 
-/** The number of trips "Recent Planned Trips" shows: List of values → Recent Planned Trips (how many), 30 by default. */
+/** The number of trips "Recent Planned Trips" shows: List of values → Recent Planned Trips (How Many), 30 by default. */
 export async function configuredRecentTrips(db: Queryable = getDatabasePool()): Promise<number> {
   const { rows } = await db.query("SELECT value FROM list_values WHERE list_key = 'recent_trips_limit' AND is_active = TRUE ORDER BY sort_order, id LIMIT 1");
   return recentTripsLimit((rows as { value: string }[])[0]?.value);

@@ -29,7 +29,7 @@ describe("Administration and reports", () => {
   });
 
   uiTest("maps a BD action to a pipeline stage and recomputes the stages", async () => {
-    await page.click(By.xpath('.//nav[contains(@class,"values-nav")]//button[starts-with(normalize-space(.), "BD action")]'), { global: true });
+    await page.click(By.xpath('.//nav[contains(@class,"values-nav")]//button[starts-with(normalize-space(.), "BD Action")]'), { global: true });
     const select = await page.wait(By.css('select[aria-label="Stage for First Call"]'));
     assert.equal(await page.selectedText(select), "Contact Made");
     await page.setValue(select, "Qualified");

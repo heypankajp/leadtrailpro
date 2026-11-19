@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe } from "node:test";
 import { By, Key, Page, addLead, createDriver, uiTest, waitForServices, xq } from "./helpers/ui.mjs";
-import { admin, ensureAdmin, runId } from "./helpers/data.mjs";
+import { admin, ensureAdmin, isoDate, runId } from "./helpers/data.mjs";
 
 const column = (stage) => `//section[contains(@class,"pipeline-column")][.//h2[normalize-space()=${xq(stage)}]]`;
 const cardIn = (stage, name) => By.xpath(`${column(stage)}//article[contains(@class,"pipeline-card")][.//strong[normalize-space()=${xq(name)}]]`);
@@ -28,7 +28,7 @@ describe("Pipeline board (PIPE-*)", () => {
   });
   after(async () => { await driver?.quit(); });
 
-  uiTest("a new deal starts in New Deal and moves with the card's actions menu", async () => {
+  uiTest("a new deal starts in New Deal and moves when its card is dragged", async () => {
     await addLead(page, { name, executive: "Adam Reid" });
     await page.toast(`${name} added to the pipeline`);
     await page.closeDialog();
@@ -155,8 +155,12 @@ describe("Pipeline board (PIPE-*)", () => {
     await page.wait(cardIn("New Deal", valued));
   });
 
-  uiTest("the card's menu adds a follow-up, puts the deal on a To Do list and archives it (PD-22)", async () => {
+  uiTest("the card's menu adds a follow-up, puts the deal on a To Do list and archives it (PD-22, PD-33, PD-34)", async () => {
     const valued = `Cedar Foods ${runId}`;
+    // PD-33: the menu no longer offers the stages.
+    await page.openCardMenu(valued);
+    assert.equal((await driver.findElements(By.xpath('//div[contains(@class,"card-menu")]//*[normalize-space()="Move to stage"]'))).length, 0, "no Move to stage in the card menu");
+    await driver.actions().sendKeys(Key.ESCAPE).perform();
     await page.openCardMenu(valued);
     await page.click(By.xpath('//div[contains(@class,"card-menu")]//button[normalize-space()="Add follow-up"]'), { global: true });
     await page.dialogTitle("Schedule an activity");
@@ -170,6 +174,8 @@ describe("Pipeline board (PIPE-*)", () => {
     await page.openCardMenu(valued);
     await page.click(By.xpath('//div[contains(@class,"card-menu")]//button[normalize-space()="Archive"]'), { global: true });
     await page.dialogTitle(`Archive ${valued}`);
+    await page.fill("Archival reason", "Not Hiring");
+    await page.fill("Archival notes (optional)", "No openings this quarter");
     await page.clickButton("Archive deal");
     await page.toast(`${valued} archived`);
     await driver.wait(async () => (await driver.findElements(cardIn("New Deal", valued))).length === 0, 10000, "an archived deal leaves the board");
@@ -219,7 +225,8 @@ describe("Pipeline board (PIPE-*)", () => {
     await page.click(By.xpath(`${column("Qualified")}//button[@aria-label="More for Qualified"]`), { global: true });
     await page.click(By.xpath('//div[contains(@class,"column-menu-list")]//button[normalize-space()="Add deal to this stage"]'), { global: true });
     await page.dialogTitle("Add deal");
-    assert.equal(await page.selectedText(await page.control("Pipeline stage")), "Qualified");
+    // PD-31: the stage is chosen with the arrows.
+    assert.equal(await page.stagePicked(), "Qualified");
     await page.closeDialog();
     await page.click(By.xpath(`${column("Qualified")}//button[@aria-label="More for Qualified"]`), { global: true });
     await page.click(By.xpath('//div[contains(@class,"column-menu-list")]//button[normalize-space()="View deals in this stage in list view"]'), { global: true });
@@ -238,5 +245,61 @@ describe("Pipeline board (PIPE-*)", () => {
     await page.wait(By.xpath('//span[contains(@class,"quick-filter-label") and normalize-space()="Open deals with no next step"]'));
     await page.click('button[aria-label="Clear the filter"]', { global: true });
     await driver.wait(async () => (await driver.findElements(By.css(".quick-filter-label"))).length === 0, 10000, "the filter clears");
+  });
+
+  uiTest("Convert to Client in the card menu makes the deal a client, listed under Clients (PD-33, PD-35)", async () => {
+    const client = `Juniper Tools ${runId}`;
+    await addLead(page, { name: client });
+    await page.toast(`${client} added to the pipeline`);
+    await page.closeDialog();
+    await page.deals("board");
+    await page.wait(cardIn("New Deal", client));
+    await page.openCardMenu(client);
+    await page.click(By.xpath('//div[contains(@class,"card-menu")]//button[normalize-space()="Convert to Client"]'), { global: true });
+    await page.toast(`${client} is now a client`);
+    await driver.wait(async () => (await driver.findElements(cardIn("New Deal", client))).length === 0, 10000, "a client leaves the board");
+    await page.nav("Clients");
+    await page.heading("Clients");
+    await page.waitLeadRow(client);
+  });
+
+  uiTest("the Filter menu lists the quarters from today, and Quiet Deals leaves out a deal first contacted today (PD-37)", async () => {
+    await page.deals("board");
+    await page.wait(cardIn("New Deal", name));
+    const entry = (start) => By.xpath(`//div[contains(@class,"quick-filter-menu")]//button[starts-with(normalize-space(.), ${xq(start)})]`);
+    await page.clickButton("Filter", { global: true });
+    await page.click(entry("Current (Q"), { global: true });
+    await page.wait(cardIn("New Deal", name));
+    assert.equal((await driver.findElements(By.xpath('//button[normalize-space()="Deals older than 3 months"]'))).length, 0);
+    await page.click(By.css('button[aria-label="Clear the filter"]'), { global: true });
+    await page.clickButton("Filter", { global: true });
+    await page.click(entry("Quiet Deals ("), { global: true });
+    await driver.wait(async () => (await driver.findElements(cardIn("New Deal", name))).length === 0, 10000, "a deal first contacted today is not a quiet deal");
+    await page.click(By.css('button[aria-label="Clear the filter"]'), { global: true });
+    await page.wait(cardIn("New Deal", name));
+  });
+
+  uiTest("Followup in the Filter menu shows the deals followed up on the days picked (PD-38)", async () => {
+    const due = `Maple Crate ${runId}`;
+    const other = `Willow Print ${runId}`;
+    await page.openAddDeal();
+    await page.fill("Organization", due);
+    await page.fill("Follow-up date", isoDate(0));
+    await page.saveDeal();
+    await page.toast(`${due} added to the pipeline`);
+    await page.closeDialog();
+    await addLead(page, { name: other });
+    await page.toast(`${other} added to the pipeline`);
+    await page.closeDialog();
+    await page.deals("board");
+    await page.wait(cardIn("New Deal", other));
+    await page.clickButton("Filter", { global: true });
+    await page.click(By.xpath('//div[contains(@class,"quick-filter-menu")]//button[normalize-space()="Followup"]'), { global: true });
+    await page.pickPeriod("Followup", isoDate(0));
+    await page.wait(By.xpath('//span[contains(@class,"follow-up-chip")]//span[starts-with(normalize-space(.), "Follow-up:")]'));
+    await page.wait(cardIn("New Deal", due));
+    await driver.wait(async () => (await driver.findElements(cardIn("New Deal", other))).length === 0, 10000, "a deal with no follow-up that day is left out");
+    await page.click(By.css('button[aria-label="Clear the follow-up period"]'), { global: true });
+    await page.wait(cardIn("New Deal", other));
   });
 });

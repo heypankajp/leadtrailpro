@@ -55,11 +55,11 @@ describe("To Do lists (TODO-*)", () => {
   uiTest("an administrator adds another list and deals are moved to it in bulk from All deals", async () => {
     await page.nav("List of Values");
     await page.heading("List of values");
-    await page.click(By.xpath('.//nav[contains(@class,"values-nav")]//button[starts-with(normalize-space(.), "To Do list")]'), { global: true });
+    await page.click(By.xpath('.//nav[contains(@class,"values-nav")]//button[starts-with(normalize-space(.), "To Do List")]'), { global: true });
     const input = await page.wait(By.css("form.values-add input"));
     await input.sendKeys(second);
     await page.clickButton("Add value", { global: true });
-    await page.toast(`Added "${second}" to To Do list`);
+    await page.toast(`Added "${second}" to To Do List`);
 
     await page.deals("all");
     await (await page.wait(By.css('input[aria-label="Search deals"]'))).sendKeys(name);

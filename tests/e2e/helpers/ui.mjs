@@ -273,24 +273,57 @@ export class Page {
     return this.wait(By.css(".card-menu"));
   }
 
-  /** PD-22: moves a board card through its actions menu (the ⇄ button) to the named stage. */
-  async moveCard(name, stage) {
-    await this.openCardMenu(name);
-    await this.click(By.xpath(`//div[contains(@class,"card-menu")]//button[@role="menuitem" and normalize-space()=${xq(stage)}]`), { global: true });
+  /** HTML5 drag and drop of `card` onto `target`, as the browser fires it (WebDriver's own drag does not produce these events). */
+  async drag(card, target) {
+    await this.driver.executeScript(`const [card, target] = arguments; const data = new DataTransfer();
+      card.dispatchEvent(new DragEvent("dragstart", { bubbles: true, cancelable: true, dataTransfer: data }));
+      target.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: data }));
+      target.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: data }));
+      card.dispatchEvent(new DragEvent("dragend", { bubbles: true, dataTransfer: data }));`, card, target);
   }
 
-  /** The stage names a card's actions menu offers, in order; the menu is closed again. */
-  async cardStages(name) {
-    const menu = await this.openCardMenu(name);
-    const labels = await this.driver.executeScript(`
-      const items = [], menu = arguments[0];
-      for (const node of menu.children) {
-        if (node.classList.contains("card-menu-rule")) break;
-        if (node.getAttribute("role") === "menuitem") items.push(node.textContent.trim());
+  /**
+   * Moves a board card to the named stage by dragging it there. The card's ⇄ menu offered the stages until the review of
+   * November 18, 2026 (PD-33); a drag gives the same toast, undo bar and "What's next?" prompt.
+   */
+  async moveCard(name, stage) {
+    const card = await this.wait(By.xpath(`//article[contains(@class,"pipeline-card")][.//strong[normalize-space()=${xq(name)}]]`));
+    const column = await this.wait(By.xpath(`//section[contains(@class,"pipeline-column")][.//h2[normalize-space()=${xq(stage)}]]`));
+    await this.drag(card, column);
+  }
+
+  /** The stage columns of the board on screen, in order. */
+  async boardStages() {
+    await this.wait(By.css("section.pipeline-column h2"));
+    return this.driver.executeScript('return [...document.querySelectorAll("section.pipeline-column h2")].map((h) => h.textContent.trim());');
+  }
+
+  /** PD-31: the stage chosen with the add-deal dialog's arrows (the checked arrow's name). */
+  async stagePicked() {
+    const checked = await this.wait(By.css('.stage-picker button[role="radio"][aria-checked="true"]'), { visible: false });
+    return (await this.driver.executeScript("return arguments[0].textContent.trim();", checked));
+  }
+
+  /**
+   * Picks `from` (and `to`, for a range) on the open By Period / Followup calendar named `label`, then Apply. Days are
+   * YYYY-MM-DD; the calendar is moved on a month at a time until the day shows.
+   */
+  async pickPeriod(label, from, to = from) {
+    const calendar = `//div[@role="dialog" and @aria-label=${xq(label)}]`;
+    const dayName = (ymd) => {
+      const [y, m, d] = ymd.split("-").map(Number);
+      return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+    };
+    await this.wait(By.xpath(calendar));
+    for (const day of from === to ? [from] : [from, to]) {
+      const name = dayName(day);
+      const button = By.xpath(`${calendar}//button[@aria-label=${xq(name)} or @aria-label=${xq(`${name} (today)`)}]`);
+      for (let step = 0; step < 24 && !(await this.driver.findElements(button)).length; step += 1) {
+        await this.click(By.xpath(`${calendar}//button[@aria-label=${xq(day < (await this.driver.executeScript("return new Date().toISOString().slice(0, 10)")) ? "Previous month" : "Next month")}]`), { global: true });
       }
-      return items;`, menu);
-    await this.driver.actions().sendKeys(Key.ESCAPE).perform();
-    return labels;
+      await this.click(button, { global: true });
+    }
+    await this.click(By.xpath(`${calendar}//button[normalize-space()="Apply"]`), { global: true });
   }
 
   /** The add-deal dialog, opened the way it opens from every page: the quick-add button in the top bar. */

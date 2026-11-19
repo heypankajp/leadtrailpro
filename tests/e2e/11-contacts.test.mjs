@@ -180,21 +180,23 @@ describe("Contacts first", () => {
     assert.equal(await dot.getAttribute("title"), "1 note");
   });
 
-  // PD-15: our own suggestion lists in Add deal.
-  uiTest("Add deal suggests organizations as you type, and an email finds the contact and their organization", async () => {
+  // PD-15, PD-32: our own suggestion lists in Add deal; contacts are looked up inside the organization chosen.
+  uiTest("Add deal suggests organizations as you type, then that organization's contacts, by name or email", async () => {
     await page.openAddDeal();
+    // No organization yet: the Contact field waits for one.
+    assert.equal(await (await page.control("Contact")).getAttribute("disabled"), "true");
     const orgInput = await page.control("Organization");
     await orgInput.sendKeys(organization.slice(0, -1));
     const option = await page.wait(By.xpath(`//ul[contains(@class,"suggest-list")]//li[@role="option"][.//strong[normalize-space()=${xq(organization)}]]`));
     assert.match(await option.getText(), /open deals?/);
-    await page.setValue(orgInput, "");
+    await option.click();
+    await page.wait(By.css(".open-deals-note"));
     const email = `adam.${runId}@northern.example`;
     await (await page.control("Email(s)")).sendKeys(`adam.${runId}@`);
     await page.click(By.xpath(`//ul[contains(@class,"suggest-list")]//li[@role="option"][.//strong[normalize-space()=${xq(email)}]]`));
     assert.equal(await (await page.control("Organization")).getAttribute("value"), organization);
     assert.equal(await (await page.control("Contact")).getAttribute("value"), person);
     assert.equal(await (await page.control("Email(s)")).getAttribute("value"), email);
-    await page.wait(By.css(".open-deals-note"));
     await page.closeDialog();
   });
 });

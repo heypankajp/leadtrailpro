@@ -160,7 +160,7 @@ export default function ListValuesPanel() {
             </div>
           )}
           {fixed
-            ? <p className="field-hint values-fixed-note">These values are fixed by the requirement: rename them if needed, but they cannot be added to or deactivated.</p>
+            ? <p className="field-hint values-fixed-note">One value: the number of trips Recent Planned Trips shows on the Sales Trip Planner (1 to 500). Rename it to change the number.</p>
             : <form className="values-add" onSubmit={add}><input value={newValue} onChange={(event) => setNewValue(event.target.value)} maxLength={120} placeholder={`New ${listKeyLabels[listKey].toLowerCase()} value`} required /><button className="button button-primary button-small" type="submit"><Plus size={14} /> Add value</button></form>}
           <ErrorText message={error} />
           {!values && !error && <Loading />}
