@@ -25,3 +25,12 @@ describe("single-number lists and the Sales Trip Planner page (request of Novemb
     assert.equal(listNumber("recent_trips_limit", undefined), 30);
   });
 });
+
+test("Lead Gen Tool: the Deal Source of deals made from Lead Generation and the Leads inbox", async () => {
+  const { leadGenToolSourceId } = await import("../../src/features/list-values/model.ts");
+  const source = (id, code, value, active = true) => ({ id, code, value, active });
+  assert.equal(leadGenToolSourceId([source(1, "cold_call", "Cold Call"), source(5, "lead_gen_tool", "Lead Gen Tool")]), 5);
+  assert.equal(leadGenToolSourceId([source(7, "custom_7", " lead gen tool ")]), 7);
+  assert.equal(leadGenToolSourceId([source(5, "lead_gen_tool", "Lead Gen Tool", false)]), null);
+  assert.equal(leadGenToolSourceId([source(1, "cold_call", "Cold Call")]), null);
+});

@@ -1,18 +1,22 @@
 "use client";
 
-import { useCallback, useState, type FormEvent } from "react";
-import { Briefcase, ChevronDown, ChevronRight, ExternalLink, Pencil, Play, Plus, RotateCcw, Search, Trash2, UserPlus, X } from "lucide-react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Briefcase, Building2, ChevronDown, ChevronRight, ExternalLink, Pencil, Play, Plus, RotateCcw, Search, Trash2, UserPlus, UserRound, X } from "lucide-react";
 import { errorMessage } from "@/lib/api";
 import { formatDate, formatDateTime, relativeTime } from "@/lib/format";
 import { useAsyncData } from "@/lib/useAsyncData";
+import { createOrganization, createPerson, fetchOrganization, fetchOrganizations } from "@/features/contacts/client";
+import { contactKey, type OrganizationRow, type PersonRow } from "@/features/contacts/model";
+import { OrganizationFormDialog, PersonFormDialog } from "@/features/contacts/ContactFormDialogs";
 import JobsUsageCard from "@/features/jobs/JobsUsageCard";
 import LeadFormDialog from "@/features/leads/LeadFormDialog";
-import type { LeadInput } from "@/features/leads/model";
-import type { ListValuesByKey } from "@/features/list-values/model";
+import { bdCommentLines, type LeadInput } from "@/features/leads/model";
+import { leadGenToolSourceId, type ListValuesByKey } from "@/features/list-values/model";
 import { useApp } from "@/features/shell/AppContext";
+import SuggestInput from "@/features/shell/SuggestInput";
 import { Dialog, EmptyState, ErrorText, Field, Loading, Pagination, Tabs, type TabOption } from "@/features/shell/components";
-import { createSearch, deleteSearch, fetchOpportunities, fetchRuns, fetchSearches, markOpportunityNotRelevant, reopenOpportunity, restoreOpportunity, runSearchesNow, updateSearch } from "./client";
-import { jobTypeOptions, maxMaxListings, maxPostedWithinDays, maxSearchTitles, minMaxListings, minPostedWithinDays, type Opportunity, type OpportunitySearch, type OpportunitySearchInput, type OpportunityStatus } from "./model";
+import { createOpportunity, createSearch, deleteSearch, editOpportunity, fetchOpportunities, fetchRuns, fetchSearches, markOpportunityNotRelevant, reopenOpportunity, restoreOpportunity, runSearchesNow, updateSearch } from "./client";
+import { jobTypeOptions, maxMaxListings, maxPostedWithinDays, maxSearchTitles, minMaxListings, minPostedWithinDays, type Opportunity, type OpportunitySearch, type OpportunitySearchInput, type OpportunityStatus, type LeadEntryInput } from "./model";
 
 type Tab = OpportunityStatus | "searches";
 const pageSize = 50;
@@ -27,16 +31,21 @@ function prefillFor(item: Opportunity, values: ListValuesByKey): Partial<LeadInp
   const lines = item.listings.map((listing) => `${listing.title} (${listing.sourceLabel}${listing.postedAt ? `, posted ${formatDate(listing.postedAt)}` : ""}) ${listing.url}`);
   const poolNote = lines.length ? `From the leads inbox (first seen ${formatDate(item.firstSeenAt.slice(0, 10))}):\n${lines.join("\n")}` : "";
   const draft = item.tracker?.lead;
+  // The deal takes the lead's Lead Source (request of November 19, 2026); a lead without one came from the lead generation tool.
+  const leadSource = item.leadSourceId ?? leadGenToolSourceId(values.lead_type) ?? undefined;
+  // BD action and Client response are fields of the lead, not of the deal: the deal keeps them in its Comments.
+  // A deal has one contact: the lead's first; the others stay contacts of the company and are named in the comments.
+  const others = item.contacts.slice(1).map((contact) => contact.name);
+  const leadNotes = [item.note, bdCommentLines(item.bdAction, item.clientResponse), others.length ? `Other contacts: ${others.join(", ")}` : ""].filter(Boolean).join("\n");
   if (!draft) {
-    return { clientName: item.companyName, companyUrl: item.website, address: item.location, positions: item.listings.map((listing) => listing.title).join("\n").slice(0, 5000), comments: poolNote.slice(0, 5000) };
+    return { leadTypeId: leadSource, clientExecutive: item.contacts[0]?.name ?? "", clientName: item.companyName, companyUrl: item.website, address: item.location, positions: item.listings.map((listing) => listing.title).join("\n").slice(0, 5000), comments: [leadNotes, poolNote].filter(Boolean).join("\n").slice(0, 5000) };
   }
   const byName = (key: keyof ListValuesByKey, name: string | null) => (name ? values[key]?.find((value) => value.value.toLowerCase() === name.toLowerCase())?.id ?? null : null);
   return {
-    clientName: draft.name, companyUrl: item.website, address: draft.address || item.location, comments: [draft.comments, poolNote].filter(Boolean).join("\n").slice(0, 5000),
+    clientName: draft.name, companyUrl: item.website, address: draft.address || item.location, comments: [draft.comments, leadNotes, poolNote].filter(Boolean).join("\n").slice(0, 5000),
     clientExecutive: draft.executive, contactPhone: draft.phone, contactAltPhone: draft.altPhone, contactRemark: draft.contactRemark, clientEmails: draft.emails, industry: draft.industry,
     positions: [draft.positions, ...item.listings.map((listing) => listing.title)].filter(Boolean).join("\n").slice(0, 5000),
-    leadTypeId: byName("lead_type", draft.type) ?? undefined, statusId: values.status.find((value) => value.code === draft.status)?.id, cityId: byName("city", draft.city),
-    bdActionId: byName("bd_action", draft.action), clientResponseId: byName("client_response", draft.response),
+    leadTypeId: leadSource ?? byName("lead_type", draft.type) ?? undefined, statusId: values.status.find((value) => value.code === draft.status)?.id, cityId: byName("city", draft.city),
     firstContactDate: draft.firstContact || undefined, followUpDate: draft.followUp, contractSignedDate: draft.contract,
   };
 }
@@ -54,6 +63,8 @@ export default function OpportunitiesPage() {
   const { data, error, reload } = useAsyncData(fetcher, dataVersion);
   const [assigning, setAssigning] = useState<Opportunity | null>(null);
   const [dismissing, setDismissing] = useState<Opportunity | null>(null);
+  // Add lead (null: closed; "new": a new lead; a card: that lead's fields).
+  const [entry, setEntry] = useState<Opportunity | "new" | null>(null);
   const [reopening, setReopening] = useState<Opportunity | null>(null);
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
   const [running, setRunning] = useState(false);
@@ -89,9 +100,12 @@ export default function OpportunitiesPage() {
         <div>
           <div className="eyebrow">LEADS INBOX</div>
           <h1>Leads</h1>
-          <p>Companies that are hiring, found by the scheduled job searches. Convert one to a deal for yourself or a colleague, or mark it not relevant. A company that is already a deal or client never appears here: its new listings go to that deal.</p>
+          <p>Companies that are hiring, found by the scheduled job searches, and leads added by hand. Convert one to a deal for yourself or a colleague, or mark it not relevant. A company that is already a deal or client never appears here: its new listings go to that deal.</p>
         </div>
-        {can("manage_settings") && <button className="button button-outline" onClick={() => void runNow()} disabled={running}><Play size={14} /> {running ? "Running searches..." : "Run searches now"}</button>}
+        <div className="page-heading-actions">
+          {can("manage_settings") && <button className="button button-outline" onClick={() => void runNow()} disabled={running}><Play size={14} /> {running ? "Running searches..." : "Run searches now"}</button>}
+          {can("create_leads") && <button className="button button-primary" onClick={() => setEntry("new")}><Plus size={14} /> Add lead</button>}
+        </div>
       </div>
       <JobsUsageCard compact refreshKey={running} />
       <Tabs tabs={tabs} active={tab} onChange={(id) => { setTab(id); setPage(1); setExpanded({}); }} />
@@ -114,7 +128,9 @@ export default function OpportunitiesPage() {
                     <tr key={item.id}>
                       <td>
                         <strong>{item.companyName}</strong>
-                        <small className="muted-cell">{[...item.sources, ...(item.tracker ? ["Sales tracker"] : [])].join(", ")}{item.website && <> · <a href={item.website} target="_blank" rel="noreferrer">website</a></>}</small>
+                        <small className="muted-cell">{[...(item.addedByName ? [`Added by ${item.addedByName}`] : []), ...item.sources, ...(item.tracker ? ["Sales tracker"] : [])].join(", ")}{item.website && <> · <a href={item.website} target="_blank" rel="noreferrer">website</a></>}</small>
+                        {item.leadSource && <small className="opp-source">Lead source: {item.leadSource}</small>}
+                        {item.contacts.length > 0 && <small className="opp-contacts"><UserRound size={11} /> {item.contacts.map((contact) => contact.name).join(", ")}</small>}
                       </td>
                       <td>
                         <button type="button" className="opp-expand" onClick={() => setExpanded((current) => ({ ...current, [item.id]: !open }))} aria-expanded={open}>
@@ -148,12 +164,20 @@ export default function OpportunitiesPage() {
                         {(item.status === "converted" || item.status === "attached") && item.lead && (
                           <span>{item.status === "converted" ? "Deal" : "Existing deal"}: <button type="button" className="link-button" onClick={() => openLead(item.lead!.id)}>{item.lead.clientName}</button><small className="muted-cell">{item.lead.statusLabel} · {item.lead.ownerName}</small></span>
                         )}
-                        {item.status === "new" && !item.history && !item.revived && !item.tracker && <small className="muted-cell">New company</small>}
+                        {(item.bdAction || item.clientResponse) && (
+                          <span className="opp-lead-fields">
+                            {item.bdAction && <small><b>BD action</b> {item.bdAction}</small>}
+                            {item.clientResponse && <small><b>Client response</b> {item.clientResponse}</small>}
+                          </span>
+                        )}
+                        {item.note && <small className="opp-note">{item.note}</small>}
+                        {item.status === "new" && !item.history && !item.revived && !item.tracker && !item.addedByName && !item.bdAction && !item.clientResponse && !item.note && <small className="muted-cell">New company</small>}
                       </td>
                       <td>
                         <div className="opp-actions">
                           {item.status === "new" && can("create_leads") && !item.history && <button type="button" className="button button-primary button-small" onClick={() => setAssigning(item)}><UserPlus size={13} /> Convert to deal</button>}
                           {item.status === "new" && can("create_leads") && item.history && <button type="button" className="button button-primary button-small" onClick={() => setReopening(item)}><RotateCcw size={13} /> Reopen deal</button>}
+                          {(item.status === "new" || item.status === "not_relevant") && can("create_leads") && <button type="button" className="button button-outline button-small" onClick={() => setEntry(item)} aria-label={`Edit ${item.companyName}`}><Pencil size={13} /> Edit</button>}
                           {item.status === "new" && can("create_leads") && <button type="button" className="button button-outline button-small" onClick={() => setDismissing(item)}><X size={13} /> Not relevant</button>}
                           {item.status === "not_relevant" && can("create_leads") && <button type="button" className="button button-outline button-small" onClick={() => void restore(item)}><RotateCcw size={13} /> Back to the inbox</button>}
                           {(item.status === "converted" || item.status === "attached") && item.lead && <button type="button" className="button button-outline button-small" onClick={() => openLead(item.lead!.id)}>Open deal</button>}
@@ -172,6 +196,7 @@ export default function OpportunitiesPage() {
         <LeadFormDialog
           prefill={prefillFor(assigning, reference.listValues)}
           opportunityId={assigning.id}
+          contact={assigning.organizationId ? { organizationId: assigning.organizationId, personId: assigning.contacts[0]?.id ?? null } : undefined}
           importedHistory={Boolean(assigning.tracker)}
           onClose={() => setAssigning(null)}
           onSaved={(lead) => { setAssigning(null); notify(`${lead.clientName} is now a deal owned by ${lead.ownerName}`); bumpData(); reload(); }}
@@ -184,6 +209,13 @@ export default function OpportunitiesPage() {
           onDone={(lead) => { setReopening(null); notify(`${lead.clientName} reopened for ${lead.ownerName}`); bumpData(); reload(); }}
         />
       )}
+      {entry && (
+        <LeadEntryDialog
+          lead={entry === "new" ? null : entry}
+          onClose={() => setEntry(null)}
+          onSaved={(item, created) => { setEntry(null); notify(created ? `${item.companyName} added to the leads inbox` : `${item.companyName} saved`); if (created) { setTab("new"); setPage(1); } bumpData(); reload(); }}
+        />
+      )}
       {dismissing && (
         <NotRelevantDialog
           opportunity={dismissing}
@@ -193,6 +225,201 @@ export default function OpportunitiesPage() {
         />
       )}
     </>
+  );
+}
+
+/**
+ * Add lead / Edit lead (request of November 19, 2026): the company, its website and location, the Lead Source (the Deal Source
+ * values; the deal takes it when the lead is converted), BD action and Client response (fields of the lead, no longer of the
+ * deal), and a note. A new lead starts with the Lead Gen Tool source.
+ */
+function LeadEntryDialog({ lead, onClose, onSaved }: { lead: Opportunity | null; onClose: () => void; onSaved: (item: Opportunity, created: boolean) => void }) {
+  const { reference } = useApp();
+  const values = reference.listValues;
+  const usable = <T extends { id: number; active: boolean }>(list: T[], current: number | null) => list.filter((item) => item.active || item.id === current);
+  const [form, setForm] = useState({
+    companyName: lead?.companyName ?? "", website: lead?.website ?? "", location: lead?.location ?? "",
+    leadSourceId: String(lead ? lead.leadSourceId ?? "" : leadGenToolSourceId(values.lead_type) ?? ""),
+    bdActionId: lead?.bdActionId ? String(lead.bdActionId) : "", clientResponseId: lead?.clientResponseId ? String(lead.clientResponseId) : "", note: lead?.note ?? "",
+  });
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const set = (key: keyof typeof form) => (event: { target: { value: string } }) => setForm((current) => ({ ...current, [key]: event.target.value }));
+
+  // Company and contacts as in Add deal (request of November 19, 2026): the company is picked from Contacts → Companies or
+  // added as new (NEW badge); contacts are looked up inside it, several of them, each picked or added as new.
+  const [org, setOrg] = useState<{ id: number | null; isNew: boolean }>({ id: lead?.organizationId ?? null, isNew: false });
+  const [orgRows, setOrgRows] = useState<{ q: string; rows: OrganizationRow[] } | null>(null);
+  const [people, setPeople] = useState<PersonRow[]>([]);
+  const [chosen, setChosen] = useState<{ id: number | null; name: string }[]>(lead?.contacts ?? []);
+  const [personName, setPersonName] = useState("");
+  const typedOrg = org.id || org.isNew ? "" : form.companyName.trim();
+  useEffect(() => {
+    if (typedOrg.length < 2) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => { fetchOrganizations(typedOrg, 1).then((page) => { if (!cancelled) setOrgRows({ q: typedOrg, rows: page.rows.slice(0, 8) }); }).catch(() => undefined); }, 250);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [typedOrg]);
+  useEffect(() => {
+    if (!org.id) return;
+    let cancelled = false;
+    fetchOrganization(org.id).then((detail) => {
+      if (cancelled) return;
+      setPeople(detail.people);
+      // A company picked brings its website and city when the lead has none yet.
+      setForm((current) => ({ ...current, website: current.website || detail.organization.website || "", location: current.location || detail.organization.city || detail.organization.address || "" }));
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [org.id]);
+  const changeOrgName = (value: string) => { setForm((current) => ({ ...current, companyName: value })); setOrg({ id: null, isNew: false }); setPeople([]); setChosen([]); setPersonName(""); };
+  const orgExact = orgRows && orgRows.q === typedOrg ? orgRows.rows.find((row) => contactKey(row.name) === contactKey(typedOrg)) ?? null : null;
+  // "+ Add ... as new company / contact" opens Add company / Add contact with the name (request of November 19, 2026).
+  const [addingOrg, setAddingOrg] = useState<string | null>(null);
+  const [addingPerson, setAddingPerson] = useState<string | null>(null);
+  const linkOrg = (id: number, name: string) => { setForm((current) => ({ ...current, companyName: name })); setOrg({ id, isNew: false }); setChosen([]); setPersonName(""); };
+  const orgCreate = typedOrg.length >= 2 && orgRows?.q === typedOrg && !orgExact ? { label: `Add '${typedOrg}' as new company`, onCreate: () => setAddingOrg(typedOrg) } : null;
+  const orgChosen = Boolean(org.id || org.isNew);
+  const typedPerson = personName.trim();
+  const isChosen = (name: string) => chosen.some((item) => contactKey(item.name) === contactKey(name));
+  const personExact = (org.id ? people : []).find((item) => contactKey(item.name) === contactKey(typedPerson)) ?? null;
+  const addPerson = (item: { id: number | null; name: string }) => { if (!isChosen(item.name)) setChosen((current) => [...current, item]); setPersonName(""); };
+  const linkPerson = (id: number, name: string) => {
+    addPerson({ id, name });
+    if (org.id) fetchOrganization(org.id).then((detail) => setPeople(detail.people)).catch(() => undefined);
+  };
+  const personCreate = orgChosen && typedPerson.length >= 2 && !personExact && !isChosen(typedPerson) ? { label: `Add '${typedPerson}' as new contact`, onCreate: () => setAddingPerson(typedPerson) } : null;
+  /** A comma after a name adds it, so the next one can be typed: a contact of the company, or a new one through Add contact. */
+  const typePerson = (value: string) => {
+    if (!value.includes(",")) { setPersonName(value); return; }
+    const [name, ...rest] = value.split(",");
+    const typed = name.trim();
+    setPersonName(rest.join(",").trimStart());
+    if (!typed || isChosen(typed)) return;
+    const known = (org.id ? people : []).find((item) => contactKey(item.name) === contactKey(typed));
+    if (known) addPerson({ id: known.id, name: known.name });
+    else if (orgChosen) setAddingPerson(typed);
+  };
+
+  /** The company and contact records to save: picked, an exact name typed, or created now (the company first, then its contacts). */
+  const resolveLinks = async (): Promise<{ organizationId: number | null; personIds: number[] }> => {
+    const name = form.companyName.trim();
+    let organizationId = org.id ?? orgExact?.id ?? null;
+    if (!organizationId) {
+      if (!org.isNew) throw new Error(`Pick “${name}” from the list, or add it as a new company.`);
+      organizationId = (await createOrganization({ name, website: "", address: form.location.trim(), cityId: null, industry: "", companySizeId: null })).organization.id;
+      setOrg({ id: organizationId, isNew: false });
+    }
+    if (typedPerson) throw new Error(`Pick “${typedPerson}” from the list, or add them as a new contact.`);
+    const personIds: number[] = [];
+    const saved: { id: number; name: string }[] = [];
+    for (const item of chosen) {
+      const id = item.id ?? (await createPerson({ name: item.name, organizationName: name, emails: [], phone: "", altPhone: "", remark: "" })).person.id;
+      personIds.push(id);
+      saved.push({ id, name: item.name });
+    }
+    setChosen(saved);
+    return { organizationId, personIds };
+  };
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    const website = form.website.trim() && !/^https?:\/\//i.test(form.website.trim()) ? `https://${form.website.trim()}` : form.website.trim();
+    try {
+      const links = await resolveLinks();
+      const input: LeadEntryInput = {
+        companyName: form.companyName.trim(), website, location: form.location, leadSourceId: form.leadSourceId ? Number(form.leadSourceId) : null,
+        bdActionId: form.bdActionId ? Number(form.bdActionId) : null, clientResponseId: form.clientResponseId ? Number(form.clientResponseId) : null, note: form.note,
+        organizationId: links.organizationId, personIds: links.personIds,
+      };
+      const { opportunity } = lead ? await editOpportunity(lead.id, input) : await createOpportunity(input);
+      onSaved(opportunity, !lead);
+    } catch (caught) {
+      setError(errorMessage(caught, "The lead could not be saved."));
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog title={lead ? `Edit ${lead.companyName}` : "Add lead"} eyebrow="LEADS INBOX" onClose={onClose}>
+      <form className="lead-form" onSubmit={submit}>
+        <Field label="Company" required wide hint={org.isNew ? "A new company: it is added under Contacts → Companies when the lead is saved." : "Start typing the company's name: pick one of the companies that match, or add it as a new one."}>
+          <SuggestInput
+            value={form.companyName} onChange={changeOrgName}
+            suggestions={orgRows && orgRows.q === typedOrg ? orgRows.rows.map((row) => ({ key: String(row.id), label: row.name, icon: <Building2 size={14} />, detail: [row.city, row.industry, row.openDeals ? `${row.openDeals} open ${row.openDeals === 1 ? "deal" : "deals"}` : null, row.people ? `${row.people} ${row.people === 1 ? "contact" : "contacts"}` : null].filter(Boolean).join(" · ") || undefined })) : []}
+            onPick={(suggestion) => { setForm((current) => ({ ...current, companyName: suggestion.label })); setOrg({ id: Number(suggestion.key), isNew: false }); setChosen([]); setPersonName(""); }}
+            loading={typedOrg.length >= 2 && orgRows?.q !== typedOrg}
+            icon={<Building2 size={16} />} create={orgCreate} isNew={org.isNew} onClear={() => changeOrgName("")}
+            required maxLength={200} placeholder="Company" autoFocus
+          />
+        </Field>
+        <Field label="Contacts" wide hint={orgChosen ? "Several contacts can be added: pick them from the company's contacts, or add a new one." : "Choose the company first: contacts are looked up inside it."}>
+          <div className="lead-contacts">
+            {chosen.length > 0 && (
+              <ul className="activity-people" aria-label="Contacts">
+                {chosen.map((item) => (
+                  <li key={`${item.id ?? "new"}-${item.name}`}>
+                    <UserRound size={13} /> <span>{item.name}</span>{!item.id && <span className="suggest-new-badge">NEW</span>}
+                    <button type="button" aria-label={`Remove ${item.name}`} title="Remove" onClick={() => setChosen((current) => current.filter((other) => other !== item))}><X size={12} /></button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <SuggestInput
+              aria-label="Contact" value={personName} onChange={typePerson}
+              suggestions={(org.id ? people : []).filter((item) => !isChosen(item.name) && (!typedPerson || contactKey(item.name).includes(contactKey(typedPerson)))).map((item) => ({ key: String(item.id), label: item.name, detail: [item.email, item.phone].filter(Boolean).join(" · ") || undefined, icon: <UserRound size={14} /> }))}
+              onPick={(suggestion) => addPerson({ id: Number(suggestion.key), name: suggestion.label })}
+              minChars={0} disabled={!orgChosen}
+              icon={<UserRound size={16} />} create={personCreate}
+              maxLength={160} placeholder={!orgChosen ? "Choose the company first" : chosen.length ? "Add another contact" : "Contact"}
+            />
+          </div>
+        </Field>
+        <Field label="Website"><input value={form.website} onChange={set("website")} maxLength={500} inputMode="url" placeholder="https://company.com" /></Field>
+        <Field label="Location"><input value={form.location} onChange={set("location")} maxLength={160} placeholder="City or address" /></Field>
+        <Field label="Lead source" required hint="The deal takes this source when the lead is converted.">
+          <select value={form.leadSourceId} onChange={set("leadSourceId")} required>
+            <option value="">Choose...</option>
+            {usable(values.lead_type, lead?.leadSourceId ?? null).map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
+          </select>
+        </Field>
+        <Field label="BD action">
+          <select value={form.bdActionId} onChange={set("bdActionId")}>
+            <option value="">Not set</option>
+            {usable(values.bd_action, lead?.bdActionId ?? null).map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
+          </select>
+        </Field>
+        <Field label="Client response">
+          <select value={form.clientResponseId} onChange={set("clientResponseId")}>
+            <option value="">Not set</option>
+            {usable(values.client_response, lead?.clientResponseId ?? null).map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
+          </select>
+        </Field>
+        <Field label="Note" wide><textarea rows={3} value={form.note} onChange={set("note")} maxLength={5000} placeholder="What you know about the company, who to call..." /></Field>
+        <div className="field-wide"><ErrorText message={error} /></div>
+        <div className="modal-actions">
+          <button type="button" className="button button-outline" onClick={onClose}>Cancel</button>
+          <button type="submit" className="button button-primary" disabled={busy}>{lead ? <Pencil size={14} /> : <Plus size={14} />} {busy ? "Saving..." : lead ? "Save lead" : "Add lead"}</button>
+        </div>
+      </form>
+      {addingOrg !== null && (
+        <OrganizationFormDialog
+          initialName={addingOrg}
+          onUseExisting={(found) => { setAddingOrg(null); linkOrg(found.id, found.name); }}
+          onClose={() => setAddingOrg(null)}
+          onSaved={(saved) => { setAddingOrg(null); linkOrg(saved.id, saved.name); }}
+        />
+      )}
+      {addingPerson !== null && (
+        <PersonFormDialog
+          organizationName={form.companyName.trim()}
+          initialName={addingPerson}
+          onUseExisting={(found) => { setAddingPerson(null); linkPerson(found.id, found.name); }}
+          onClose={() => setAddingPerson(null)}
+          onSaved={(saved) => { setAddingPerson(null); linkPerson(saved.id, saved.name); }}
+        />
+      )}
+    </Dialog>
   );
 }
 

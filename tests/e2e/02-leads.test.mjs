@@ -40,14 +40,9 @@ describe("Deals", () => {
     assert.equal(await (await page.wait(By.css(".detail-owner strong"))).getText(), admin.name);
   });
 
-  uiTest("updates the BD action from the overview", async () => {
-    const select = await page.wait(By.css('select[aria-label="BD action"]'));
-    await page.setValue(select, "First Call");
-    await page.toast("BD action updated");
-    // PIPE-09: the next-step prompt follows a BD action; this suite skips it.
-    await page.dialogTitle(`What's next for ${lead.name}?`);
-    await page.clickButton("Skip");
-    assert.equal(await page.selectedText(await page.wait(By.css('select[aria-label="BD action"]'))), "First Call");
+  uiTest("the deal's Summary has no BD action, client response, stage or To Do list control (November 19, 2026)", async () => {
+    await page.wait(By.css(".stage-bar"));
+    assert.equal((await driver.findElements(By.css('select[aria-label="BD action"], select[aria-label="Client response"], select[aria-label="Stage"], select[aria-label="To Do list"]'))).length, 0);
   });
 
   uiTest("logs a call and adds a note on the timeline", async () => {

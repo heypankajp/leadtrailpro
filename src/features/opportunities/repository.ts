@@ -4,11 +4,12 @@ import { recordAudit } from "@/features/audit/repository";
 import { jobSourceLabels, type JobSourceId } from "@/features/jobs/model";
 import { statusLabel } from "@/features/list-values/model";
 import { assertListValue, getListValue } from "@/features/list-values/repository";
-import { addActivity, getLead, setLeadState, transferLead, updateLead } from "@/features/leads/repository";
+import { addActivity, findDuplicateLead, getLead, setLeadState, transferLead, updateLead } from "@/features/leads/repository";
+import { normalizeCompanyName } from "@/features/trips/matching";
 import type { LeadSummary } from "@/features/leads/model";
 import type { UserAccount } from "@/features/users/model";
 import { claimOpportunityForLead } from "./claim";
-import { closedStatusCodes, defaultPostedWithinDays, indeedKeyword, parseTitles, reasonScopeFor, trackerCard, trackerDraft, type Opportunity, type OpportunityListing, type OpportunityPage, type OpportunityRun, type OpportunitySearch, type OpportunitySearchInput, type OpportunityStatus, type ReasonScope } from "./model";
+import { closedStatusCodes, defaultPostedWithinDays, indeedKeyword, parseTitles, reasonScopeFor, trackerCard, trackerDraft, type Opportunity, type OpportunityListing, type OpportunityPage, type OpportunityRun, type OpportunitySearch, type OpportunitySearchInput, type OpportunityStatus, type ReasonScope, type LeadEntryInput } from "./model";
 
 /** Reads and the people's actions on the opportunity pool (OPP-*); the search runs live in `runner.ts`. */
 
@@ -89,6 +90,9 @@ type OpportunityRow = {
   historyId: number | null; historyName: string | null; historyOwnerName: string | null; historyStatus: string | null; historyStatusReason: string | null; historyRecordState: string | null;
   sources: string[] | string;
   draft: unknown;
+  leadSourceId: number | null; leadSource: string | null; bdActionId: number | null; bdAction: string | null; clientResponseId: number | null; clientResponse: string | null;
+  note: string | null; addedByName: string | null;
+  organizationId: number | null; contacts: string | { id: number; name: string }[] | null;
 };
 
 const opportunityColumns = `
@@ -99,7 +103,11 @@ const opportunityColumns = `
   ls.value AS "leadStatus", lsr.value AS "leadStatusReason", l.record_state AS "leadRecordState",
   h.id AS "historyId", h.client_name AS "historyName", NULLIF(CONCAT(ho.first_name, ' ', ho.last_name), ' ') AS "historyOwnerName",
   hs.value AS "historyStatus", hsr.value AS "historyStatusReason", h.record_state AS "historyRecordState",
-  (SELECT COALESCE(json_agg(DISTINCT ol.source), '[]'::json) FROM opportunity_listings ol WHERE ol.opportunity_id = o.id) AS sources`;
+  (SELECT COALESCE(json_agg(DISTINCT ol.source), '[]'::json) FROM opportunity_listings ol WHERE ol.opportunity_id = o.id) AS sources,
+  o.lead_type_id AS "leadSourceId", lsrc.value AS "leadSource", o.bd_action_id AS "bdActionId", oba.value AS "bdAction",
+  o.client_response_id AS "clientResponseId", ocr.value AS "clientResponse", o.note, NULLIF(CONCAT(ab.first_name, ' ', ab.last_name), ' ') AS "addedByName", o.organization_id AS "organizationId",
+  (SELECT COALESCE(json_agg(json_build_object('id', pp.id, 'name', pp.name) ORDER BY ops.position, pp.name), '[]'::json)
+     FROM opportunity_persons ops JOIN persons pp ON pp.id = ops.person_id WHERE ops.opportunity_id = o.id) AS contacts`;
 
 const opportunityJoins = `
   FROM opportunities o
@@ -112,7 +120,11 @@ const opportunityJoins = `
   LEFT JOIN leads h ON h.id = o.matched_lead_id
   LEFT JOIN users ho ON ho.id = h.owner_id
   LEFT JOIN list_values hs ON hs.id = h.status_id
-  LEFT JOIN list_values hsr ON hsr.id = h.status_reason_id`;
+  LEFT JOIN list_values hsr ON hsr.id = h.status_reason_id
+  LEFT JOIN list_values lsrc ON lsrc.id = o.lead_type_id
+  LEFT JOIN list_values oba ON oba.id = o.bd_action_id
+  LEFT JOIN list_values ocr ON ocr.id = o.client_response_id
+  LEFT JOIN users ab ON ab.id = o.added_by`;
 
 const sourceLabel = (source: string) => jobSourceLabels[source as JobSourceId] ?? source;
 
@@ -135,6 +147,12 @@ const toOpportunity = (row: OpportunityRow, listings: OpportunityListing[]): Opp
     decidedByName: row.decidedByName, decidedAt: fromSqlDateTime(row.decidedAt),
     listings,
     tracker: trackerCard(trackerDraft(row.draft)),
+    leadSourceId: row.leadSourceId === null ? null : Number(row.leadSourceId), leadSource: row.leadSource,
+    bdActionId: row.bdActionId === null ? null : Number(row.bdActionId), bdAction: row.bdAction,
+    clientResponseId: row.clientResponseId === null ? null : Number(row.clientResponseId), clientResponse: row.clientResponse,
+    note: row.note ?? "", addedByName: row.addedByName?.trim() || null,
+    organizationId: row.organizationId === null ? null : Number(row.organizationId),
+    contacts: ((typeof row.contacts === "string" ? JSON.parse(row.contacts) : row.contacts) ?? []).map((item: { id: number; name: string }) => ({ id: Number(item.id), name: item.name })),
   };
 };
 
@@ -164,9 +182,9 @@ export async function listOpportunities(filter: { status: OpportunityStatus; pag
   const clauses = ["o.status = ?"];
   const params: unknown[] = [filter.status];
   if (filter.search) {
-    clauses.push("(LOWER(o.company_name) LIKE ? OR LOWER(o.latest_title) LIKE ? OR LOWER(o.location) LIKE ? OR LOWER(COALESCE(o.draft->'lead'->>'executive', '')) LIKE ?)");
+    clauses.push("(LOWER(o.company_name) LIKE ? OR LOWER(o.latest_title) LIKE ? OR LOWER(o.location) LIKE ? OR LOWER(COALESCE(o.draft->'lead'->>'executive', '')) LIKE ? OR LOWER(o.note) LIKE ?)");
     const like = `%${filter.search.toLowerCase()}%`;
-    params.push(like, like, like, like);
+    params.push(like, like, like, like, like);
   }
   const where = `WHERE ${clauses.join(" AND ")}`;
   const order = filter.status === "new" ? "o.last_seen_at DESC, o.listings_count DESC, o.id DESC" : "o.decided_at DESC NULLS LAST, o.last_seen_at DESC, o.id DESC";
@@ -186,6 +204,93 @@ export async function getOpportunity(id: number, db: Queryable = getDatabasePool
   if (!row) return null;
   const listings = await listingsFor([id], db);
   return toOpportunity(row, listings.get(id) ?? []);
+}
+
+/** The list values of a lead's fields must be of their lists. */
+async function checkLeadEntry(db: Queryable, input: LeadEntryInput): Promise<void> {
+  await assertListValue(db, "lead_type", input.leadSourceId, { required: true, label: "Lead source" });
+  await assertListValue(db, "bd_action", input.bdActionId, { label: "BD action" });
+  await assertListValue(db, "client_response", input.clientResponseId, { label: "Client response" });
+  // The company record must exist and the contacts must be its own (as in Add deal: a contact belongs to a company).
+  if (input.organizationId) {
+    const { rows } = await db.query("SELECT name FROM organizations WHERE id = ?", [input.organizationId]);
+    const organization = (rows as { name: string }[])[0];
+    if (!organization) throw new HttpError(400, "That company no longer exists.");
+    input.companyName = organization.name;
+  }
+  const personIds = input.personIds ?? [];
+  if (personIds.length) {
+    const { rows } = await db.query("SELECT id FROM persons WHERE id = ANY(?) AND organization_id = ?", [personIds, input.organizationId]);
+    if ((rows as unknown[]).length !== personIds.length) throw new HttpError(400, "Every contact must be a contact of the company.");
+  }
+}
+
+async function saveLeadContacts(db: Queryable, opportunityId: number, personIds: number[]): Promise<void> {
+  await db.query("DELETE FROM opportunity_persons WHERE opportunity_id = ?", [opportunityId]);
+  for (const [position, personId] of personIds.entries()) {
+    await db.query("INSERT INTO opportunity_persons (opportunity_id, person_id, position) VALUES (?, ?, ?)", [opportunityId, personId, position]);
+  }
+}
+
+/**
+ * A lead added by hand (request of November 19, 2026): it goes to the inbox like a card the searches found. A company that is
+ * already a lead in the inbox, or a live deal, is refused with its name, so it is not added twice.
+ */
+export async function createManualOpportunity(input: LeadEntryInput, actor: UserAccount): Promise<Opportunity> {
+  return withTransaction(async (connection) => {
+    await checkLeadEntry(connection, input);
+    const key = normalizeCompanyName(input.companyName);
+    // A company picked from Contacts that already has a live deal is that deal's: the check below names it.
+    if (!key) throw new HttpError(400, "Enter the company's name.");
+    const { rows: existing } = await connection.query("SELECT id, company_name AS \"companyName\", status FROM opportunities WHERE company_key = ?", [key]);
+    const same = (existing as { id: number; companyName: string; status: OpportunityStatus }[])[0];
+    if (same) throw new HttpError(409, `${same.companyName} is already a lead (${same.status === "new" ? "in the inbox" : same.status === "not_relevant" ? "marked not relevant" : "converted to a deal"}).`);
+    const duplicate = await findDuplicateLead({ clientName: input.companyName, companyUrl: input.website, contactPhone: "", contactAltPhone: "", address: input.location, clientEmails: [] }, connection);
+    if (duplicate?.exact) throw new HttpError(409, `${duplicate.lead.clientName} is already a deal (owner ${duplicate.lead.ownerName}).`);
+    const now = toSqlDateTime(new Date());
+    const result = await connection.query(
+      `INSERT INTO opportunities (company_key, company_name, website, location, status, revived, listings_count, latest_title, first_seen_at, last_seen_at, lead_type_id, bd_action_id, client_response_id, note, added_by, organization_id)
+       VALUES (?, ?, ?, ?, 'new', FALSE, 0, '', ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+      [key, input.companyName, input.website, input.location, now, now, input.leadSourceId, input.bdActionId, input.clientResponseId, input.note, actor.id, input.organizationId ?? null],
+    );
+    const id = insertId(result);
+    await saveLeadContacts(connection, id, input.personIds ?? []);
+    const created = (await getOpportunity(id, connection))!;
+    await recordAudit(connection, {
+      actorId: actor.id, action: "opportunity.created", entityType: "opportunity", entityId: id, after: { companyName: created.companyName, leadSource: created.leadSource, bdAction: created.bdAction, clientResponse: created.clientResponse },
+      details: `${actor.name} added the lead ${created.companyName} by hand`,
+    });
+    return created;
+  });
+}
+
+/** Changes a lead's fields (name, website, location, Lead Source, BD action, Client response, note) while it is in the inbox or not relevant. */
+export async function updateOpportunityDetails(id: number, input: LeadEntryInput, actor: UserAccount): Promise<Opportunity> {
+  return withTransaction(async (connection) => {
+    const before = await getOpportunity(id, connection);
+    if (!before) throw new HttpError(404, "Lead not found.");
+    if (before.status !== "new" && before.status !== "not_relevant") throw new HttpError(409, `${before.companyName} is already a deal: change it on the deal.`);
+    await checkLeadEntry(connection, input);
+    await connection.query(
+      "UPDATE opportunities SET company_name = ?, website = ?, location = ?, lead_type_id = ?, bd_action_id = ?, client_response_id = ?, note = ?, organization_id = ? WHERE id = ?",
+      [input.companyName, input.website, input.location, input.leadSourceId, input.bdActionId, input.clientResponseId, input.note, input.organizationId ?? null, id],
+    );
+    await saveLeadContacts(connection, id, input.personIds ?? []);
+    const after = (await getOpportunity(id, connection))!;
+    const fields = ["companyName", "website", "location", "leadSource", "bdAction", "clientResponse", "note"] as const;
+    const changed: string[] = fields.filter((field) => before[field] !== after[field]);
+    const names = (item: Opportunity) => item.contacts.map((contact) => contact.name).join(", ");
+    if (names(before) !== names(after)) changed.push("contacts");
+    const valueOf = (item: Opportunity, field: string) => (field === "contacts" ? names(item) : item[field as (typeof fields)[number]]);
+    if (changed.length) {
+      await recordAudit(connection, {
+        actorId: actor.id, action: "opportunity.updated", entityType: "opportunity", entityId: id,
+        before: Object.fromEntries(changed.map((field) => [field, valueOf(before, field)])), after: Object.fromEntries(changed.map((field) => [field, valueOf(after, field)])),
+        details: `${actor.name} changed the lead ${after.companyName}: ${changed.join(", ")}`,
+      });
+    }
+    return after;
+  });
 }
 
 export async function countNewOpportunities(db: Queryable = getDatabasePool()): Promise<number> {

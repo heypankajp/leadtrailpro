@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { asString, handleRouteError } from "@/lib/http";
-import { listOpportunities } from "@/features/opportunities/repository";
-import { opportunityStatuses, type OpportunityStatus } from "@/features/opportunities/model";
+import { asString, handleRouteError, jsonError, readJsonBody, requireSameOrigin } from "@/lib/http";
+import { createManualOpportunity, listOpportunities } from "@/features/opportunities/repository";
+import { opportunityStatuses, parseLeadEntry, type OpportunityStatus } from "@/features/opportunities/model";
 import { requirePrivilege, requireUser } from "@/features/users/session";
 
 /** The pool (OPP-02, OPP-11): one card per company with its listings, by status. */
@@ -17,5 +17,19 @@ export async function GET(request: Request) {
     return NextResponse.json(await listOpportunities({ status: status as OpportunityStatus, page, pageSize, search: asString(params.get("search"), 120) }));
   } catch (error) {
     return handleRouteError(error, "List leads");
+  }
+}
+
+/** A lead added by hand (request of November 19, 2026): `{ companyName, website, location, leadSourceId, bdActionId, clientResponseId, note }`. */
+export async function POST(request: Request) {
+  try {
+    requireSameOrigin(request);
+    const user = await requireUser();
+    requirePrivilege(user, "create_leads", "You do not have permission to add leads.");
+    const { input, errors } = parseLeadEntry(await readJsonBody(request));
+    if (errors.length) return jsonError(400, errors.join(" "));
+    return NextResponse.json({ opportunity: await createManualOpportunity(input, user) }, { status: 201 });
+  } catch (error) {
+    return handleRouteError(error, "Add lead");
   }
 }

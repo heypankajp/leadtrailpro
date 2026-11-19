@@ -21,16 +21,21 @@ describe("To Do lists (TODO-*)", () => {
   });
   after(async () => { await driver?.quit(); });
 
-  uiTest("a deal is put on To be visited from its page and the timeline records it", async () => {
+  // The deal page has no To Do list control since November 19, 2026: a deal is put on a list from the Pipeline list.
+  uiTest("a deal is put on To be visited from the Pipeline list", async () => {
     await addLead(page, { name, executive: "Priya Nair" });
     await page.toast(`${name} added to the pipeline`);
-    const select = await page.wait(By.css('select[aria-label="To Do list"]'));
-    assert.equal(await page.selectedText(select), "Not on a list");
-    await page.setValue(select, "To be visited");
-    await page.toast("Moved to To Do: To be visited");
-    await page.tab("Timeline");
-    await page.wait(By.xpath('//article[contains(@class,"timeline-entry")]//strong[normalize-space()="To Do: added to To be visited"]'));
     await page.closeDialog();
+    await page.deals("all");
+    await (await page.wait(By.css('input[aria-label="Search deals"]'))).sendKeys(name);
+    await page.waitLeadRow(name);
+    await page.click(By.css(`input[aria-label=${JSON.stringify(`Select ${name}`)}]`), { global: true });
+    await page.clickButton("Move to To Do", { global: true });
+    await page.dialogTitle("Move deal to a To Do list");
+    await page.setValue(await page.wait(By.css('section[role="dialog"] select[aria-label="To Do list"]')), "To be visited");
+    await page.clickButton("Move deals");
+    await page.toast("1 deal moved to To Do: To be visited");
+    assert.match(await (await page.wait(badge(name))).getText(), /^To Do: To be visited/);
   });
 
   uiTest("the To Do page lists it under its list, with the count on the tab and in the sidebar", async () => {

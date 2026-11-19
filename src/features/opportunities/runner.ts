@@ -93,8 +93,10 @@ async function applyGroup(group: CompanyGroup, searchIds: Map<string, number>, e
   let opportunityId = existing?.id ?? null;
   if (opportunityId === null) {
     const { rows } = await db.query(
-      `INSERT INTO opportunities (company_key, company_name, website, location, status, lead_id, matched_lead_id, revived, listings_count, latest_title, first_seen_at, last_seen_at)
-       VALUES (?, ?, '', ?, ?, ?, ?, FALSE, 0, '', ?, ?) RETURNING id`,
+      // A company the job searches found: its Lead Source is the lead generation tool (Deal Source "Lead Gen Tool", migration 38).
+      `INSERT INTO opportunities (company_key, company_name, website, location, status, lead_id, matched_lead_id, revived, listings_count, latest_title, first_seen_at, last_seen_at, lead_type_id)
+       VALUES (?, ?, '', ?, ?, ?, ?, FALSE, 0, '', ?, ?,
+         (SELECT v.id FROM list_values v WHERE v.list_key = 'lead_type' AND (v.code = 'lead_gen_tool' OR LOWER(v.value) = 'lead gen tool') ORDER BY v.id LIMIT 1)) RETURNING id`,
       [group.key, group.company.slice(0, 200), group.location.slice(0, 160), decision.action === "attach" ? "attached" : "new", leadId, decision.action === "pool" ? decision.matchedLeadId : null, nowSql, nowSql],
     );
     opportunityId = Number((rows as { id: number }[])[0].id);

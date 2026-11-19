@@ -25,8 +25,9 @@ export type LeadInput = {
   leadTypeId: number;
   statusId: number;
   statusReasonId: number | null;
-  bdActionId: number | null;
-  clientResponseId: number | null;
+  /** No longer on the deal screens (request of November 19, 2026): a lead carries them; the API still takes them. */
+  bdActionId?: number | null;
+  clientResponseId?: number | null;
   leadCategoryId: number | null;
   companySizeId: number | null;
   cityId: number | null;
@@ -44,6 +45,9 @@ export { dealCurrency, formatDealValue, maxDealValue, parseDealValue } from "./d
 
 export type LeadSummary = LeadInput & {
   id: number;
+  /** Still stored on a deal (history, reminder rules), though the deal screens no longer show them. */
+  bdActionId: number | null;
+  clientResponseId: number | null;
   /** The organization and the person the deal belongs to (SPEC §10.14); the deal carries a copy of their fields. */
   organizationId: number | null;
   personId: number | null;
@@ -347,4 +351,12 @@ export function parseLeadFilters(params: URLSearchParams): LeadFilters {
     page: Number.isInteger(page) && page > 0 ? page : 1,
     pageSize: Number.isInteger(pageSize) && pageSize > 0 ? Math.min(pageSize, 200) : 50,
   };
+}
+
+/**
+ * BD action and Client response written in a deal's Comments (request of November 19, 2026): "BD Action : <value>" and on the
+ * next line "Client response : <value>", as the tracker import and the migration of existing deals write them.
+ */
+export function bdCommentLines(action: string | null | undefined, response: string | null | undefined): string {
+  return [action ? `BD Action : ${action}` : "", response ? `Client response : ${response}` : ""].filter(Boolean).join("\n");
 }

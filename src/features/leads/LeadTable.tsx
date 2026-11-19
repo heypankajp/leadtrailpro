@@ -43,7 +43,7 @@ export default function LeadTable({ leads, selected, today, view, canSelect, can
             <th>CLIENT</th>
             <th>STATUS</th>
             <th>STAGE</th>
-            <th>LAST BD ACTION</th>
+            <th>LAST ACTIVITY</th>
             <th>{view === "archive" ? "REASON" : "FOLLOW-UP"}</th>
             {view === "archive" && <th>NOTES</th>}
             <th>FIRST CONTACT</th>
@@ -70,7 +70,7 @@ export default function LeadTable({ leads, selected, today, view, canSelect, can
                 </td>
                 <td><StatusPill status={lead.statusLabel} code={lead.statusCode} /></td>
                 <td><span className="muted-cell stage-cell">{lead.stage ?? "—"}</span></td>
-                <td><span className="action-cell">{lead.bdAction ?? "—"}</span><small className="activity-time">{relativeTime(lead.lastActivityAt)}</small></td>
+                <td><span className="action-cell">{relativeTime(lead.lastActivityAt)}</span></td>
                 <td>
                   {/* Review of November 18, 2026: the archive shows the Archival reason and the notes typed with it. */}
                   {view === "archive"

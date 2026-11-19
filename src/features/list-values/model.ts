@@ -102,3 +102,12 @@ export function isClosedStatus(statusCode: string | null | undefined): boolean {
 export function statusLabel(status: string, reason: string | null | undefined): string {
   return reason ? `${status} – ${reason}` : status;
 }
+
+/**
+ * The Deal Source of deals made from Lead Generation and the Leads inbox (request of November 19, 2026): "Lead Gen Tool"
+ * (migration 38), found by its code or, when an administrator added it by hand, by its name; null when it was switched off.
+ */
+export function leadGenToolSourceId(values: readonly { id: number; code: string; value: string; active: boolean }[] | undefined): number | null {
+  const found = values?.find((item) => item.code === "lead_gen_tool") ?? values?.find((item) => item.value.trim().toLowerCase() === "lead gen tool");
+  return found && found.active ? found.id : null;
+}

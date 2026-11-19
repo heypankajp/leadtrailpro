@@ -15,26 +15,24 @@ import { replyWaiting } from "@/features/gmail/watch-model";
 import { reasonListFor, type ListKey, type ListValue } from "@/features/list-values/model";
 import CollaborationTab from "@/features/messages/CollaborationTab";
 import NextStepDialog from "@/features/pipeline/NextStepDialog";
-import { stageChoices } from "@/features/pipeline/model";
 import StageBar from "@/features/pipeline/StageBar";
 import RichText from "@/features/shell/RichText";
 import RichTextArea from "@/features/shell/RichTextArea";
 import { useApp } from "@/features/shell/AppContext";
-import { Avatar, Dialog, EmptyState, ErrorText, Field, Loading, PromptDialog, StatusPill, Tabs } from "@/features/shell/components";
+import { Avatar, Dialog, EmptyState, ErrorText, Field, Loading, PromptDialog, StatusPill, Tabs, ConvertToClientDialog } from "@/features/shell/components";
 import { updateTask } from "@/features/tasks/client";
 import TaskFormDialog from "@/features/tasks/TaskFormDialog";
 import type { Task } from "@/features/tasks/model";
 import UserDirectoryDialog from "@/features/users/UserDirectoryDialog";
 import type { UserSummary } from "@/features/users/model";
 import ArchiveDialog from "./ArchiveDialog";
-import { attachmentUrl, fetchLead, logActivity, removeAttachment, reviewLead, setLeadState, setLeadTodo, transferLead, updateLead, uploadAttachment, type LeadDetail } from "./client";
+import { attachmentUrl, fetchLead, logActivity, removeAttachment, reviewLead, setLeadState, transferLead, updateLead, uploadAttachment, type LeadDetail } from "./client";
 import { activityIcons } from "@/features/tasks/ScheduleActivity";
 import LeadFormDialog from "./LeadFormDialog";
 import { activityLabels, formatDealValue, type LeadActivity, type LeadSummary, type LoggableActivityType } from "./model";
 
 type HistoryTab = "timeline" | "collaboration" | "emails" | "files" | "profiles" | "history";
 type TimelineFilter = "all" | "notes" | "activities" | "changes";
-type QuickChanges = { bdActionId?: number | null; clientResponseId?: number | null; statusReasonId?: number | null; stageId?: number | null };
 
 const activityIcon = (type: LeadActivity["type"]) => {
   switch (type) {
@@ -67,6 +65,7 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
   const [dialog, setDialog] = useState<
     | { kind: "transfer-pick" } | { kind: "transfer-reason"; user: UserSummary } | { kind: "archive" } | { kind: "restore" } | { kind: "review"; approve: boolean } | { kind: "task"; task?: Task }
     | { kind: "status-reason"; statusId: number; statusName: string; listKey: ListKey }
+    | { kind: "convert-client"; statusId: number }
     | null
   >(null);
 
@@ -96,6 +95,8 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
     const target = reference.listValues.status.find((status) => status.id === statusId);
     const listKey = reasonListFor(target?.code);
     if (target && listKey) { setDialog({ kind: "status-reason", statusId, statusName: target.value, listKey }); return; }
+    // Client asks first (request of November 19, 2026).
+    if (target?.code === "client" && lead.statusCode !== "client") { setDialog({ kind: "convert-client", statusId }); return; }
     try {
       await updateLead(lead.id, { statusId });
       await refresh("Status updated");
@@ -110,15 +111,6 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
       const result = await updateLead(lead.id, changes);
       await refresh(result.task ? `${message} · ${result.task.title} scheduled for ${result.task.dueAt ? result.task.dueAt.slice(0, 10) : "later"}` : message);
       if (prompt && !result.task) offerNextStep(prompt, result.lead);
-    } catch (caught) {
-      notify(errorMessage(caught), "error");
-    }
-  };
-
-  const changeTodo = async (listId: number | null) => {
-    try {
-      const result = await setLeadTodo(lead.id, listId);
-      await refresh(result.lead.todoList ? `Moved to To Do: ${result.lead.todoList}` : "Taken off the To Do list");
     } catch (caught) {
       notify(errorMessage(caught), "error");
     }
@@ -188,7 +180,8 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
               <label className={`status-pill status-${lead.statusCode} status-select-pill`}>
                 <i />
                 <select aria-label="Update deal status" value={lead.statusId} onChange={(event) => void changeStatus(Number(event.target.value))}>
-                  {reference.listValues.status.map((status) => <option key={status.id} value={status.id}>{status.value}</option>)}
+                  {/* Client is not offered here (request of November 19, 2026): a deal becomes a client through Convert to Client. */}
+                  {reference.listValues.status.filter((status) => status.code !== "client" || status.id === lead.statusId).map((status) => <option key={status.id} value={status.id}>{status.value}</option>)}
                 </select>
               </label>
             ) : <StatusPill status={lead.statusLabel} code={lead.statusCode} />}
@@ -208,7 +201,7 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
 
         <div className="deal-columns">
           <aside className="deal-side" aria-label="Deal details">
-            <SidePanels detail={detail} canEdit={canEdit} overdue={overdue} onQuickUpdate={quickUpdate} onTodo={changeTodo} />
+            <SidePanels detail={detail} overdue={overdue} />
           </aside>
 
           <div className="deal-main">
@@ -298,6 +291,13 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
       {dialog?.kind === "review" && (
         <PromptDialog title={dialog.approve ? `Approve ${lead.clientName}` : `Reject ${lead.clientName}`} eyebrow="QUEUED DEAL" label={dialog.approve ? "Comment (optional)" : "Reason"} required={!dialog.approve} danger={!dialog.approve} confirmLabel={dialog.approve ? "Approve" : "Reject"} onClose={() => setDialog(null)} onConfirm={async (comment) => { await reviewLead(lead.id, dialog.approve, comment); setDialog(null); await refresh(dialog.approve ? "Deal approved" : "Deal rejected"); }} />
       )}
+      {dialog?.kind === "convert-client" && (
+        <ConvertToClientDialog
+          dealName={lead.clientName}
+          onClose={() => setDialog(null)}
+          onConfirm={async () => { await updateLead(lead.id, { statusId: dialog.statusId, statusReasonId: null }); setDialog(null); await refresh(`${lead.clientName} is now a client`); }}
+        />
+      )}
       {dialog?.kind === "status-reason" && (
         <StatusReasonDialog
           leadName={lead.clientName}
@@ -365,50 +365,16 @@ export function SideRow({ label, wide, children }: { label: string; wide?: boole
 
 const missing = (text = "Not provided") => <span className="detail-missing">{text}</span>;
 
-/** The deal's details, in groups; the selects save at once. */
-function SidePanels({ detail, canEdit, overdue, onQuickUpdate, onTodo }: {
-  detail: LeadDetail; canEdit: boolean; overdue: boolean;
-  onQuickUpdate: (changes: QuickChanges, message: string, prompt?: string) => Promise<void>;
-  /** TODO-02: put the deal on a To Do list, move it, or take it off (null). */
-  onTodo: (listId: number | null) => Promise<void>;
-}) {
+/** The deal's details, in groups. */
+function SidePanels({ detail, overdue }: { detail: LeadDetail; overdue: boolean }) {
   const { reference, openContact } = useApp();
   const { lead } = detail;
   return (
     <>
       <SidePanel title="Summary" icon={<CircleDollarSign size={14} />}>
-        <SideRow label="Pipeline stage">
-          {canEdit && lead.recordState === "active" ? (
-            <select className="inline-select" aria-label="Stage" value={lead.stageId ?? ""} onChange={(event) => void onQuickUpdate({ stageId: event.target.value ? Number(event.target.value) : null }, "Stage updated", "You moved the deal to a new stage.")}>
-              {!lead.stageId && <option value="">Not set</option>}
-              {stageChoices(reference.listValues.stage, reference.pipelines).filter((item) => item.active || item.id === lead.stageId).map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
-            </select>
-          ) : <strong>{lead.stage ?? "Not set"}</strong>}
-        </SideRow>
-        <SideRow label="BD action">
-          {canEdit ? (
-            <select className="inline-select" aria-label="BD action" value={lead.bdActionId ?? ""} onChange={(event) => void onQuickUpdate({ bdActionId: event.target.value ? Number(event.target.value) : null }, "BD action updated", "You recorded a BD action.")}>
-              <option value="">Not set</option>
-              {reference.listValues.bd_action.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
-            </select>
-          ) : <strong>{lead.bdAction ?? "Not set"}</strong>}
-        </SideRow>
-        <SideRow label="Client response">
-          {canEdit ? (
-            <select className="inline-select" aria-label="Client response" value={lead.clientResponseId ?? ""} onChange={(event) => void onQuickUpdate({ clientResponseId: event.target.value ? Number(event.target.value) : null }, "Client response updated")}>
-              <option value="">Not set</option>
-              {reference.listValues.client_response.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
-            </select>
-          ) : <strong>{lead.clientResponse ?? "Not set"}</strong>}
-        </SideRow>
-        <SideRow label="To Do list">
-          {canEdit && (lead.recordState === "active" || lead.todoListId) ? (
-            <select className="inline-select" aria-label="To Do list" value={lead.todoListId ?? ""} onChange={(event) => void onTodo(event.target.value ? Number(event.target.value) : null)}>
-              <option value="">Not on a list</option>
-              {reference.listValues.todo_list.filter((item) => item.active || item.id === lead.todoListId).map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
-            </select>
-          ) : <strong>{lead.todoList ?? "Not on a list"}</strong>}
-        </SideRow>
+        {/* Request of November 19, 2026: Pipeline stage and To Do list are not in the Summary (the stage bar above moves the
+            deal; a card's menu and the list's bulk action put it on a To Do list). BD action and Client response are fields of a
+            lead; a deal keeps them in its Comments. */}
         <SideRow label="Next follow-up"><strong className={overdue ? "overdue" : lead.followUpDate === reference.today ? "due-today" : ""}>{formatDate(lead.followUpDate)}{overdue ? " · overdue" : ""}</strong></SideRow>
         {/* PD-11: both are optional and only take room once one of them is filled. */}
         {(lead.dealValue !== null && lead.dealValue !== undefined) && <SideRow label="Value"><strong>{formatDealValue(lead.dealValue)}</strong></SideRow>}

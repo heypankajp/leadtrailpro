@@ -7,6 +7,7 @@ import { useAsyncData } from "@/lib/useAsyncData";
 import { fetchLead, fetchLeads, updateLead } from "@/features/leads/client";
 import { createOrganization, createPerson, fetchOrganization, fetchOrganizations } from "@/features/contacts/client";
 import { contactKey, type OrganizationRow, type PersonRow } from "@/features/contacts/model";
+import { OrganizationFormDialog, PersonFormDialog } from "@/features/contacts/ContactFormDialogs";
 import SuggestInput from "@/features/shell/SuggestInput";
 import type { LeadSummary } from "@/features/leads/model";
 import { useApp } from "@/features/shell/AppContext";
@@ -202,13 +203,33 @@ export default function TaskFormDialog({ task, leadId, leadName, defaultAssignee
   const clearOrg = () => changeOrgName("");
   const orgPeople = org.id ? people : [];
   const orgExact = orgRows && orgRows.q === typedOrg ? orgRows.rows.find((row) => contactKey(row.name) === contactKey(typedOrg)) ?? null : null;
-  const orgCreate = typedOrg.length >= 2 && orgRows?.q === typedOrg && !orgExact ? { label: `Add '${typedOrg}' as new company`, onCreate: () => setOrg({ id: null, isNew: true }) } : null;
+  // "+ Add 'Acme' as new company" opens Add company with the name (request of November 19, 2026); the company saved there is linked.
+  const [addingOrg, setAddingOrg] = useState<string | null>(null);
+  const [addingPerson, setAddingPerson] = useState<string | null>(null);
+  const linkOrg = (id: number, name: string) => { setOrgName(name); setOrg({ id, isNew: false }); setChosen([]); setPersonName(""); };
+  const orgCreate = typedOrg.length >= 2 && orgRows?.q === typedOrg && !orgExact ? { label: `Add '${typedOrg}' as new company`, onCreate: () => setAddingOrg(typedOrg) } : null;
   const orgChosen = Boolean(org.id || org.isNew || orgName.trim());
   const typedPerson = personName.trim();
   const isChosen = (name: string) => chosen.some((item) => contactKey(item.name) === contactKey(name));
   const personExact = orgPeople.find((item) => contactKey(item.name) === contactKey(typedPerson)) ?? null;
   const addPerson = (item: { id: number | null; name: string }) => { if (!isChosen(item.name)) setChosen((current) => [...current, item]); setPersonName(""); };
-  const personCreate = typedPerson.length >= 2 && !personExact && !isChosen(typedPerson) ? { label: `Add '${typedPerson}' as new person`, onCreate: () => addPerson({ id: null, name: typedPerson }) } : null;
+  // A new person opens Add contact with the name, inside the company; the contact saved there is added (and listed from then on).
+  const linkPerson = (id: number, name: string) => {
+    addPerson({ id, name });
+    if (org.id) fetchOrganization(org.id).then((detail) => setPeople(detail.people)).catch(() => undefined);
+  };
+  const personCreate = typedPerson.length >= 2 && !personExact && !isChosen(typedPerson) ? { label: `Add '${typedPerson}' as new person`, onCreate: () => setAddingPerson(typedPerson) } : null;
+  /** A comma after a name adds it, so the next one can be typed: a contact of the company, or a new one through Add contact. */
+  const typePerson = (value: string) => {
+    if (!value.includes(",")) { setPersonName(value); return; }
+    const [name, ...rest] = value.split(",");
+    const typed = name.trim();
+    setPersonName(rest.join(",").trimStart());
+    if (!typed || isChosen(typed)) return;
+    const known = orgPeople.find((item) => contactKey(item.name) === contactKey(typed));
+    if (known) addPerson({ id: known.id, name: known.name });
+    else if (orgChosen) setAddingPerson(typed);
+  };
 
   /**
    * The organization and person ids to save: what was picked, an exact name typed, or records created now (the
@@ -336,7 +357,7 @@ export default function TaskFormDialog({ task, leadId, leadName, defaultAssignee
                 </ul>
               )}
               <SuggestInput
-                aria-label="Person" value={personName} onChange={setPersonName}
+                aria-label="Person" value={personName} onChange={typePerson}
                 suggestions={orgPeople.filter((item) => !isChosen(item.name) && (!typedPerson || contactKey(item.name).includes(contactKey(typedPerson)))).map((item) => ({ key: String(item.id), label: item.name, detail: item.email ?? undefined, icon: <UserRound size={14} /> }))}
                 onPick={(suggestion) => addPerson({ id: Number(suggestion.key), name: suggestion.label })}
                 minChars={0} disabled={!orgChosen}
@@ -451,6 +472,23 @@ export default function TaskFormDialog({ task, leadId, leadName, defaultAssignee
           draft={{ title: title || autoTitle(type), icon: activityIcons[type], start, end }}
         />
       </form>
+      {addingOrg !== null && (
+        <OrganizationFormDialog
+          initialName={addingOrg}
+          onUseExisting={(found) => { setAddingOrg(null); linkOrg(found.id, found.name); }}
+          onClose={() => setAddingOrg(null)}
+          onSaved={(saved) => { setAddingOrg(null); linkOrg(saved.id, saved.name); }}
+        />
+      )}
+      {addingPerson !== null && (
+        <PersonFormDialog
+          organizationName={orgName.trim()}
+          initialName={addingPerson}
+          onUseExisting={(found) => { setAddingPerson(null); linkPerson(found.id, found.name); }}
+          onClose={() => setAddingPerson(null)}
+          onSaved={(saved) => { setAddingPerson(null); linkPerson(saved.id, saved.name); }}
+        />
+      )}
     </Dialog>
   );
 }

@@ -71,6 +71,45 @@ describe("Leads inbox", () => {
     await page.closeDialog();
   });
 
+  uiTest("a lead added by hand carries its source, BD action and client response into the deal (request of November 19, 2026)", async () => {
+    const manual = `Hand Added Lead ${runId}`;
+    await page.nav("Leads");
+    await page.clickButton("Add lead", { global: true });
+    await page.dialogTitle("Add lead");
+    // Company and contacts as in Add deal: "+ Add ... as new company" opens Add company with the name; a new contact opens
+    // Add contact. The second contact is typed after a comma.
+    const pickOption = (label) => page.click(By.xpath(`//ul[contains(@class,"suggest-list")]//li[@role="option"][contains(normalize-space(.), ${JSON.stringify(label)})]`), { global: true });
+    await page.fill("Company", manual);
+    await pickOption(`Add '${manual}' as new company`);
+    await page.dialogTitle("Add company");
+    assert.equal(await (await page.control("Name")).getAttribute("value"), manual);
+    await page.clickButton("Save company");
+    await page.dialogTitle("Add lead");
+    await page.fillNamed("Contact", "Nora Hand");
+    await pickOption("Add 'Nora Hand' as new contact");
+    await page.dialogTitle("Add contact");
+    await page.clickButton("Save contact");
+    await page.dialogTitle("Add lead");
+    await page.fillNamed("Contact", "Omar Hand,");
+    await page.dialogTitle("Add contact");
+    await page.clickButton("Save contact");
+    await page.dialogTitle("Add lead");
+    await page.setValue(await page.control("Lead source"), "Referral");
+    await page.setValue(await page.control("BD action"), "First Call");
+    await page.setValue(await page.control("Client response"), "Approach Later");
+    await page.clickButton("Add lead");
+    await page.toast(`${manual} added to the leads inbox`);
+    const row = await page.wait(cardRow(manual));
+    assert.match(await row.getText(), /Lead source: Referral/);
+    assert.match(await row.getText(), /First Call/);
+    assert.match(await row.getText(), /Nora Hand, Omar Hand/);
+    await row.findElement(By.xpath('.//button[contains(normalize-space(.), "Convert to deal")]')).click();
+    await page.dialogTitle("Add deal");
+    assert.equal(await page.selectedText(await page.control("Deal source")), "Referral");
+    assert.match(await (await page.control("Comments")).getAttribute("value"), /BD Action : First Call\nClient response : Approach Later\nOther contacts: Omar Hand/);
+    await page.closeDialog();
+  });
+
   uiTest("a card can be marked not relevant and brought back", async () => {
     await page.nav("Leads");
     await page.heading("Leads");

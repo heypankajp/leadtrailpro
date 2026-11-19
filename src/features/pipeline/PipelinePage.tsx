@@ -12,7 +12,8 @@ import { StatusReasonDialog } from "@/features/leads/DealPage";
 import QuickFilterMenu from "@/features/leads/QuickFilterMenu";
 import type { QuickFilterKey } from "@/features/leads/quick-filters";
 import { useApp } from "@/features/shell/AppContext";
-import { EmptyState, ErrorText, Loading, StatusPill } from "@/features/shell/components";
+import { ConvertToClientDialog, EmptyState, ErrorText, Loading, StatusPill } from "@/features/shell/components";
+import StatusFilter from "@/features/shell/StatusFilter";
 import { fetchPipeline, moveLeadToStage, type PipelineQuery } from "./client";
 import CardActions from "./CardActions";
 import NextStepDialog, { type NextStepLead } from "./NextStepDialog";
@@ -134,11 +135,13 @@ export default function PipelinePage({ groupBy = "stage" }: { groupBy?: Pipeline
   };
 
   /** PD-24: a drop on the board by status. Lost and Disqualified ask for their reason first (LEAD-06). */
-  const changeStatus = async (card: PipelineCard, statusId: number, statusReasonId: number | null = null, undo = false) => {
+  const changeStatus = async (card: PipelineCard, statusId: number, statusReasonId: number | null = null, undo = false, confirmed = false) => {
     if (!canMove(card) || (card.statusId === statusId && card.statusReasonId === statusReasonId)) return;
     const target = reference.listValues.status.find((status) => status.id === statusId);
     const listKey = reasonListFor(target?.code);
     if (listKey && !statusReasonId) { setReasonFor({ card, statusId, statusName: target?.value ?? "", listKey }); return; }
+    // A drop on Client asks first (request of November 19, 2026); Undo does not.
+    if (target?.code === "client" && !undo && !confirmed) { setConfirmClient({ card, statusId }); return; }
     const from = { statusId: card.statusId, statusReasonId: card.statusReasonId, statusCode: card.statusCode, statusLabel: card.statusLabel };
     applyLocally(card.id, statusId, { statusId, statusReasonId, statusCode: target?.code ?? card.statusCode, statusLabel: target?.value ?? card.statusLabel });
     try {
@@ -154,6 +157,8 @@ export default function PipelinePage({ groupBy = "stage" }: { groupBy?: Pipeline
 
   /** Review of November 18, 2026: Convert to Client from the card menu. The deal leaves the board and is listed under Clients. */
   const clientStatus = reference.listValues.status.find((status) => status.code === "client") ?? null;
+  // Convert to Client and a drop on Client ask "Do you want to convert this deal to client?" first (request of November 19, 2026).
+  const [confirmClient, setConfirmClient] = useState<{ card: PipelineCard; statusId: number | null } | null>(null);
   const convertToClient = async (card: PipelineCard) => {
     if (!clientStatus) return;
     try {
@@ -241,7 +246,7 @@ export default function PipelinePage({ groupBy = "stage" }: { groupBy?: Pipeline
           </div>
           {byStatus
             ? <label className="select-filter"><Filter size={15} />{options(pipelineStages, "All stages", filters.stageId, "stageId")}</label>
-            : <label className="select-filter"><Filter size={15} />{options(boardStatuses, "All statuses", filters.statusId, "statusId")}</label>}
+            : <StatusFilter statuses={boardStatuses} value={filters.statusId} onChange={(statusId) => update({ statusId })} />}
           <button className={`button button-outline button-small ${showFilters || activeFilterCount ? "is-active" : ""}`} onClick={() => setShowFilters((open) => !open)}>
             <Filter size={14} /> Filters{activeFilterCount ? ` (${activeFilterCount})` : ""}
           </button>
@@ -354,7 +359,7 @@ export default function PipelinePage({ groupBy = "stage" }: { groupBy?: Pipeline
                               stages={(byStatus ? pipelineStages : columns.filter((item) => item.active || item.id === card.stageId)).map((item) => ({ id: item.id, value: item.value }))}
                               canEdit={canMove(card)}
                               onMove={(stageId) => void move(card, stageId)}
-                              onConvert={clientStatus && card.statusCode !== "client" ? () => void convertToClient(card) : null}
+                              onConvert={clientStatus && card.statusCode !== "client" ? () => setConfirmClient({ card, statusId: null }) : null}
                               onChanged={(message) => { notify(message); bumpData(); }}
                             />
                           )}
@@ -365,8 +370,8 @@ export default function PipelinePage({ groupBy = "stage" }: { groupBy?: Pipeline
                           {card.dealValue !== null && <span className="deal-value" title="Deal value">{formatDealValue(card.dealValue)}</span>}
                         </div>
                         {byStatus
-                          ? <small className="pipeline-action">{stageName(card.stageId)}{card.bdAction ? ` · ${card.bdAction}` : ""}</small>
-                          : card.bdAction && <small className="pipeline-action">{card.bdAction} · {relativeTime(card.lastActivityAt)}</small>}
+                          ? <small className="pipeline-action">{stageName(card.stageId)} · {relativeTime(card.lastActivityAt)}</small>
+                          : <small className="pipeline-action">Last activity {relativeTime(card.lastActivityAt)}</small>}
                         <div className="pipeline-card-foot">
                           {next
                             ? <span className={`pipeline-next ${overdue ? "overdue" : ""}`} title={next.title ?? undefined}><Clock3 size={12} /> {next.kind === "task" ? "Task" : "Follow-up"} {next.date ? formatShortDate(next.date) : "no date"}</span>
@@ -396,6 +401,17 @@ export default function PipelinePage({ groupBy = "stage" }: { groupBy?: Pipeline
       </section>
       {nextStep && (
         <NextStepDialog lead={nextStep} reason={`You moved ${nextStep.clientName} to ${nextStep.stage}.`} onClose={() => setNextStep(null)} onSaved={(message) => { setNextStep(null); notify(message); bumpData(); }} />
+      )}
+      {confirmClient && (
+        <ConvertToClientDialog
+          dealName={confirmClient.card.clientName}
+          onClose={() => setConfirmClient(null)}
+          onConfirm={async () => {
+            const { card, statusId } = confirmClient;
+            setConfirmClient(null);
+            if (statusId === null) await convertToClient(card); else await changeStatus(card, statusId, null, false, true);
+          }}
+        />
       )}
       {reasonFor && (
         <StatusReasonDialog

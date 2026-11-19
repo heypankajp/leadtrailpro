@@ -144,6 +144,18 @@ function mostFrequent(values) {
   return best;
 }
 
+/**
+ * BD action and Client response are no longer fields of a deal (request of November 19, 2026): the import writes them
+ * in its Comments, "BD Action : <value>" and on the next line "Client response : <value>". Earlier such lines are
+ * replaced, so a later import keeps one pair, the latest. Exported for the tests.
+ */
+export function withBdLines(comments, action, response) {
+  const kept = String(comments ?? "").split("\n").filter((line) => !/^\s*(BD Action|Client response)\s*:/i.test(line));
+  while (kept.length && !kept[kept.length - 1].trim()) kept.pop();
+  const lines = [...kept, action ? `BD Action : ${action}` : "", response ? `Client response : ${response}` : ""].filter((line, index) => line || index < kept.length);
+  return lines.join("\n");
+}
+
 /** Rows of one company → the lead's fields (latest non-empty value per field) plus the activities to write. */
 export function buildLead(rows, sheet) {
   rows.sort((a, b) => (a.date ?? "9999").localeCompare(b.date ?? "9999") || a.row - b.row);
@@ -575,8 +587,8 @@ export async function runTrackerImport(options) {
          first_contact_date, follow_up_date, contract_signed_date, record_state, state_reason, state_changed_by, state_changed_at, last_activity_at, created_at)
        VALUES (?, ?, ?, ?, NULL, ?, ?, NULL, NULL, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
       [
-        ownerId, ownerId, await ensureValue("lead_type", leadType), statusIdByCode[statusCode], actionId, await ensureValue("client_response", lead.response), cityId, stageIdForAction(actionId),
-        truncate(lead.name, 200), lead.address, lead.comments || null, lead.executive, lead.phone, lead.altPhone, lead.contactRemark, JSON.stringify(lead.emails), lead.industry, lead.positions || null,
+        ownerId, ownerId, await ensureValue("lead_type", leadType), statusIdByCode[statusCode], null, null, cityId, stageIdForAction(actionId),
+        truncate(lead.name, 200), lead.address, withBdLines(lead.comments, actionName, lead.response) || null, lead.executive, lead.phone, lead.altPhone, lead.contactRemark, JSON.stringify(lead.emails), lead.industry, lead.positions || null,
         firstContact, lead.followUp, lead.contract,
         insertOptions.archived ? "archived" : "active", insertOptions.archived ? insertOptions.reason : null, insertOptions.archived ? actor.id : null, insertOptions.archived ? nowSql : null,
         `${lead.lastActivity ?? firstContact} 12:00:00`, `${firstContact} 09:00:00`,
@@ -620,13 +632,11 @@ export async function runTrackerImport(options) {
     const actionName = lead.action ? canonicalBdAction(lead.action.name, keepActionNames) : null;
     if (actionName) {
       const actionId = await ensureValue("bd_action", actionName);
-      change("bd_action_id", "BD action", existing.bdActionId, actionId);
       // PIPE-03: an action from a later stage moves the lead forward, never back.
       const target = listItem("stage", stageIdForAction(actionId));
       const current = existing.stageId ? listItem("stage", Number(existing.stageId)) : null;
       if (target && (!current || Number(target.sortOrder) > Number(current.sortOrder))) change("stage_id", "stage", existing.stageId, target.id);
     }
-    if (lead.response) change("client_response_id", "client response", existing.clientResponseId, await ensureValue("client_response", lead.response));
     if (lead.city) change("city_id", "city", existing.cityId, await ensureValue("city", lead.city));
     if (lead.type) change("lead_type_id", "deal source", existing.leadTypeId, await ensureValue("lead_type", lead.type));
     const sheetOwner = lead.manager ? await ownerFor(lead.manager) : null;
@@ -644,7 +654,9 @@ export async function runTrackerImport(options) {
     const positions = [...new Set([...existingPositions, ...lead.positions.split(/\s*;\s*/).filter(Boolean)])].join("; ");
     if (positions && positions !== existingPositions.join("; ")) change("positions", "positions", existing.positions, positions);
     const newComments = lead.commentLines.filter((line) => !(existing.comments ?? "").includes(line));
-    if (newComments.length) change("comments", "comments", existing.comments, [existing.comments, ...newComments].filter(Boolean).join("\n"));
+    const commentsBase = newComments.length ? [existing.comments, ...newComments].filter(Boolean).join("\n") : existing.comments ?? "";
+    const comments = actionName || lead.response ? withBdLines(commentsBase, actionName, lead.response) : commentsBase;
+    if (comments !== (existing.comments ?? "")) change("comments", "comments", existing.comments, comments || null);
     if (lead.firstContact && (!existing.firstContactDate || lead.firstContact < existing.firstContactDate)) change("first_contact_date", "first contact date", existing.firstContactDate, lead.firstContact);
     if (lead.followUp) change("follow_up_date", "follow-up date", existing.followUpDate, lead.followUp);
     if (lead.contract) change("contract_signed_date", "contract signed date", existing.contractSignedDate, lead.contract);
@@ -704,10 +716,11 @@ export async function runTrackerImport(options) {
     const actionName = lead.action ? canonicalBdAction(lead.action.name, keepActionNames) : null;
     if (lead.action && actionName !== lead.action.name) decision(`BD action "${lead.action.name}" imported as "${actionName}"`);
     // The list values the assign form will pick are created now, so they exist whenever the card is assigned.
-    await ensureValue("lead_type", leadType);
+    const cardTypeId = await ensureValue("lead_type", leadType); // the lead's Lead Source
     await ensureValue("city", lead.city);
-    await ensureValue("bd_action", actionName);
-    await ensureValue("client_response", lead.response);
+    // The lead's BD action and client response (fields of the lead since November 19, 2026).
+    const cardActionId = await ensureValue("bd_action", actionName);
+    const cardResponseId = await ensureValue("client_response", lead.response);
     const entries = [];
     for (const row of lead.rows) {
       const { userId, ...entry } = await rowActivity(row, firstContact);
@@ -727,15 +740,15 @@ export async function runTrackerImport(options) {
     const lastSeen = `${draft.lead.lastActivity} 12:00:00`;
     if (card) {
       await query(
-        "UPDATE opportunities SET company_name = ?, location = CASE WHEN location = '' THEN ? ELSE location END, draft = ?, first_seen_at = LEAST(first_seen_at, ?::timestamp), last_seen_at = GREATEST(last_seen_at, ?::timestamp) WHERE id = ?",
-        [name, truncate(lead.city, 160), JSON.stringify(draft), firstSeen, lastSeen, card.id],
+        "UPDATE opportunities SET company_name = ?, location = CASE WHEN location = '' THEN ? ELSE location END, draft = ?, first_seen_at = LEAST(first_seen_at, ?::timestamp), last_seen_at = GREATEST(last_seen_at, ?::timestamp), bd_action_id = COALESCE(?, bd_action_id), client_response_id = COALESCE(?, client_response_id), lead_type_id = COALESCE(?, lead_type_id) WHERE id = ?",
+        [name, truncate(lead.city, 160), JSON.stringify(draft), firstSeen, lastSeen, cardActionId, cardResponseId, cardTypeId, card.id],
       );
       count(card.draft ? "leads inbox cards updated" : "leads inbox cards given the sheet's rows (company also found by the job searches)");
       card.draft = draft;
     } else {
       const { rows: [created] } = await query(
-        "INSERT INTO opportunities (company_key, company_name, website, location, status, lead_id, matched_lead_id, revived, listings_count, latest_title, first_seen_at, last_seen_at, draft) VALUES (?, ?, '', ?, 'new', NULL, NULL, FALSE, 0, '', ?, ?, ?) RETURNING id",
-        [poolKey, name, truncate(lead.city, 160), firstSeen, lastSeen, JSON.stringify(draft)],
+        "INSERT INTO opportunities (company_key, company_name, website, location, status, lead_id, matched_lead_id, revived, listings_count, latest_title, first_seen_at, last_seen_at, draft, bd_action_id, client_response_id, lead_type_id) VALUES (?, ?, '', ?, 'new', NULL, NULL, FALSE, 0, '', ?, ?, ?, ?, ?, ?) RETURNING id",
+        [poolKey, name, truncate(lead.city, 160), firstSeen, lastSeen, JSON.stringify(draft), cardActionId, cardResponseId, cardTypeId],
       );
       cards.set(poolKey, { id: created.id, key: poolKey, status: "new", leadId: null, listingsCount: 0, draft });
       count("companies with no Sales Manager placed in the leads inbox");

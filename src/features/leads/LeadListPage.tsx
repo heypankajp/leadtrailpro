@@ -19,6 +19,7 @@ import { todoTabs, type TodoCounts, type TodoScope } from "./todo-model";
 import LeadTable from "./LeadTable";
 import { leadSortKeys, type LeadPage, type LeadSortKey, type LeadSummary } from "./model";
 import QuickFilterMenu from "./QuickFilterMenu";
+import StatusFilter from "@/features/shell/StatusFilter";
 import { isQuickFilterKey, type QuickFilterKey } from "./quick-filters";
 
 export const leadListViews = ["leads", "todo", "all-leads", "cold", "warm", "hot", "client", "queued", "archive"] as const;
@@ -213,7 +214,7 @@ export default function LeadListPage({ view, embedded = false }: { view: LeadLis
               {filters.q && <button className="clear-search" aria-label="Clear search" onClick={() => update({ q: "" })}><X size={13} /></button>}
             </div>
             {!statusViews.includes(view) && (
-              <label className="select-filter"><Filter size={15} />{options(reference.listValues.status, "All statuses", filters.statusId, "statusId")}<ChevronDown size={14} /></label>
+              <StatusFilter statuses={reference.listValues.status} value={filters.statusId} onChange={(statusId) => update({ statusId })} />
             )}
             {reasonKey && (
               <label className="select-filter">{options(reference.listValues[reasonKey], "Any reason", filters.statusReasonId, "statusReasonId")}<ChevronDown size={14} /></label>
@@ -247,8 +248,6 @@ export default function LeadListPage({ view, embedded = false }: { view: LeadLis
                     {owners.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
                   </select>
                 )}
-                {options(reference.listValues.client_response, "Any client response", filters.clientResponseId, "clientResponseId")}
-                {options(reference.listValues.bd_action, "Any BD action", filters.bdActionId, "bdActionId")}
                 {options(stageChoices(reference.listValues.stage, reference.pipelines), "Any stage", filters.stageId, "stageId")}
                 {view !== "todo" && options(todoLists, "Any To Do list", filters.todoListId, "todoListId")}
               </div>

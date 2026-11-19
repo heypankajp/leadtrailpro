@@ -580,7 +580,7 @@ export async function createLead(input: LeadInput, actor: UserAccount, ownerId: 
          first_contact_date, follow_up_date, contract_signed_date, record_state, state_reason, state_changed_at, last_activity_at, created_at, deal_value, expected_close_date)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
       [
-        owner.id, actor.id, input.leadTypeId, input.statusId, statusReasonId, input.bdActionId, input.clientResponseId, input.leadCategoryId, input.companySizeId, input.cityId, stageId,
+        owner.id, actor.id, input.leadTypeId, input.statusId, statusReasonId, input.bdActionId ?? null, input.clientResponseId ?? null, input.leadCategoryId, input.companySizeId, input.cityId, stageId,
         input.clientName, input.companyUrl, input.address, input.comments || null, input.clientExecutive, input.contactPhone, input.contactAltPhone, input.contactRemark,
         JSON.stringify(input.clientEmails), input.industry, input.positions || null,
         input.firstContactDate, input.followUpDate, input.contractSignedDate,

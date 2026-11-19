@@ -2,12 +2,14 @@
 
 import { useState, type FormEvent } from "react";
 import { ArrowRight, BriefcaseBusiness, Building2, MapPin, ShieldCheck, Sparkles } from "lucide-react";
+import { leadGenToolSourceId } from "@/features/list-values/model";
 import { useApp } from "@/features/shell/AppContext";
 
 /** Preview only: the BRD's lead generation module needs connected job, review, and company-data sources. */
 export default function LeadGenerationPage() {
-  const { openNewLead, can, notify } = useApp();
+  const { openNewLeadFor, can, notify, reference } = useApp();
   const [company, setCompany] = useState("");
+  const [website, setWebsite] = useState("");
   const [generated, setGenerated] = useState<string | null>(null);
 
   const generate = (event: FormEvent<HTMLFormElement>) => {
@@ -15,6 +17,10 @@ export default function LeadGenerationPage() {
     setGenerated(company.trim() || "Acme Industries");
     notify("Company brief generated from sample preview data.", "info");
   };
+  // A deal made here has the Deal Source "Lead Gen Tool" (request of November 19, 2026), with the company and website typed.
+  const createDeal = () => openNewLeadFor({
+    prefill: { clientName: generated ?? company.trim(), companyUrl: website.trim(), leadTypeId: leadGenToolSourceId(reference.listValues.lead_type) ?? undefined },
+  });
 
   return (
     <>
@@ -23,7 +29,7 @@ export default function LeadGenerationPage() {
         <div className="generation-intro"><div className="generation-icon"><Sparkles size={20} /></div><div><h2>Research a company</h2><p>Company overview, open positions, hiring challenges, review summary, and a suggested introduction.</p></div></div>
         <form className="generation-form" onSubmit={generate}>
           <label>Company name<input required placeholder="e.g. Acme Industries" value={company} onChange={(event) => setCompany(event.target.value)} /></label>
-          <label>Company website<input type="url" placeholder="https://company.com" /></label>
+          <label>Company website<input type="url" placeholder="https://company.com" value={website} onChange={(event) => setWebsite(event.target.value)} /></label>
           <label>Search radius<span className="input-with-suffix"><input type="number" defaultValue="25" min="1" /><span>km</span></span></label>
           <button className="button button-primary" type="submit"><Sparkles size={16} /> Generate company brief</button>
         </form>
@@ -33,7 +39,7 @@ export default function LeadGenerationPage() {
             <p>Sample content. Once job-board, careers-page, review, and company-data sources are connected, this brief will show the real overview, open positions, hiring challenges, interview and review summaries, a suggested engagement approach, and similar companies within the radius.</p>
             <div className="brief-pills"><span><BriefcaseBusiness size={13} /> Open roles</span><span><MapPin size={13} /> Within 25 km</span><span><Building2 size={13} /> Industry</span></div>
             <div className="brief-actions">
-              {can("create_leads") && <button className="button button-primary" onClick={openNewLead}>Create a deal <ArrowRight size={14} /></button>}
+              {can("create_leads") && <button className="button button-primary" onClick={createDeal}>Create a deal <ArrowRight size={14} /></button>}
             </div>
           </div>
         )}

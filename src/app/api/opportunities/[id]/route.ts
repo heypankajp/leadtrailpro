@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { asOptionalId, asString, handleRouteError, jsonError, readJsonBody, requireSameOrigin } from "@/lib/http";
-import { getOpportunity, markNotRelevant, restoreOpportunity } from "@/features/opportunities/repository";
+import { getOpportunity, markNotRelevant, restoreOpportunity, updateOpportunityDetails } from "@/features/opportunities/repository";
+import { parseLeadEntry } from "@/features/opportunities/model";
 import { requirePrivilege, requireUser } from "@/features/users/session";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -20,7 +21,7 @@ export async function GET(_request: Request, context: RouteContext) {
   }
 }
 
-/** `{ action: "not_relevant", reasonId, note }` hides the card with a reason (OPP-13); `{ action: "restore" }` brings it back. */
+/** `{ action: "not_relevant", reasonId, note }` hides the card with a reason (OPP-13); `{ action: "restore" }` brings it back; `{ action: "edit", ... }` changes the lead's fields. */
 export async function PATCH(request: Request, context: RouteContext) {
   try {
     requireSameOrigin(request);
@@ -35,6 +36,12 @@ export async function PATCH(request: Request, context: RouteContext) {
       return NextResponse.json({ opportunity: await markNotRelevant(id, reasonId, asString(body.note, 500), user) });
     }
     if (body.action === "restore") return NextResponse.json({ opportunity: await restoreOpportunity(id, user) });
+    // The lead's fields (request of November 19, 2026).
+    if (body.action === "edit") {
+      const { input, errors } = parseLeadEntry(body);
+      if (errors.length) return jsonError(400, errors.join(" "));
+      return NextResponse.json({ opportunity: await updateOpportunityDetails(id, input, user) });
+    }
     return jsonError(400, "Unknown action.");
   } catch (error) {
     return handleRouteError(error, "Update lead");

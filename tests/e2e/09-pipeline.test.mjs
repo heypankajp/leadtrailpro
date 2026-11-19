@@ -48,18 +48,21 @@ describe("Pipeline board (PIPE-*)", () => {
     await page.wait(cardIn("New Deal", name));
   });
 
-  uiTest("a BD action from a later stage moves the deal forward and the timeline records it", async () => {
+  uiTest("a stage picked on the deal moves it forward and the timeline records it", async () => {
     await page.click(By.xpath(`${column("New Deal")}//button[contains(@class,"pipeline-card-title")][.//strong[normalize-space()=${xq(name)}]]`), { global: true });
     await page.dialogTitle(name);
-    await page.setValue(await page.wait(By.css('select[aria-label="BD action"]')), "Shared Profiles");
-    await page.toast("BD action updated");
+    // BD action is a field of a lead since November 19, 2026; the deal moves on the stage bar.
+    await page.click(By.css('.stage-bar button[aria-label="Move to Profile Shared"]'));
+    await page.dialogTitle(`Move ${name} to Profile Shared?`);
+    await page.clickButton("Move to Profile Shared");
+    await page.toast("Moved to Profile Shared");
     // PIPE-09: the prompt is pre-filled from the Profile Shared suggestion (a call in three business days); save it as a task.
     await page.dialogTitle(`What's next for ${name}?`);
     assert.match(await (await page.control("Next step")).getAttribute("value"), /^Call Adam Reid$/);
     await page.fill("Next step", "Send the two welder profiles");
     await page.clickButton("Save next step");
     await page.toast("Next step saved: Send the two welder profiles");
-    assert.equal(await page.selectedText(await page.wait(By.css('select[aria-label="Stage"]'))), "Profile Shared");
+    await page.wait(By.css('.stage-bar button[aria-current="step"][aria-label="Profile Shared (current stage)"]'));
     await page.tab("Timeline");
     await page.wait(By.xpath('//article[contains(@class,"timeline-entry")]//strong[normalize-space()="Stage changed from New Deal to Profile Shared"]'));
     await page.wait(By.xpath('//article[contains(@class,"timeline-entry")]//strong[starts-with(normalize-space(.), "Task created: Send the two welder profiles")]'));
@@ -68,9 +71,11 @@ describe("Pipeline board (PIPE-*)", () => {
   });
 
   uiTest("the status filter narrows the board", async () => {
-    await page.setValue(await page.wait(By.css('select[aria-label="All statuses"]')), "Warm");
+    await page.click(By.css('button[aria-label="Status"]'));
+    await page.click(By.xpath('//ul[@aria-label="Status"]//button[normalize-space()="Warm"]'), { global: true });
     await driver.wait(async () => (await driver.findElements(cardIn("Profile Shared", name))).length === 0, 10000, "the cold deal leaves the board when only warm deals are shown");
-    await page.setValue(await page.wait(By.css('select[aria-label="All statuses"]')), "All statuses");
+    await page.click(By.css('button[aria-label="Status"]'));
+    await page.click(By.xpath('//ul[@aria-label="Status"]//button[normalize-space()="All"]'), { global: true });
     await page.wait(cardIn("Profile Shared", name));
   });
 
@@ -237,7 +242,7 @@ describe("Pipeline board (PIPE-*)", () => {
     await page.click(By.xpath('//div[contains(@class,"pipeline-toolbar")]//div[contains(@class,"quick-filter")]/button[contains(normalize-space(.), "Quick filters")]'), { global: true });
     await page.click(By.xpath('//div[contains(@class,"quick-filter-menu")]//button[normalize-space()="Open deals with no next step"]'), { global: true });
     await page.wait(By.xpath('//div[contains(@class,"pipeline-toolbar")]//span[contains(@class,"quick-filter-label") and normalize-space()="Open deals with no next step"]'));
-    // This deal has an open task (the BD action test saved one), so the filter leaves it out.
+    // This deal has an open task (the stage test saved one), so the filter leaves it out.
     await driver.wait(async () => (await driver.findElements(By.xpath(`//article[contains(@class,"pipeline-card")][.//strong[normalize-space()=${xq(name)}]]`))).length === 0, 10000, "a deal with a next step is filtered out");
     await page.clickButton("Open in the list", { global: true });
     await page.wait(By.xpath('//span[contains(@class,"quick-filter-label") and normalize-space()="Open deals with no next step"]'));
@@ -254,6 +259,10 @@ describe("Pipeline board (PIPE-*)", () => {
     await page.wait(cardIn("New Deal", client));
     await page.openCardMenu(client);
     await page.click(By.xpath('//div[contains(@class,"card-menu")]//button[normalize-space()="Convert to Client"]'), { global: true });
+    // It asks first (request of November 19, 2026).
+    await page.dialogTitle("Convert to client");
+    await page.waitText(By.css('section[role="dialog"] .dialog-description'), "Do you want to convert this deal to client?");
+    await page.clickButton("Yes, convert to client");
     await page.toast(`${client} is now a client`);
     await driver.wait(async () => (await driver.findElements(cardIn("New Deal", client))).length === 0, 10000, "a client leaves the board");
     await page.nav("Clients");

@@ -5,10 +5,11 @@ import { AlertTriangle, Building2, Mail, Plus, Save, ShieldCheck, UserRound } fr
 import { ApiError, errorMessage } from "@/lib/api";
 import { entryStageCode, reasonListFor } from "@/features/list-values/model";
 import { useApp } from "@/features/shell/AppContext";
-import { Dialog, ErrorText, Field } from "@/features/shell/components";
+import { Dialog, ErrorText, Field, ConvertToClientDialog } from "@/features/shell/components";
 import SuggestInput from "@/features/shell/SuggestInput";
 import StagePicker from "@/features/pipeline/StagePicker";
 import { fetchOrganization, fetchOrganizations, fetchPerson } from "@/features/contacts/client";
+import { OrganizationFormDialog, PersonFormDialog } from "@/features/contacts/ContactFormDialogs";
 import { contactKey, type OrganizationDetail, type OrganizationRow } from "@/features/contacts/model";
 import { createLead, updateLead } from "./client";
 import { dealCurrency, parseDealValue, type LeadInput, type LeadSummary } from "./model";
@@ -33,7 +34,7 @@ type ConfirmNotice = { organization: string | null; contact: string | null };
 
 type FormState = {
   clientName: string; companyUrl: string; address: string; comments: string; clientExecutive: string; contactPhone: string; contactAltPhone: string; contactRemark: string;
-  clientEmails: string; industry: string; positions: string; leadTypeId: string; statusId: string; statusReasonId: string; bdActionId: string; clientResponseId: string; leadCategoryId: string;
+  clientEmails: string; industry: string; positions: string; leadTypeId: string; statusId: string; statusReasonId: string; leadCategoryId: string;
   companySizeId: string; cityId: string; firstContactDate: string; followUpDate: string; contractSignedDate: string; ownerId: string; stageId: string;
   dealValue: string; expectedCloseDate: string;
 };
@@ -48,7 +49,7 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
   const [form, setForm] = useState<FormState>(() => lead ? {
     clientName: lead.clientName, companyUrl: lead.companyUrl, address: lead.address, comments: lead.comments, clientExecutive: lead.clientExecutive, contactPhone: lead.contactPhone,
     contactAltPhone: lead.contactAltPhone, contactRemark: lead.contactRemark, clientEmails: lead.clientEmails.join(", "), industry: lead.industry, positions: lead.positions,
-    leadTypeId: String(lead.leadTypeId), statusId: String(lead.statusId), statusReasonId: lead.statusReasonId ? String(lead.statusReasonId) : "", bdActionId: lead.bdActionId ? String(lead.bdActionId) : "", clientResponseId: lead.clientResponseId ? String(lead.clientResponseId) : "",
+    leadTypeId: String(lead.leadTypeId), statusId: String(lead.statusId), statusReasonId: lead.statusReasonId ? String(lead.statusReasonId) : "",
     leadCategoryId: lead.leadCategoryId ? String(lead.leadCategoryId) : "", companySizeId: lead.companySizeId ? String(lead.companySizeId) : "", cityId: lead.cityId ? String(lead.cityId) : "",
     firstContactDate: lead.firstContactDate, followUpDate: lead.followUpDate ?? "", contractSignedDate: lead.contractSignedDate ?? "", ownerId: String(lead.ownerId), stageId: lead.stageId ? String(lead.stageId) : "",
     dealValue: lead.dealValue === null || lead.dealValue === undefined ? "" : String(lead.dealValue), expectedCloseDate: lead.expectedCloseDate ?? "",
@@ -57,7 +58,7 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
     contactPhone: prefill?.contactPhone ?? "", contactAltPhone: prefill?.contactAltPhone ?? "", contactRemark: prefill?.contactRemark ?? "", clientEmails: (prefill?.clientEmails ?? []).join(", "),
     industry: prefill?.industry ?? "", positions: prefill?.positions ?? "",
     leadTypeId: prefill?.leadTypeId ? String(prefill.leadTypeId) : values.lead_type[0] ? String(values.lead_type[0].id) : "", statusId: prefill?.statusId ? String(prefill.statusId) : defaultStatus ? String(defaultStatus.id) : "",
-    statusReasonId: "", bdActionId: prefill?.bdActionId ? String(prefill.bdActionId) : "", clientResponseId: prefill?.clientResponseId ? String(prefill.clientResponseId) : "", leadCategoryId: "",
+    statusReasonId: "", leadCategoryId: "",
     companySizeId: prefill?.companySizeId ? String(prefill.companySizeId) : "", cityId: prefill?.cityId ? String(prefill.cityId) : "", firstContactDate: prefill?.firstContactDate || reference.today, followUpDate: prefill?.followUpDate ?? "", contractSignedDate: prefill?.contractSignedDate ?? "", ownerId: String(user.id), stageId: prefill?.stageId ? String(prefill.stageId) : entryStage ? String(entryStage.id) : "",
     dealValue: "", expectedCloseDate: "",
   });
@@ -67,6 +68,12 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
   // confirmed already, shown with a blue NEW badge; typing another name drops it.
   const [newOrganization, setNewOrganization] = useState(false);
   const [newContact, setNewContact] = useState(false);
+  // "+ Add ... as new company / contact" opens Add company / Add contact with the name typed (request of November 19, 2026);
+  // the record saved there becomes the deal's company or contact.
+  const [addingOrg, setAddingOrg] = useState<string | null>(null);
+  const [addingPerson, setAddingPerson] = useState<string | null>(null);
+  // The Client status picked, waiting for "Do you want to convert this deal to client?".
+  const [clientStatusId, setClientStatusId] = useState<string | null>(null);
   // "Save anyway" on a similar company is kept when the new organization is then confirmed.
   const allowSimilarChosen = useRef(false);
   const [error, setError] = useState("");
@@ -164,6 +171,19 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
     return () => { cancelled = true; };
   }, [matchedPersonId]);
 
+  /** A company saved in (or picked from) Add company: the deal's company, its record loaded so its details and contacts follow. */
+  const linkOrg = (id: number, name: string) => {
+    setForm((current) => ({ ...current, clientName: name, clientExecutive: "" }));
+    setNewOrganization(false); setNewContact(false); setDuplicate(null); setConfirm(null);
+    fetchOrganization(id).then(setOrganization).catch(() => undefined);
+  };
+  /** A contact saved in (or picked from) Add contact: the deal's contact, the company's contacts reloaded so it is matched. */
+  const linkPerson = (_id: number, name: string) => {
+    const organizationId = matchedOrganization?.organization.id ?? null;
+    if (organizationId) fetchOrganization(organizationId).then(setOrganization).catch(() => undefined);
+    pickContact(name);
+    setNewContact(false);
+  };
   const set = (key: keyof FormState) => (event: { target: { value: string } }) => setForm((current) => ({ ...current, [key]: event.target.value }));
   const idOrNull = (value: string) => (value ? Number(value) : null);
   const yesterday = (() => { const [y, m, d] = reference.today.split("-").map(Number); const date = new Date(Date.UTC(y, m - 1, d - 1)); return date.toISOString().slice(0, 10); })();
@@ -186,7 +206,7 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
     const input: LeadInput = {
       clientName: form.clientName, companyUrl: form.companyUrl, address: form.address, comments: form.comments, clientExecutive: form.clientExecutive, contactPhone: form.contactPhone,
       contactAltPhone: form.contactAltPhone, contactRemark: form.contactRemark, clientEmails: form.clientEmails.split(/[,;\s]+/).filter(Boolean), industry: form.industry, positions: form.positions,
-      leadTypeId: Number(form.leadTypeId), statusId: Number(form.statusId), statusReasonId: reasonKey ? idOrNull(form.statusReasonId) : null, bdActionId: idOrNull(form.bdActionId), clientResponseId: idOrNull(form.clientResponseId),
+      leadTypeId: Number(form.leadTypeId), statusId: Number(form.statusId), statusReasonId: reasonKey ? idOrNull(form.statusReasonId) : null,
       leadCategoryId: idOrNull(form.leadCategoryId), companySizeId: idOrNull(form.companySizeId), cityId: idOrNull(form.cityId),
       firstContactDate: form.firstContactDate, followUpDate: form.followUpDate || null, contractSignedDate: form.contractSignedDate || null,
       stageId: idOrNull(form.stageId),
@@ -228,7 +248,7 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
                   suggestions={orgSuggestions} onPick={(suggestion) => { setForm((current) => ({ ...current, clientName: suggestion.label })); setDuplicate(null); setConfirm(null); setNewOrganization(false); }}
                   loading={!orgRows || orgRows.q !== typedOrganization}
                   icon={<Building2 size={16} />}
-                  create={organizationIsNew ? { label: `Add '${typedOrganization}' as new company`, onCreate: () => { setNewOrganization(true); setConfirm(null); } } : null}
+                  create={organizationIsNew ? { label: `Add '${typedOrganization}' as new company`, onCreate: () => { setAddingOrg(typedOrganization); setConfirm(null); } } : null}
                   isNew={newOrganization} onClear={() => { setForm((current) => ({ ...current, clientName: "" })); setNewOrganization(false); setNewContact(false); setConfirm(null); }}
                   required maxLength={200} placeholder="Company" autoFocus
                 />
@@ -256,7 +276,7 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
                   }}
                   minChars={0} disabled={!organizationChosen}
                   icon={<UserRound size={16} />}
-                  create={contactIsNew ? { label: `Add '${form.clientExecutive.trim()}' as new contact`, onCreate: () => { setNewContact(true); setConfirm(null); } } : null}
+                  create={contactIsNew ? { label: `Add '${form.clientExecutive.trim()}' as new contact`, onCreate: () => { setAddingPerson(form.clientExecutive.trim()); setConfirm(null); } } : null}
                   isNew={newContact} onClear={() => { setForm((current) => ({ ...current, clientExecutive: "" })); setNewContact(false); setConfirm(null); }}
                   maxLength={160} placeholder={!organizationChosen ? "Choose the company first" : "Contact person"}
                 />
@@ -265,7 +285,12 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
           <StagePicker value={form.stageId} onChange={(stageId) => setForm((current) => ({ ...current, stageId }))} hint={lead ? undefined : "Where the deal starts on the board: click an arrow."} />
           <Field label="Deal source" required>{select("leadTypeId", values.lead_type, "")}</Field>
           <Field label="Status" required>
-            <select value={form.statusId} onChange={(event) => setForm((current) => ({ ...current, statusId: event.target.value, statusReasonId: "" }))}>
+            <select value={form.statusId} onChange={(event) => {
+              const statusId = event.target.value;
+              // Client asks first (request of November 19, 2026); the deal becomes a client when it is saved.
+              if (values.status.find((item) => String(item.id) === statusId)?.code === "client" && lead?.statusCode !== "client") { setClientStatusId(statusId); return; }
+              setForm((current) => ({ ...current, statusId, statusReasonId: "" }));
+            }}>
               {values.status.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
             </select>
           </Field>
@@ -286,8 +311,6 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
           {!lead && can("reassign_leads") && (
             <Field label="Owner" wide hint={opportunityId ? "Who will follow up this company; the deal is created in their name." : "The creator becomes the owner unless you choose someone else."}><select value={form.ownerId} onChange={set("ownerId")}>{owners.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
           )}
-          <Field label="BD action">{select("bdActionId", values.bd_action)}</Field>
-          <Field label="Client response">{select("clientResponseId", values.client_response)}</Field>
           <Field label="Deal category">{select("leadCategoryId", values.lead_category)}</Field>
           <Field label="Contract signed date"><input type="date" value={form.contractSignedDate} onChange={set("contractSignedDate")} /></Field>
           <Field label="Position(s)" wide><textarea value={form.positions} onChange={set("positions")} rows={2} maxLength={5000} placeholder="Open or target positions" /></Field>
@@ -350,6 +373,30 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
           <button type="submit" className="button button-primary" disabled={saving}>{lead ? <Save size={15} /> : <Plus size={15} />} {saving ? "Saving..." : lead ? "Save changes" : "Save deal"}</button>
         </div>
       </form>
+      {addingOrg !== null && (
+        <OrganizationFormDialog
+          initialName={addingOrg}
+          onUseExisting={(found) => { setAddingOrg(null); linkOrg(found.id, found.name); }}
+          onClose={() => setAddingOrg(null)}
+          onSaved={(saved) => { setAddingOrg(null); linkOrg(saved.id, saved.name); }}
+        />
+      )}
+      {addingPerson !== null && (
+        <PersonFormDialog
+          organizationName={matchedOrganization?.organization.name ?? form.clientName.trim()}
+          initialName={addingPerson}
+          onUseExisting={(found) => { setAddingPerson(null); linkPerson(found.id, found.name); }}
+          onClose={() => setAddingPerson(null)}
+          onSaved={(saved) => { setAddingPerson(null); linkPerson(saved.id, saved.name); }}
+        />
+      )}
+      {clientStatusId !== null && (
+        <ConvertToClientDialog
+          dealName={form.clientName.trim() || "This deal"}
+          onClose={() => setClientStatusId(null)}
+          onConfirm={() => { setForm((current) => ({ ...current, statusId: clientStatusId, statusReasonId: "" })); setClientStatusId(null); }}
+        />
+      )}
     </Dialog>
   );
 }

@@ -32,9 +32,17 @@ describe("Sales Trips (PD-39..41)", () => {
   uiTest("a deal on To be visited is put on a new sales trip and leaves the list", async () => {
     await addLead(page, { name, executive: "Dana Brooks" });
     await page.toast(`${name} added to the pipeline`);
-    await page.setValue(await page.wait(By.css('select[aria-label="To Do list"]')), "To be visited");
-    await page.toast("Moved to To Do: To be visited");
     await page.closeDialog();
+    // The deal page has no To Do list control since November 19, 2026: the Pipeline list's bulk action puts it on the list.
+    await page.deals("all");
+    await (await page.wait(By.css('input[aria-label="Search deals"]'))).sendKeys(name);
+    await page.waitLeadRow(name);
+    await page.click(By.css(`input[aria-label=${JSON.stringify(`Select ${name}`)}]`), { global: true });
+    await page.clickButton("Move to To Do", { global: true });
+    await page.dialogTitle("Move deal to a To Do list");
+    await page.setValue(await page.wait(By.css('section[role="dialog"] select[aria-label="To Do list"]')), "To be visited");
+    await page.clickButton("Move deals");
+    await page.toast("1 deal moved to To Do: To be visited");
 
     await openToBeVisited();
     await page.waitLeadRow(name);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useState, type FormEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, Inbox, X } from "lucide-react";
 import { avatarTone, initials, statusClass } from "@/lib/format";
 
@@ -8,13 +9,20 @@ export function Dialog({ title, eyebrow, onClose, children, size = "default", ac
   title: ReactNode; eyebrow?: string; onClose: () => void; children: ReactNode; size?: "default" | "wide" | "narrow"; actions?: ReactNode;
 }) {
   const titleId = useId();
+  // Dialogs can open on top of each other (Add company from Add deal, request of November 19, 2026): Escape closes only the
+  // top one, and each is drawn on the page itself, so one opened from inside another is not held inside its box.
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    openDialogs.push(titleId);
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape" && openDialogs[openDialogs.length - 1] === titleId) onClose(); };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-  return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      const index = openDialogs.lastIndexOf(titleId);
+      if (index >= 0) openDialogs.splice(index, 1);
+    };
+  }, [onClose, titleId]);
+  const dialog = (
+    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }} onSubmit={(event) => event.stopPropagation()}>
       <section className={`modal ${size === "wide" ? "modal-wide" : size === "narrow" ? "modal-narrow" : ""}`} role="dialog" aria-modal="true" aria-labelledby={titleId}>
         <div className="modal-header">
           <div className="modal-title-content">
@@ -30,7 +38,11 @@ export function Dialog({ title, eyebrow, onClose, children, size = "default", ac
       </section>
     </div>
   );
+  return typeof document === "undefined" ? dialog : createPortal(dialog, document.body);
 }
+
+/** The dialogs open, oldest first (their title ids): Escape belongs to the last. */
+const openDialogs: string[] = [];
 
 export function Avatar({ name, seed, className = "" }: { name: string; seed?: number | string; className?: string }) {
   return <span className={`avatar avatar-${avatarTone(seed ?? name)} ${className}`}>{initials(name)}</span>;
@@ -135,4 +147,28 @@ export function PromptDialog({ title, eyebrow, description, label, placeholder, 
 
 export function KeyValue({ label, children }: { label: string; children: ReactNode }) {
   return <div><small>{label}</small>{typeof children === "string" || typeof children === "number" ? <strong>{children}</strong> : children}</div>;
+}
+
+/**
+ * Converting a deal to a client asks first (request of November 19, 2026): changing its status to Client anywhere (the deal
+ * page, Edit deal, the board by status) and Convert to Client in a card's menu. Yes converts; No leaves the deal as it was.
+ */
+export function ConvertToClientDialog({ dealName, onConfirm, onClose }: { dealName: string; onConfirm: () => Promise<void> | void; onClose: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const confirm = async () => {
+    setBusy(true);
+    setError("");
+    try { await onConfirm(); } catch (caught) { setError(caught instanceof Error ? caught.message : "Could not convert the deal."); setBusy(false); }
+  };
+  return (
+    <Dialog title="Convert to client" eyebrow={dealName.toUpperCase()} size="narrow" onClose={onClose}>
+      <p className="dialog-description">Do you want to convert this deal to client?</p>
+      <ErrorText message={error} />
+      <div className="modal-actions">
+        <button type="button" className="button button-outline" onClick={onClose} disabled={busy}>No</button>
+        <button type="button" className="button button-primary" onClick={() => void confirm()} disabled={busy} autoFocus>{busy ? "Converting..." : "Yes, convert to client"}</button>
+      </div>
+    </Dialog>
+  );
 }

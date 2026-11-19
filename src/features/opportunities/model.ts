@@ -242,7 +242,50 @@ export type Opportunity = {
   listings: OpportunityListing[];
   /** The lead the tracker import drafted for a company with no Sales Manager (§10.9); null for a card the job searches made. */
   tracker: TrackerCard | null;
+  /**
+   * The lead's own fields (request of November 19, 2026): its Lead Source (a Deal Source value, which the deal takes when the
+   * lead is converted), BD action and Client response (no longer fields of a deal), and a note.
+   */
+  leadSourceId: number | null; leadSource: string | null;
+  bdActionId: number | null; bdAction: string | null;
+  clientResponseId: number | null; clientResponse: string | null;
+  note: string;
+  /** Who added the lead by hand; null for a card the job searches or the tracker import made. */
+  addedByName: string | null;
+  /** The company record (Contacts → Companies) and its contacts on the lead, in order (request of November 19, 2026). */
+  organizationId: number | null;
+  contacts: { id: number; name: string }[];
 };
+
+/** A lead added by hand or edited (request of November 19, 2026). */
+export type LeadEntryInput = {
+  companyName: string; website: string; location: string;
+  leadSourceId: number | null; bdActionId: number | null; clientResponseId: number | null; note: string;
+  /** The company record picked or added (its name is `companyName`) and its contacts, in order. */
+  organizationId?: number | null; personIds?: number[];
+};
+
+const entryId = (value: unknown): number | null => {
+  const number = typeof value === "string" && value.trim() ? Number(value) : value;
+  return typeof number === "number" && Number.isInteger(number) && number > 0 ? number : null;
+};
+const entryText = (value: unknown, max: number): string => (typeof value === "string" ? value.trim().slice(0, max) : "");
+
+export function parseLeadEntry(value: unknown): { input: LeadEntryInput; errors: string[] } {
+  const body = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
+  const input: LeadEntryInput = {
+    companyName: entryText(body.companyName, 200), website: entryText(body.website, 500), location: entryText(body.location, 160),
+    leadSourceId: entryId(body.leadSourceId), bdActionId: entryId(body.bdActionId), clientResponseId: entryId(body.clientResponseId), note: entryText(body.note, 5000),
+    organizationId: entryId(body.organizationId),
+    personIds: Array.isArray(body.personIds) ? [...new Set(body.personIds.map(entryId).filter((id): id is number => id !== null))].slice(0, 20) : [],
+  };
+  const errors: string[] = [];
+  if (!input.companyName) errors.push("Enter the company's name.");
+  if (!input.leadSourceId) errors.push("Choose the lead source.");
+  if (input.website && !/^https?:\/\/\S+$/i.test(input.website)) errors.push("The website must begin with http:// or https://.");
+  if (input.personIds?.length && !input.organizationId) errors.push("Choose the company first: contacts belong to it.");
+  return { input, errors };
+}
 
 export type OpportunityRun = {
   id: number; trigger: "scheduled" | "manual"; status: "running" | "success" | "partial" | "failed"; startedAt: string; finishedAt: string | null;

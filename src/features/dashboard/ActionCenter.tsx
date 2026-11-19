@@ -38,7 +38,7 @@ export default function ActionCenter() {
   const followUpRow = (lead: LeadSummary, emphasize: boolean) => (
     <button className={`followup-row ${emphasize ? "row-overdue" : ""}`} key={lead.id} onClick={() => openLead(lead.id)}>
       <Avatar name={lead.clientName} seed={lead.id} />
-      <span className="followup-info"><strong>{lead.clientName}</strong><small>{lead.bdAction ?? "No BD action yet"}{lead.clientExecutive ? ` · ${lead.clientExecutive}` : ""}</small></span>
+      <span className="followup-info"><strong>{lead.clientName}</strong><small>{lead.clientExecutive || "No contact"}{lead.city ? ` · ${lead.city}` : ""}</small></span>
       <StatusPill status={lead.statusLabel} code={lead.statusCode} />
       <span className={`followup-time ${emphasize ? "overdue" : ""}`}><Clock3 size={13} /> {formatDate(lead.followUpDate)}</span>
       <span className="followup-owner">{lead.ownerName}</span>
@@ -205,13 +205,13 @@ export default function ActionCenter() {
             </div>
             <div className="table-scroll">
               <table className="lead-table">
-                <thead><tr><th>CLIENT</th><th>STATUS</th><th>LAST BD ACTION</th><th>FOLLOW-UP</th><th>OWNER</th><th><span className="sr-only">Open</span></th></tr></thead>
+                <thead><tr><th>CLIENT</th><th>STATUS</th><th>LAST ACTIVITY</th><th>FOLLOW-UP</th><th>OWNER</th><th><span className="sr-only">Open</span></th></tr></thead>
                 <tbody>
                   {data.recentLeads.map((lead) => (
                     <tr key={lead.id}>
                       <td><button className="client-cell" onClick={() => openLead(lead.id)}><Avatar name={lead.clientName} seed={lead.id} /><span><strong>{lead.clientName}</strong><small>{lead.clientExecutive || "No contact"}{lead.city ? ` · ${lead.city}` : ""}</small></span></button></td>
                       <td><StatusPill status={lead.statusLabel} code={lead.statusCode} /></td>
-                      <td><span className="action-cell">{lead.bdAction ?? "—"}</span><small className="activity-time">{relativeTime(lead.lastActivityAt)}</small></td>
+                      <td><span className="action-cell">{relativeTime(lead.lastActivityAt)}</span></td>
                       <td><span className={lead.followUpDate === data.today ? "due-today" : lead.followUpDate && lead.followUpDate < data.today ? "overdue" : "muted-cell"}>{formatDate(lead.followUpDate, "—")}</span></td>
                       <td><span className="owner-cell"><span className="mini-avatar">{lead.ownerName.split(" ").map((part) => part[0]).join("").slice(0, 2)}</span>{lead.ownerName}</span></td>
                       <td><button className="row-more" aria-label={`Open ${lead.clientName}`} onClick={() => openLead(lead.id)}><ChevronRight size={16} /></button></td>

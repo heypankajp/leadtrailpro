@@ -1231,6 +1231,65 @@ const migrations = [
       await client.query("INSERT INTO task_assignees (task_id, user_id, position) SELECT id, assignee_id, 0 FROM tasks ON CONFLICT DO NOTHING");
     },
   },
+  {
+    version: 38,
+    name: "Deal source Lead Gen Tool (request of November 19, 2026): the source of deals made from Lead Generation and the Leads inbox",
+    async run(client) {
+      // Last in the list, unless an administrator already added it (the app finds it by its code or its name).
+      await client.query(`
+        INSERT INTO list_values (list_key, code, value, sort_order)
+        SELECT 'lead_type', 'lead_gen_tool', 'Lead Gen Tool', COALESCE(MAX(sort_order), 0) + 1 FROM list_values WHERE list_key = 'lead_type'
+        HAVING NOT EXISTS (SELECT 1 FROM list_values WHERE list_key = 'lead_type' AND (LOWER(value) = 'lead gen tool' OR code = 'lead_gen_tool'))`);
+    },
+  },
+  {
+    version: 39,
+    name: "BD action and Client response move from the deal to the lead (request of November 19, 2026); leads added by hand",
+    async run(client) {
+      // The lead (a card of the Leads inbox) carries them now, with a note, and may be added by hand (added_by).
+      await client.query("ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS bd_action_id INTEGER NULL REFERENCES list_values(id) ON DELETE SET NULL");
+      await client.query("ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS client_response_id INTEGER NULL REFERENCES list_values(id) ON DELETE SET NULL");
+      await client.query("ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS note TEXT NOT NULL DEFAULT ''");
+      await client.query("ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS added_by INTEGER NULL REFERENCES users(id) ON DELETE SET NULL");
+      // The Lead Source (values of the Deal Source list), which the deal takes when the lead is converted. Cards found by the
+      // job searches came from the lead generation tool; cards the tracker import drafted take the source their rows named.
+      await client.query("ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS lead_type_id INTEGER NULL REFERENCES list_values(id) ON DELETE SET NULL");
+      await client.query(`
+        UPDATE opportunities o SET lead_type_id = COALESCE(
+          (SELECT v.id FROM list_values v WHERE v.list_key = 'lead_type' AND o.draft IS NOT NULL AND LOWER(v.value) = LOWER(o.draft->'lead'->>'type') ORDER BY v.id LIMIT 1),
+          (SELECT v.id FROM list_values v WHERE v.list_key = 'lead_type' AND (v.code = 'lead_gen_tool' OR LOWER(v.value) = 'lead gen tool') ORDER BY v.id LIMIT 1))
+        WHERE o.lead_type_id IS NULL`);
+      // Cards the tracker import drafted take the action and response their rows named.
+      await client.query(`
+        UPDATE opportunities o SET
+          bd_action_id = (SELECT v.id FROM list_values v WHERE v.list_key = 'bd_action' AND LOWER(v.value) = LOWER(o.draft->'lead'->>'action') ORDER BY v.id LIMIT 1),
+          client_response_id = (SELECT v.id FROM list_values v WHERE v.list_key = 'client_response' AND LOWER(v.value) = LOWER(o.draft->'lead'->>'response') ORDER BY v.id LIMIT 1)
+        WHERE o.draft IS NOT NULL`);
+      // A deal's values are kept in its Comments, as the import writes them ("BD Action : <value>", "Client response : <value>").
+      // The columns stay (history, reminder rules); the screens no longer show or change them.
+      await client.query(`
+        UPDATE leads l SET comments = CONCAT_WS(E'\\n', NULLIF(l.comments, ''),
+          'BD Action : ' || (SELECT v.value FROM list_values v WHERE v.id = l.bd_action_id),
+          'Client response : ' || (SELECT v.value FROM list_values v WHERE v.id = l.client_response_id))
+        WHERE l.bd_action_id IS NOT NULL OR l.client_response_id IS NOT NULL`);
+    },
+  },
+  {
+    version: 40,
+    name: "A lead's company and contacts (request of November 19, 2026), picked or added as in Add deal; several contacts",
+    async run(client) {
+      await client.query("ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS organization_id INTEGER NULL REFERENCES organizations(id) ON DELETE SET NULL");
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS opportunity_persons (
+          opportunity_id INTEGER NOT NULL REFERENCES opportunities(id) ON DELETE CASCADE,
+          person_id INTEGER NOT NULL REFERENCES persons(id) ON DELETE CASCADE,
+          position SMALLINT NOT NULL DEFAULT 0,
+          PRIMARY KEY (opportunity_id, person_id)
+        )
+      `);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_opportunity_persons_person ON opportunity_persons (person_id)");
+    },
+  },
 ];
 
 if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port > 65535 || !/^[a-z_][a-z0-9_]*$/.test(databaseName)) {
