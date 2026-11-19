@@ -36,7 +36,7 @@ export default function ApiTokensPanel() {
   return (
     <>
       <div className="page-heading">
-        <div><div className="eyebrow">ADMINISTRATION <span className="eyebrow-dot">·</span> {tokens ? `${tokens.length} ACTIVE` : "LOADING"}</div><h1>API access</h1><p>Personal access tokens for scripts and for administering the app from another machine.</p></div>
+        <div><div className="eyebrow">ADMINISTRATION <span className="eyebrow-dot">·</span> {tokens ? `${tokens.length} ACTIVE` : "LOADING"}</div><h1>API Access</h1><p>Personal access tokens for scripts and for administering the app from another machine.</p></div>
         <button className="button button-primary" onClick={() => setDialog({ kind: "create" })}><Plus size={17} /> Create token</button>
       </div>
       <ErrorText message={error} />

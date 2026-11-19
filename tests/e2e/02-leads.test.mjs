@@ -135,7 +135,7 @@ describe("Deals", () => {
     await page.setValue(await page.control("To"), "10:30");
     await page.setValue(await page.control("Priority"), "High");
     await page.fill("Note", "Bring the safety-shoe brochure.");
-    await page.wait(By.xpath('//aside[@aria-label="The day\'s agenda"]//span[contains(@class,"is-draft")]'));
+    await page.wait(By.xpath('//aside[@aria-label="The day\'s activities"]//span[contains(@class,"is-draft")]'));
     await page.clickButton("Save activity");
     await page.toast("Visit scheduled for");
     const card = await page.wait(By.xpath(`//article[contains(@class,"task-card")][.//strong[contains(normalize-space(.), ${xq(`Visit ${lead.executive}`)})]]`));

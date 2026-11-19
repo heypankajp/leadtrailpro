@@ -184,6 +184,12 @@ export class Page {
     return element;
   }
 
+  /** The priority chips of Schedule an Activity: "high", "medium", "low", or "None". */
+  async pickPriority(value) {
+    await this.click(By.css('section[role="dialog"] button[aria-label="Priority"]'));
+    await this.click(By.xpath(`//section[@role="dialog"]//ul[@aria-label="Priority"]//button[normalize-space()=${xq(value)}]`));
+  }
+
   async fill(label, value, { global = false } = {}) {
     const element = await this.driver.wait(() => this.control(label, global).catch(() => null), DEFAULT_TIMEOUT, `Field "${label}" not found`);
     await this.setValue(element, value);
@@ -268,7 +274,7 @@ export class Page {
   }
 
   /**
-   * PD-22: opens a board card's actions menu. The ⇄ button only shows on hover (opacity 0 otherwise), which WebDriver
+   * PD-22: opens a board card's actions menu. The ⋯ button only shows on hover (opacity 0 otherwise), which WebDriver
    * counts as hidden, so it is pressed the way a keyboard user would reach it: a click on the element itself.
    */
   async openCardMenu(name) {
@@ -290,7 +296,7 @@ export class Page {
   }
 
   /**
-   * Moves a board card to the named stage by dragging it there. The card's ⇄ menu offered the stages until the review of
+   * Moves a board card to the named stage by dragging it there. The card's ⋯ menu offered the stages until the review of
    * November 18, 2026 (PD-33); a drag gives the same toast, undo bar and "What's next?" prompt.
    */
   async moveCard(name, stage) {

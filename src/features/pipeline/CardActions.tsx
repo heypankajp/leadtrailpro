@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Archive, ArrowRightLeft, CalendarCheck2, Check, Handshake, ListChecks, X } from "lucide-react";
+import { Archive, CalendarCheck2, Check, Handshake, ListChecks, MoreHorizontal, X } from "lucide-react";
 import { errorMessage } from "@/lib/api";
 import { setLeadState, setLeadTodo } from "@/features/leads/client";
 import { ScheduleActivityDialog } from "@/features/tasks/ScheduleActivity";
@@ -11,7 +11,7 @@ import ArchiveDialog from "@/features/leads/ArchiveDialog";
 import type { PipelineCard } from "./model";
 
 /**
- * The ⇄ button on a board card (PD-22, SPEC §10.19): one menu for what is done to a deal without opening it. Since the
+ * The ⋯ button on a board card (PD-22, SPEC §10.19): one menu for what is done to a deal without opening it. Since the
  * review of November 18, 2026 it holds Add follow-up, Add to To Do list ("To be visited" is where the team parks a deal
  * for a visit), Convert to Client and Archive; a deal changes stage by dragging its card or from the deal page.
  * Each action needs the same rights as on the deal page. The menu is drawn over the page (fixed), so a column's own
@@ -81,7 +81,7 @@ export default function CardActions({ card, canEdit, onConvert, onChanged }: {
   return (
     <>
       <button ref={button} type="button" className="pipeline-move" aria-label={`Actions for ${card.clientName}`} title="Follow up, To Do, convert to client, archive" aria-haspopup="menu" aria-expanded={Boolean(open)} onClick={toggle}>
-        <ArrowRightLeft size={13} />
+        <MoreHorizontal size={14} />
       </button>
       {open && createPortal(
         <div ref={menu} className="menu-dropdown card-menu" role="menu" aria-label={`Actions for ${card.clientName}`} style={{ top: open.top ?? "auto", bottom: open.bottom ?? "auto", left: open.left, maxHeight: open.maxHeight }}>

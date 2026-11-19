@@ -20,7 +20,7 @@ describe("Team, roles, and deal ownership", () => {
 
   uiTest("admin creates a sales manager account", async () => {
     await page.nav("User Management");
-    await page.heading("User management");
+    await page.heading("User Management");
     await page.clickButton("Add user", { global: true });
     await page.dialogTitle("Add user");
     await page.fill("First name", manager.firstName);
@@ -48,7 +48,7 @@ describe("Team, roles, and deal ownership", () => {
     await page.toast("Task created");
     // Back to User management, where the next test edits the account.
     await page.nav("User Management");
-    await page.heading("User management");
+    await page.heading("User Management");
   });
 
   uiTest("a per-account sign-out time ends sessions started before it", async (t) => {
@@ -163,7 +163,7 @@ describe("Team, roles, and deal ownership", () => {
 
   uiTest("terminating the manager reassigns their deals", async () => {
     await page.nav("User Management");
-    await page.heading("User management");
+    await page.heading("User Management");
     await page.click(By.css(`button[aria-label="Terminate ${manager.name}"]`), { global: true });
     await page.dialogTitle(`Terminate ${manager.name}`);
     await page.fill("Reassign deals and tasks to", `${admin.name} (me)`);

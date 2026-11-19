@@ -1715,7 +1715,7 @@ h1 { margin: 9px 0 5px; color: #242941; font-size: 25px; font-weight: 690; lette
   .pipeline-board { height: auto; overflow-y: visible; }
   .pipeline-column-body { overflow-y: visible; }
 }
-/* PD-22: the ⇄ button opens the card's menu (drawn over the page so a column's scrolling never cuts it). */
+/* PD-22: the ⋯ button opens the card's menu (drawn over the page so a column's scrolling never cuts it). */
 button.pipeline-move { padding: 0; cursor: pointer; }
 .pipeline-move[aria-expanded="true"] { opacity: 1; border-color: #7180e1; color: #4c5ed9; }
 .card-menu { position: fixed; z-index: 60; right: auto; width: 240px; overflow-y: auto; overscroll-behavior: contain; }
@@ -2161,3 +2161,45 @@ button.pipeline-move { padding: 0; cursor: pointer; }
 /* The details row's "..." folds the open Description, Checklist, Note or Files section. */
 button.activity-row-icon.is-button { border: 0; background: none; padding: 0; width: 100%; color: #3d4359; cursor: pointer; border-radius: 6px; }
 button.activity-row-icon.is-button:hover, button.activity-row-icon.is-button:focus-visible { color: var(--blue); background: var(--line); }
+
+/* Check of November 18, 2026, after the review's screens went in: layout repairs found on the screenshots. */
+
+/* Schedule an Activity on the deal page and from a board card: its fields are not inside a .lead-form, so they get the
+   same look here (they showed as bare browser inputs next to their labels). */
+.schedule-activity-main label:not(.checklist-item):not(.activity-outcome) { display: grid; gap: 7px; color: #666c80; font-weight: 600; }
+.schedule-activity-main :where(input:not([type="checkbox"]), select, textarea) { width: 100%; min-height: 35px; padding: 0 10px; border: 1px solid #e8eaf0; border-radius: 6px; outline: 0; color: #50566c; background: #fff; font-size: 12.5px; font-weight: 400; }
+.schedule-activity-main textarea { min-height: 80px; padding: 9px 10px; resize: vertical; line-height: 1.5; }
+.schedule-activity-main :where(input, textarea)::placeholder { color: #b2b6c2; }
+.schedule-activity-main :where(input[type="date"], input[type="time"]) { padding-right: 6px; }
+
+/* Activity Calendar: the day names stay above their columns when the hour grid shows a scrollbar (Windows, Linux). */
+.calendar-head, .calendar-allday { overflow-y: hidden; scrollbar-gutter: stable; }
+.calendar-grid { scrollbar-gutter: stable; }
+
+/* Activity List: a subject reads as text; red is kept for an overdue activity, like its due date. */
+.activity-subject { color: #20243a; }
+.activity-overdue .activity-subject { color: #c0392b; }
+
+/* A page heading's button keeps its label on one line next to a long description, and stays readable on a phone. */
+.page-heading > .button { flex: 0 0 auto; white-space: nowrap; }
+@media (max-width: 640px) { .page-heading > .button { font-size: 11px; } }
+
+/* Sales Trip Planner: the form and the trips list keep an inset from their panel's border, and the panels a gap. */
+.trip-panel { margin-bottom: 16px; padding: 16px 18px 18px; }
+.integration-note + .trip-panel { margin-top: 14px; }
+.trip-form label { align-content: start; }
+.recent-trips-panel > .panel-heading { padding: 16px 16px 12px; }
+
+/* List of Values: the heading, the pipelines, the notes and the planner's tabs line up with the table below them. */
+.values-panel > .panel-heading { padding: 16px 16px 10px; }
+.values-panel > .panel-heading.planner-list-count { padding-top: 0; }
+.values-panel > .pipelines-bar { padding: 0 16px 10px; }
+.values-panel > .values-fixed-note { margin: 0 16px 12px; }
+.values-panel > .values-stage-note { padding: 0 16px; }
+.values-panel > .planner-tabs { margin: 0 16px 16px; }
+.values-panel > .planner-settings { margin: 0 16px 18px; }
+
+/* Phone width: a page no longer scrolls sideways because of what a table or a list holds. A hidden "Actions" header
+   (.sr-only) is now clipped by its scrolling table, and List of Values' columns may shrink to the screen. */
+.table-scroll { position: relative; }
+.values-layout > * { min-width: 0; }

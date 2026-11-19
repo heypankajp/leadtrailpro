@@ -29,7 +29,7 @@ describe("Sales trip planner", () => {
     await page.closeDialog();
 
     await page.nav("Sales Trip Planner");
-    await page.heading("Sales trip planner");
+    await page.heading("Sales Trip Planner");
     await page.fill("Trip title", tripTitle);
     await page.fill("Address", "Mississauga, ON");
     await page.fill("Radius type", "Kilometres");
@@ -79,10 +79,12 @@ describe("Sales trip planner", () => {
 
   uiTest("the trip is listed and reopens from the list", async () => {
     await page.click(By.css("button.back-link"), { global: true });
-    await page.heading("Sales trip planner");
-    const row = await page.wait(By.xpath(`//table[contains(@class,"trips-table")]//tr[.//strong[normalize-space()=${xq(tripTitle)}]]`));
-    assert.match(await row.getText(), /\b10\b/);
-    await row.findElement(By.xpath('.//button[normalize-space()="Open"]')).click();
+    await page.heading("Sales Trip Planner");
+    const row = await page.wait(By.xpath(`//table[contains(@class,"trip-table")]//tr[.//button[contains(@class,"trip-title") and normalize-space()=${xq(tripTitle)}]]`));
+    // One company was shortlisted, so the trip counts that stop and names it.
+    assert.match(await row.getText(), new RegExp(company));
+    assert.equal(await row.findElement(By.css(".todo-count")).getText(), "1");
+    await row.findElement(By.css("button.trip-title")).click();
     await page.heading(tripTitle);
   });
 });

@@ -59,7 +59,7 @@ export default function TripsPage() {
 
   return (
     <>
-      <div className="page-heading"><div><div className="eyebrow">PLAN A SALES TRIP</div><h1>Sales trip planner</h1><p>Find companies around an address, see who is hiring and who is already in the CRM, then shortlist the ones to visit.</p></div></div>
+      <div className="page-heading"><div><div className="eyebrow">PLAN A SALES TRIP</div><h1>Sales Trip Planner</h1><p>Find companies around an address, see who is hiring and who is already in the CRM, then shortlist the ones to visit.</p></div></div>
       {provider && !provider.configured && <div className="integration-note"><ShieldCheck size={16} /><span><strong>Not configured.</strong> {provider.message}</span></div>}
       {provider && provider.configured && provider.message && <div className="integration-note"><ShieldCheck size={16} /><span>{provider.message}</span></div>}
       {provider?.name === "google" && <MapsUsageCard />}
@@ -86,7 +86,7 @@ export default function TripsPage() {
         </form>
       </section>
 
-      <section className="panel">
+      <section className="panel recent-trips-panel">
         {/* Review of November 18, 2026: the same list as Sales Trips (planner trips and trips planned for To Do deals),
             the most recently planned first, as many as List of values → Recent Planned Trips says, ten to a page. */}
         <div className="panel-heading">

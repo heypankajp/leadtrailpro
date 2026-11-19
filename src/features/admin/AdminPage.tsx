@@ -29,7 +29,7 @@ export default function AdminPage({ tab }: { tab: AdminTab }) {
   if (tab === "api") return <ApiTokensPanel />;
   return (
     <>
-      <div className="page-heading"><div><div className="eyebrow">ADMINISTRATION</div><h1>Device authorization</h1><p>Restrict sign-in to approved company phones and laptops.</p></div></div>
+      <div className="page-heading"><div><div className="eyebrow">ADMINISTRATION</div><h1>Device Authorization</h1><p>Restrict sign-in to approved company phones and laptops.</p></div></div>
       <div className="panel preview-panel">
         <ShieldCheck size={22} />
         <strong>Not available yet</strong>

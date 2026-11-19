@@ -18,7 +18,7 @@ describe("Administration and reports", () => {
 
   uiTest("adds a value to the list of values", async () => {
     await page.nav("List of Values");
-    await page.heading("List of values");
+    await page.heading("List of Values");
     await page.click(By.xpath('.//nav[contains(@class,"values-nav")]//button[starts-with(normalize-space(.), "City")]'), { global: true });
     const value = `Testville ${runId}`;
     const input = await page.wait(By.css("form.values-add input"));
@@ -93,7 +93,7 @@ describe("Administration and reports", () => {
 
   uiTest("a set-password link from the stub outbox resets the password", async () => {
     await page.nav("User Management");
-    await page.heading("User management");
+    await page.heading("User Management");
     await page.click(By.css(`button[aria-label="Email a set-password link to ${admin.name}"]`), { global: true });
     await page.toast("set-password link was emailed");
     await page.nav("Settings");
@@ -170,7 +170,7 @@ describe("Administration and reports", () => {
 
   uiTest("creates a target template", async () => {
     await page.nav("Targets & Templates");
-    await page.heading("Targets & templates");
+    await page.heading("Targets & Templates");
     await page.clickButton("New template", { global: true });
     await page.dialogTitle("New target template");
     const name = `Ramp-up ${runId}`;
@@ -229,7 +229,7 @@ describe("Administration and reports", () => {
 
   uiTest("creates an API token, sees it once, and revokes it", async () => {
     await page.nav("API Access");
-    await page.heading("API access");
+    await page.heading("API Access");
     await page.clickButton("Create token", { global: true });
     const name = `Token ${runId}`;
     await page.fill("Token name", name);
@@ -245,7 +245,7 @@ describe("Administration and reports", () => {
 
   uiTest("opens the tracker import page", async () => {
     await page.nav("Tracker Import");
-    await page.heading("Tracker import");
+    await page.heading("Tracker Import");
     await page.wait(By.xpath("//h2[normalize-space()='Sales Managers in the sheet']"));
     await page.wait(By.xpath("//button[normalize-space()='Preview']"));
   });

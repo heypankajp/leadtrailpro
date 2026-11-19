@@ -52,7 +52,7 @@ export default function SalesTripsPage() {
           <h1>Sales Trips</h1>
           <p>Every trip: those planned for the deals on the To be visited list (plan one here, or select deals under To Do → To be visited and choose Add to sales trip) and those made in the Sales Trip Planner.</p>
         </div>
-        {can("plan_trips") && <button className="button button-primary" onClick={() => setCreating(true)}><Plus size={17} /> Sales trip</button>}
+        {can("plan_trips") && <button className="button button-primary" onClick={() => setCreating(true)}><Plus size={17} /> Sales Trip</button>}
       </div>
 
       <section className="panel leads-panel">

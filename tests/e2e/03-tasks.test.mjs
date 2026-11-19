@@ -28,7 +28,7 @@ describe("Tasks and reminders", () => {
     await page.clickButton("Schedule an Activity", { global: true });
     await page.dialogTitle("Schedule an Activity");
     await page.fillNamed("Subject", title);
-    await page.fillNamed("Priority", "Priority: High");
+    await page.pickPriority("high");
     await page.fillNamed("Date", localDateTime(2, "10:00").slice(0, 10));
     await page.fillNamed("Start time", "10:00");
     await (await page.wait(By.css('section[role="dialog"] input[aria-label="Deal"]'))).sendKeys(leadName);

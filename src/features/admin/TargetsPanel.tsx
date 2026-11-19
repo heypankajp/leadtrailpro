@@ -47,7 +47,7 @@ export default function TargetsPanel() {
   return (
     <>
       <div className="page-heading">
-        <div><div className="eyebrow">ADMINISTRATION</div><h1>Targets & templates</h1><p>Daily and weekly deal targets, minimum road visits, and monthly conversions per productivity stage.</p></div>
+        <div><div className="eyebrow">ADMINISTRATION</div><h1>Targets & Templates</h1><p>Daily and weekly deal targets, minimum road visits, and monthly conversions per productivity stage.</p></div>
         <button className="button button-primary" onClick={() => setDialog({})}><Plus size={17} /> New template</button>
       </div>
       <ErrorText message={error} />

@@ -18,7 +18,7 @@ export default function LeadGenerationPage() {
 
   return (
     <>
-      <div className="page-heading"><div><div className="eyebrow">DISCOVER YOUR NEXT CLIENT <span className="eyebrow-dot">·</span> PREVIEW</div><h1>Lead generation</h1><p>Explore a company and find a thoughtful way to start a conversation.</p></div></div>
+      <div className="page-heading"><div><div className="eyebrow">DISCOVER YOUR NEXT CLIENT <span className="eyebrow-dot">·</span> PREVIEW</div><h1>Lead Generation</h1><p>Explore a company and find a thoughtful way to start a conversation.</p></div></div>
       <div className="panel generation-panel">
         <div className="generation-intro"><div className="generation-icon"><Sparkles size={20} /></div><div><h2>Research a company</h2><p>Company overview, open positions, hiring challenges, review summary, and a suggested introduction.</p></div></div>
         <form className="generation-form" onSubmit={generate}>

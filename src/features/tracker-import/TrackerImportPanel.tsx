@@ -71,7 +71,7 @@ export default function TrackerImportPanel() {
   return (
     <>
       <div className="page-heading">
-        <div><div className="eyebrow">ADMINISTRATION</div><h1>Tracker import</h1><p>Bring the team&apos;s Google Sheet into the app: upload the export, preview the exact outcome, then apply it. Rows already imported are left alone; new and edited rows are applied.</p></div>
+        <div><div className="eyebrow">ADMINISTRATION</div><h1>Tracker Import</h1><p>Bring the team&apos;s Google Sheet into the app: upload the export, preview the exact outcome, then apply it. Rows already imported are left alone; new and edited rows are applied.</p></div>
         <button type="button" className="text-button" onClick={reload}><RefreshCw size={13} /> Refresh</button>
       </div>
       <ErrorText message={error} />

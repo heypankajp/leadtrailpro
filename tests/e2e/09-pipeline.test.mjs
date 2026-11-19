@@ -265,18 +265,18 @@ describe("Pipeline board (PIPE-*)", () => {
 
   uiTest("the Filter menu lists the quarters from today, and Quiet Deals leaves out a deal first contacted today (PD-37)", async () => {
     await page.deals("board");
-    await page.wait(cardIn("New Deal", name));
+    await page.wait(cardIn("Contact Made", name));
     const entry = (start) => By.xpath(`//div[contains(@class,"quick-filter-menu")]//button[starts-with(normalize-space(.), ${xq(start)})]`);
     await page.clickButton("Filter", { global: true });
     await page.click(entry("Current (Q"), { global: true });
-    await page.wait(cardIn("New Deal", name));
+    await page.wait(cardIn("Contact Made", name));
     assert.equal((await driver.findElements(By.xpath('//button[normalize-space()="Deals older than 3 months"]'))).length, 0);
     await page.click(By.css('button[aria-label="Clear the filter"]'), { global: true });
     await page.clickButton("Filter", { global: true });
     await page.click(entry("Quiet Deals ("), { global: true });
-    await driver.wait(async () => (await driver.findElements(cardIn("New Deal", name))).length === 0, 10000, "a deal first contacted today is not a quiet deal");
+    await driver.wait(async () => (await driver.findElements(cardIn("Contact Made", name))).length === 0, 10000, "a deal first contacted today is not a quiet deal");
     await page.click(By.css('button[aria-label="Clear the filter"]'), { global: true });
-    await page.wait(cardIn("New Deal", name));
+    await page.wait(cardIn("Contact Made", name));
   });
 
   uiTest("Followup in the Filter menu shows the deals followed up on the days picked (PD-38)", async () => {

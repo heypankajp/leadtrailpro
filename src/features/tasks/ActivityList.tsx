@@ -73,7 +73,7 @@ export default function ActivityList({ tasks, showAssignee, onToggle, onOpen }: 
               {shown.map((task) => {
                 const overdue = task.status === "open" && task.dueAt !== null && task.dueAt < nowIso;
                 return (
-                  <tr key={task.id} className={task.status === "done" ? "activity-done" : ""}>
+                  <tr key={task.id} className={task.status === "done" ? "activity-done" : overdue ? "activity-overdue" : ""}>
                     <td><button type="button" className={`activity-done-toggle ${task.status === "done" ? "is-done" : ""}`} aria-label={task.status === "done" ? `Reopen ${task.title}` : `Mark ${task.title} as done`} title={task.status === "done" ? "Reopen" : "Mark as done"} disabled={!can("manage_tasks")} onClick={() => onToggle(task)}><Check size={12} /></button></td>
                     <td><button type="button" className={`activity-subject activity-${task.activityType}`} onClick={() => onOpen(task)}>{activityIcons[task.activityType]} <span>{task.title}</span></button>{task.outcome && <small className="activity-outcome-tag">{task.outcome}</small>}</td>
                     <td>{task.leadId ? <button type="button" className="link-button contact-link" onClick={() => openLead(task.leadId!)}>{task.leadName}</button> : <span className="muted-cell">—</span>}</td>

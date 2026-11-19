@@ -118,7 +118,7 @@ describe("Leads inbox cards from the sales tracker", () => {
 
   uiTest("the tracker import places a company with no Sales Manager in the inbox", async () => {
     await page.nav("Tracker Import");
-    await page.heading("Tracker import");
+    await page.heading("Tracker Import");
     const fileInput = await page.wait(By.css('input[type="file"]'), { visible: false });
     await fileInput.sendKeys(workbookPath);
     await page.clickButton("Preview", { global: true });

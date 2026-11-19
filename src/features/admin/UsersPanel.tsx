@@ -63,7 +63,7 @@ export default function UsersPanel() {
   return (
     <>
       <div className="page-heading">
-        <div><div className="eyebrow">ADMINISTRATION <span className="eyebrow-dot">·</span> {users ? `${users.filter((user) => user.active).length} ACTIVE` : "LOADING"}</div><h1>User management</h1><p>Accounts, roles, stages, security options, and termination hand-offs.</p></div>
+        <div><div className="eyebrow">ADMINISTRATION <span className="eyebrow-dot">·</span> {users ? `${users.filter((user) => user.active).length} ACTIVE` : "LOADING"}</div><h1>User Management</h1><p>Accounts, roles, stages, security options, and termination hand-offs.</p></div>
         <button className="button button-primary" onClick={() => setDialog({ kind: "create" })}><Plus size={17} /> Add user</button>
       </div>
       <ErrorText message={error} />

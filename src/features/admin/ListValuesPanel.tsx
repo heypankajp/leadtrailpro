@@ -148,7 +148,7 @@ export default function ListValuesPanel() {
 
   return (
     <>
-      <div className="page-heading"><div><div className="eyebrow">ADMINISTRATION</div><h1>List of values</h1><p>Maintain the dropdown values used across deals. Renames update every existing record; deactivate instead of deleting values that are in use.</p></div></div>
+      <div className="page-heading"><div><div className="eyebrow">ADMINISTRATION</div><h1>List of Values</h1><p>Maintain the dropdown values used across deals. Renames update every existing record; deactivate instead of deleting values that are in use.</p></div></div>
       <div className="values-layout">
         <nav className="panel values-nav" aria-label="Lists">
           {listKeys.filter((key) => !tripPlannerListKeys.includes(key)).map((key) => <button key={key} className={key === view ? "is-active" : ""} onClick={() => { setView(key); setEditing(null); }}>{listKeyLabels[key]}<span>{values ? values[key].length : ""}</span></button>)}
@@ -183,7 +183,7 @@ export default function ListValuesPanel() {
           )}
           {listKey === "stage" && <p className="field-hint values-fixed-note">{pipeline && !pipeline.isDefault
             ? `Deals in the ${pipeline.name} pipeline move through these stages, in this order, on its board. BD actions and the tracker import place deals in the default pipeline only.`
-            : "Deals move through these stages, in this order, on the Deals board. New Deal is the entry stage and cannot be deactivated."}</p>}
+            : "Deals move through these stages, in this order, on the Pipeline board. New Deal is the entry stage and cannot be deactivated."}</p>}
           {listKey === "bd_action" && (
             <div className="values-stage-note">
               <p className="field-hint">Each BD action lands a deal in a pipeline stage; recording an action from a later stage moves the deal forward. An action with no stage counts as Contact Made.</p>
