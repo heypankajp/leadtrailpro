@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import type { WebsiteDetails } from "./websiteDetails";
 import type { ContactActivityInput, ContactPage, ContactsTimeline, Organization, OrganizationDetail, OrganizationInput, OrganizationRow, Person, PersonDetail, PersonInput, PersonRow } from "./model";
 
 const search = (q: string, page: number) => new URLSearchParams({ ...(q ? { q } : {}), page: String(page) }).toString();
@@ -17,4 +18,6 @@ export const logPersonActivity = (id: number, input: ContactActivityInput) => ap
 /** Folds the other contact into this one (SPEC §10.16). */
 export const mergeOrganization = (id: number, otherId: number) => api<{ organization: Organization }>(`/api/contacts/organizations/${id}/merge`, { method: "POST", json: { otherId } });
 export const mergePerson = (id: number, otherId: number) => api<{ person: Person }>(`/api/contacts/people/${id}/merge`, { method: "POST", json: { otherId } });
+/** The company details read from its website (Add company → Website → Fetch). */
+export const lookupWebsite = (url: string) => api<{ details: WebsiteDetails }>("/api/contacts/organizations/lookup", { method: "POST", json: { url } });
 export const fetchContactsTimeline = (q: string, page: number) => api<ContactsTimeline>(`/api/contacts/timeline?${search(q, page)}`);

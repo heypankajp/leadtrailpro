@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { Building2, Plus, Save, UserRound } from "lucide-react";
+import { Building2, DownloadCloud, LoaderCircle, Plus, Save, TriangleAlert, UserRound } from "lucide-react";
 import { ApiError, errorMessage } from "@/lib/api";
 import { useApp } from "@/features/shell/AppContext";
 import { Dialog, ErrorText, Field } from "@/features/shell/components";
 import SuggestInput from "@/features/shell/SuggestInput";
-import { createOrganization, createPerson, fetchOrganization, fetchOrganizations, updateOrganization, updatePerson } from "./client";
+import { createOrganization, createPerson, fetchOrganization, fetchOrganizations, lookupWebsite, updateOrganization, updatePerson } from "./client";
+import type { WebsiteDetails } from "./websiteDetails";
 import { contactKey, type Organization, type OrganizationRow, type Person, type PersonRow } from "./model";
 
 /** Add or edit an organization (SPEC §10.14). Saving an edit updates the company details on every deal of the organization. */
@@ -32,6 +33,65 @@ export function OrganizationFormDialog({ organization, onClose, onSaved }: { org
   }, [typed]);
   const found = matches && matches.q === typed ? matches.rows : [];
   const exists = found.find((row) => contactKey(row.name) === contactKey(typed)) ?? null;
+
+  // Website → Fetch (request of November 19, 2026): the server reads the website and the name, industry, city and address
+  // it gives fill the form. A field the person typed is kept; one filled by an earlier fetch (or empty) is replaced.
+  const [fetching, setFetching] = useState(false);
+  const [fetched, setFetched] = useState<{ tone: "ok" | "error"; text: string; missing?: string } | null>(null);
+  const [autoFilled, setAutoFilled] = useState<Partial<Record<keyof typeof form, string>>>({});
+  // A company found outside Canada: its details wait for the person's yes before they fill the form.
+  const [abroad, setAbroad] = useState<WebsiteDetails | null>(null);
+  const fetchWebsite = async () => {
+    if (!form.website.trim()) { setFetched({ tone: "error", text: "Enter the company's website first, e.g. company.com." }); return; }
+    setFetching(true);
+    setFetched(null);
+    setAbroad(null);
+    try {
+      const { details } = await lookupWebsite(form.website);
+      if (details.country && details.country.toLowerCase() !== "canada") setAbroad(details);
+      else fillFrom(details);
+    } catch (caught) {
+      setFetched({ tone: "error", text: errorMessage(caught, "Could not read the website.") });
+    } finally {
+      setFetching(false);
+    }
+  };
+  /** Fills the form with what the website gave and says what was found. */
+  const fillFrom = (details: WebsiteDetails) => {
+    // The City list value the address names: its town first, otherwise any city of the list the address mentions.
+    const cities = reference.listValues.city.filter((item) => item.active !== false);
+    const plain = (value: string) => value.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+    const byTown = details.city ? cities.find((item) => plain(item.value) === plain(details.city)) : undefined;
+    const byAddress = byTown ?? [...cities].sort((a, b) => b.value.length - a.value.length)
+      .find((item) => new RegExp(`(^|[^a-z])${plain(item.value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z]|$)`).test(plain(details.address)));
+    const found: Partial<Record<keyof typeof form, string>> = {
+      website: details.website, name: details.name, industry: details.industry, address: details.address, cityId: byAddress ? String(byAddress.id) : "",
+    };
+    const filled: Partial<Record<keyof typeof form, string>> = {};
+    const next = { ...form };
+    for (const key of Object.keys(found) as (keyof typeof form)[]) {
+      const value = found[key];
+      if (!value) continue;
+      // The website itself is always tidied; the name only for a new company (an edit keeps its name).
+      if (key === "name" && organization) continue;
+      if (key !== "website" && next[key].trim() && next[key] !== autoFilled[key]) continue;
+      next[key] = value;
+      filled[key] = value;
+    }
+    setForm(next);
+    if (filled.name) setIsNew(false);
+    setAutoFilled((current) => ({ ...current, ...filled }));
+    const labels: Record<string, string> = { name: "name", industry: "industry", cityId: "city", address: details.addressSource === "google" ? "address (from Google Maps)" : "address" };
+    const got = (Object.keys(filled) as string[]).filter((key) => labels[key]).map((key) => labels[key]);
+    const missing = ["name", "cityId", "address"].filter((key) => !found[key as keyof typeof form]).map((key) => labels[key]);
+    const cityNote = details.city && !byAddress ? ` The city ${details.city} is not in the City list.` : "";
+    // What the website did not give is shown apart, in red; not the industry, which is a guess and often left empty.
+    setFetched({
+      tone: "ok",
+      text: got.length ? `Filled from the website: ${got.join(", ")}.` : "Nothing new filled from the website.",
+      missing: [missing.length ? `Not found: ${missing.join(", ")}.` : "", cityNote.trim()].filter(Boolean).join(" "),
+    });
+  };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -65,6 +125,33 @@ export function OrganizationFormDialog({ organization, onClose, onSaved }: { org
                 required maxLength={200} placeholder="Company" autoFocus
               />}
         </Field>
+        <Field label="Website" wide hint={fetched || abroad ? undefined : "Fetch reads the company's name, industry, city and address from its website."}>
+          <div className="website-fetch">
+            <input
+              type="text" inputMode="url" value={form.website} maxLength={2048} placeholder="https://company.com"
+              onChange={(event) => { set("website")(event); setFetched(null); }}
+              onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void fetchWebsite(); } }}
+              onBlur={() => { const value = form.website.trim(); if (value && !/^https?:\/\//i.test(value) && /^[\w-]+(\.[\w-]+)+/.test(value)) setForm((current) => ({ ...current, website: `https://${value}` })); }}
+            />
+            <button type="button" className="button button-outline website-fetch-button" onClick={() => void fetchWebsite()} disabled={fetching} aria-label="Fetch company details from the website" title="Fetch company details from the website">
+              {fetching ? <LoaderCircle size={16} className="spin" /> : <DownloadCloud size={16} />} {fetching ? "Fetching..." : "Fetch"}
+            </button>
+          </div>
+          {fetched && <small className={`website-fetch-note ${fetched.tone === "error" ? "is-error" : ""}`} role="status">{fetched.text}{fetched.missing && <> <span className="website-fetch-missing">{fetched.missing}</span></>}</small>}
+          {abroad && (
+            <div className="website-abroad" role="alertdialog" aria-label="Company outside Canada">
+              <TriangleAlert size={18} aria-hidden="true" />
+              <div>
+                <strong>{abroad.name || "This company"} appears to be outside Canada, in {abroad.country}.</strong>
+                <p>{abroad.address ? `Address found: ${abroad.address}. ` : ""}Are you sure you want to add this company?</p>
+                <div className="website-abroad-actions">
+                  <button type="button" className="button button-primary button-small" onClick={() => { const details = abroad; setAbroad(null); fillFrom(details); }}>Yes, fill in the details</button>
+                  <button type="button" className="button button-outline button-small" onClick={() => { setAbroad(null); setFetched({ tone: "error", text: `Not filled: the company is in ${abroad.country}.` }); }}>No</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </Field>
         <Field label="Industry"><input value={form.industry} onChange={set("industry")} maxLength={120} placeholder="e.g. Healthcare" /></Field>
         <Field label="Company size">
           <select value={form.companySizeId} onChange={set("companySizeId")}><option value="">Not set</option>{reference.listValues.company_size.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}</select>
@@ -73,7 +160,6 @@ export function OrganizationFormDialog({ organization, onClose, onSaved }: { org
           <select value={form.cityId} onChange={set("cityId")}><option value="">Not set</option>{reference.listValues.city.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}</select>
         </Field>
         <Field label="Address" wide><input value={form.address} onChange={set("address")} maxLength={500} placeholder="Street and location" /></Field>
-        <Field label="Website" wide><input type="url" value={form.website} onChange={set("website")} pattern="https?://.+" title="Enter a URL beginning with http:// or https://" placeholder="https://company.com" /></Field>
         {organization && <p className="dialog-description field-wide">These details are shown on every deal of this company.</p>}
         <div className="field-wide"><ErrorText message={error} /></div>
         <div className="modal-actions">

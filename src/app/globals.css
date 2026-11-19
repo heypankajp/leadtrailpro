@@ -2173,3 +2173,17 @@ button.activity-row-icon.is-button:hover, button.activity-row-icon.is-button:foc
 /* The card's menu: Move to stage opens the stages under it (November 19, 2026). */
 .card-menu-chevron { display: inline-flex; margin-left: auto; color: #8b91a5; }
 .card-menu .card-menu-stage { padding-left: 22px; }
+
+/* Add company → Website → Fetch (request of November 19, 2026). */
+.website-fetch { display: flex; gap: 8px; align-items: stretch; }
+.website-fetch input { flex: 1; min-width: 0; }
+.website-fetch-button { flex: none; white-space: nowrap; gap: 6px; }
+.website-fetch-note { display: block; margin-top: 6px; font-size: 13px; color: #1f7a4d; }
+.website-fetch-note.is-error { color: #b23b2e; }
+.spin { animation: spin-around 0.9s linear infinite; }
+@keyframes spin-around { to { transform: rotate(360deg); } }
+.website-abroad { display: flex; gap: 10px; margin-top: 8px; padding: 12px 14px; border: 1px solid #f0c36d; border-radius: 10px; background: #fff8e6; color: #6b4a00; }
+.website-abroad > svg { flex: none; margin-top: 2px; color: #c98a00; }
+.website-abroad p { margin: 4px 0 10px; font-size: 13px; }
+.website-abroad-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.website-fetch-missing { color: #b23b2e; }
