@@ -14,7 +14,30 @@ export type PersonRow = {
   deals: number; openDeals: number; ownerName: string; lastActivityAt: string | null; dealId: number | null;
 };
 
-export type ContactPage<Row> = { rows: Row[]; total: number; page: number; pageSize: number };
+/**
+ * `letterPages`: for each first letter that names in the list start with (A–Z, "#" for anything else), the page its first
+ * name is on, for the A–Z index of Contacts and Organizations (request of November 18, 2026).
+ */
+export type ContactPage<Row> = { rows: Row[]; total: number; page: number; pageSize: number; letterPages?: Record<string, number> };
+
+/**
+ * Contact details compared for duplicates (request of November 18, 2026): an email address without case or outer
+ * spaces; a phone number by its digits, the last ten of them (so "+1 (416) 555-0142" and "416-555-0142" are the same),
+ * and only when it has at least seven digits (an extension alone is not a phone number).
+ */
+export const emailKey = (email: string) => email.trim().toLowerCase();
+export function phoneKey(phone: string): string | null {
+  const digits = phone.replace(/\D/g, "");
+  return digits.length >= 7 ? digits.slice(-10) : null;
+}
+
+/** The index letters, in order: A to Z, then "#" for names that start with anything else. */
+export const indexLetters = [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ", "#"];
+/** The index letter a name is filed under. */
+export function indexLetter(name: string): string {
+  const first = name.trim().charAt(0).toUpperCase();
+  return first >= "A" && first <= "Z" ? first : "#";
+}
 export type ContactQuery = { q: string; page: number; pageSize: number };
 
 export type OrganizationInput = { name: string; website: string; address: string; cityId: number | null; industry: string; companySizeId: number | null };

@@ -127,7 +127,7 @@ describe("Deals", () => {
   });
 
   uiTest("schedules an activity: the type sets the title, and the visit shows in Focus with its time slot and priority (PD-29)", async () => {
-    await page.clickButton("Schedule activity");
+    await page.clickButton("Schedule an Activity");
     await page.wait(By.css('div[aria-label="Activity type"]'));
     assert.equal(await (await page.control("Title")).getAttribute("value"), `Call ${lead.executive}`);
     await page.click(By.xpath('//div[@aria-label="Activity type"]/button[normalize-space()="Visit"]'));

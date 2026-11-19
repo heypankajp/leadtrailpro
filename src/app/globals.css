@@ -1917,3 +1917,247 @@ button.pipeline-move { padding: 0; cursor: pointer; }
 .planner-tabs button { font-size: 11.5px; padding: 7px 14px; }
 .planner-list-count { margin-top: 0; }
 @media (max-width: 720px) { .planner-setting { flex-direction: column; align-items: stretch; } .planner-setting input { max-width: none; } }
+/* Contacts and Organizations: a letter heading before each first letter, and the A–Z index down the right side, after
+   the phone's contacts list (request of November 18, 2026). */
+.contacts-az { display: flex; align-items: flex-start; gap: 4px; }
+.contacts-az .table-scroll { flex: 1 1 auto; min-width: 0; }
+.contacts-letter-row td { height: auto; padding: 14px 16px 6px; border-bottom: 1px solid #e3e6ee; background: #fff; color: #7a8094; font-size: 13px; font-weight: 600; letter-spacing: .2px; scroll-margin-top: 72px; }
+.contacts-letter-row:hover td { background: #fff; }
+/* The index fills the window's height under the top bar: letters spread evenly and scale with the window, smaller on
+   short or narrow screens (dvh follows a phone's moving address bar). */
+.az-index { position: sticky; top: 72px; display: flex; flex: 0 0 auto; flex-direction: column; align-items: center; justify-content: space-between; height: calc(100vh - 96px); height: calc(100dvh - 96px); min-height: 220px; padding: 4px 2px; }
+.az-index button { display: grid; flex: 1 1 0; place-items: center; width: 22px; min-height: 0; padding: 0; border: 0; border-radius: 4px; background: none; color: #586be3; font-size: clamp(9px, 1.7vh, 13px); font-weight: 700; line-height: 1; cursor: pointer; }
+.az-index button:hover:not(:disabled) { background: #f0f1ff; color: #3d47a5; }
+.az-index button:focus-visible { outline: 2px solid #586be3; outline-offset: 1px; }
+.az-index button:disabled { color: #c9cddb; cursor: default; }
+@media (max-width: 720px) {
+  .az-index { top: 60px; height: calc(100vh - 80px); height: calc(100dvh - 80px); }
+  .az-index button { width: 18px; font-size: clamp(8.5px, 1.6vh, 11px); }
+}
+/* A very short window: every other letter shows, as phones do, so the column still fits (# stays). */
+@media (max-height: 460px) {
+  .az-index button:nth-child(even):not(:last-child) { display: none; }
+}
+
+/* Activities in three views (request of November 18, 2026): the switch in the heading, then the List and the Calendar. */
+.heading-actions .view-switch { margin-left: 4px; }
+.activity-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 14px 16px 12px; }
+.activity-type-chips, .activity-period-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.activity-type-chips button, .activity-period-chips > button { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; padding: 0 10px; border: 1px solid transparent; border-radius: 7px; background: #f3f5fb; color: #4352c9; font-size: 11.5px; font-weight: 600; cursor: pointer; }
+.activity-type-chips button:first-child { background: none; color: #20243a; }
+.activity-type-chips button:hover, .activity-period-chips > button:hover { background: #e9ecff; }
+.activity-type-chips button.is-active, .activity-period-chips > button.is-active { border-color: #c9cff7; background: #e4e8ff; color: #2f3ca6; }
+.activity-period-chips > button { background: none; color: #20243a; }
+.activity-period-custom .period-trigger { min-height: 28px; font-size: 11.5px; }
+.activity-count { color: #5a6177; font-size: 12px; font-weight: 600; }
+.activity-table td { vertical-align: middle; }
+.activity-done-toggle { display: inline-grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 1.5px solid #c3c8d6; border-radius: 50%; background: #fff; color: transparent; cursor: pointer; }
+.activity-done-toggle:hover:not(:disabled) { border-color: #2b8049; color: #2b8049; }
+.activity-done-toggle.is-done { border-color: #2b8049; background: #2b8049; color: #fff; }
+.activity-subject { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: #c0392b; font-size: 12.5px; font-weight: 600; text-align: left; cursor: pointer; }
+.activity-subject:hover span { text-decoration: underline; }
+.activity-done .activity-subject { color: #8b91a5; text-decoration: line-through; }
+.activity-outcome-tag { display: block; margin-top: 2px; color: #2b8049; font-size: 10.5px; font-weight: 600; }
+.priority-chip { display: inline-flex; padding: 2px 8px; border-radius: 6px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; }
+.priority-chip-high { background: #fde3e0; color: #b8392c; }
+.priority-chip-medium { background: #fff1b8; color: #7a5b00; }
+.priority-chip-low { background: #e4e8ff; color: #3d47a5; }
+.activity-outcome { display: flex; align-items: center; gap: 10px; color: #5a6177; }
+.activity-outcome select { flex: 1 1 auto; }
+
+/* The Activity Calendar: a week, Sunday to Saturday, with an hour grid. */
+.activity-calendar { padding-bottom: 0; overflow: hidden; }
+.calendar-nav { display: flex; align-items: center; gap: 6px; }
+.calendar-range { margin-right: 6px; color: #20243a; font-size: 13px; }
+.calendar-head, .calendar-allday { display: grid; grid-template-columns: 56px repeat(7, minmax(0, 1fr)); border-bottom: 1px solid #eceef4; }
+.calendar-corner { padding: 8px 6px; color: #8b91a5; font-size: 10.5px; font-weight: 700; text-align: right; }
+.calendar-day-name { padding: 8px 4px; border-left: 1px solid #eceef4; color: #20243a; font-size: 12px; font-weight: 600; text-align: center; }
+.calendar-day-name b { display: inline-grid; place-items: center; min-width: 24px; height: 24px; margin-left: 2px; border-radius: 12px; }
+.calendar-day-name.is-today b { background: #586be3; color: #fff; }
+.calendar-allday-cell { display: grid; gap: 2px; min-height: 30px; padding: 3px; border-left: 1px solid #eceef4; }
+.calendar-grid { display: grid; grid-template-columns: 56px repeat(7, minmax(0, 1fr)); height: calc(100vh - 300px); height: calc(100dvh - 300px); min-height: 360px; overflow-y: auto; }
+.calendar-hours span { display: block; padding-right: 6px; color: #8b91a5; font-size: 10.5px; text-align: right; transform: translateY(-6px); }
+.calendar-column { position: relative; border-left: 1px solid #eceef4; background: repeating-linear-gradient(#fff 0 47px, #eceef4 47px 48px); cursor: cell; }
+.calendar-event { position: absolute; display: grid; align-content: start; gap: 1px; overflow: hidden; padding: 3px 6px; border: 0; border-radius: 5px; background: #586be3; color: #fff; font-size: 11px; font-weight: 600; text-align: left; cursor: pointer; }
+.calendar-event:hover { background: #4352c9; }
+.calendar-event small { overflow: hidden; color: #e4e8ff; font-size: 10px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.calendar-event-title { display: flex; align-items: center; gap: 4px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.calendar-event.is-done { background: #c9cff7; color: #3d47a5; text-decoration: line-through; }
+.calendar-event.is-allday { position: static; display: flex; align-items: center; gap: 4px; min-height: 22px; white-space: nowrap; }
+.calendar-event.is-allday span { overflow: hidden; text-overflow: ellipsis; }
+.calendar-now { position: absolute; right: 0; left: 0; z-index: 2; height: 0; border-top: 1.5px solid #d93025; pointer-events: none; }
+.calendar-now i { position: absolute; top: -8px; left: 2px; padding: 0 3px; border-radius: 3px; background: #fff; color: #d93025; font-size: 9.5px; font-style: normal; font-weight: 700; }
+.calendar-draft-scrim { position: fixed; inset: 0; z-index: 70; border: 0; background: transparent; }
+.calendar-draft { position: fixed; z-index: 71; display: grid; gap: 10px; width: 300px; padding: 12px; border: 1px solid #e8eaf0; border-radius: 11px; background: #fff; box-shadow: 0 16px 38px #20243a24; }
+.calendar-draft-types { display: flex; gap: 2px; }
+.calendar-draft-types button { display: grid; place-items: center; width: 34px; height: 30px; border: 1px solid #e3e6ee; border-radius: 6px; background: #fff; color: #20243a; cursor: pointer; }
+.calendar-draft-types button.is-active { border-color: #9aa6f0; background: #e4e8ff; color: #2f3ca6; }
+.calendar-draft-time { margin: 0; color: #20243a; font-size: 12px; }
+.calendar-draft-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 10px; border-top: 1px solid #eceef4; }
+@media (max-width: 720px) {
+  .calendar-head, .calendar-allday, .calendar-grid { grid-template-columns: 40px repeat(7, minmax(44px, 1fr)); }
+  .activity-calendar { overflow-x: auto; }
+  .calendar-day-name { font-size: 10.5px; }
+  .calendar-event small { display: none; }
+}
+/* Suggestion fields with an icon, the "+ Add … as new …" line and the blue NEW badge, after Pipedrive (request of
+   November 18, 2026). */
+.suggest-field.has-icon > input { padding-left: 36px; }
+.suggest-field-icon { position: absolute; top: 50%; left: 11px; display: grid; place-items: center; color: #3d4359; transform: translateY(-50%); pointer-events: none; }
+.suggest-field.is-new > input { padding-right: 84px; border-color: #586be3; }
+.suggest-new { position: absolute; top: 50%; right: 8px; display: flex; align-items: center; gap: 6px; transform: translateY(-50%); }
+.suggest-new-badge { padding: 2px 8px; border-radius: 10px; background: #1f6fd1; color: #fff; font-size: 10.5px; font-weight: 800; letter-spacing: .4px; }
+.suggest-clear { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 5px; background: none; color: #5a6177; cursor: pointer; }
+.suggest-clear:hover { background: #f0f1f6; color: #20243a; }
+.suggest-list li.suggest-create, .suggest-list li.suggest-create svg { color: #1f6fd1; }
+.suggest-list li.suggest-create strong { color: #1f6fd1; }
+
+/* Schedule an activity (request of November 18, 2026), after Pipedrive's dialog: the form on the left with an icon per
+   row, the assignee's day on the right. */
+.activity-dialog { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(250px, 1fr); gap: 0; margin: -4px -4px 0; }
+.activity-dialog-main { display: grid; align-content: start; gap: 14px; padding: 4px 22px 4px 4px; border-right: 1px solid #eceef4; }
+.activity-subject-input { width: 100%; min-height: 50px; padding: 0 14px; border: 1px solid #e3e6ee; border-radius: 9px; color: #20243a; font-size: 20px; }
+.activity-subject-input:focus { border-color: #586be3; outline: 2px solid #e4e8ff; }
+.activity-type-buttons { display: inline-flex; justify-self: start; overflow: hidden; border: 1px solid #e3e6ee; border-radius: 8px; }
+.activity-type-buttons button { display: grid; place-items: center; width: 42px; height: 38px; border: 0; border-right: 1px solid #e3e6ee; background: #fff; color: #20243a; cursor: pointer; }
+.activity-type-buttons button:last-child { border-right: 0; }
+.activity-type-buttons button:hover { background: #f5f6fb; }
+.activity-type-buttons button.is-active { background: #e4e8ff; color: #2f3ca6; box-shadow: inset 0 0 0 1px #9aa6f0; }
+.activity-type-buttons button svg { width: 18px; height: 18px; }
+.activity-row { display: grid; grid-template-columns: 34px minmax(0, 1fr); align-items: start; gap: 12px; }
+.activity-row-icon { display: grid; place-items: center; height: 40px; color: #3d4359; }
+.activity-row-body { display: grid; gap: 8px; min-width: 0; }
+.activity-row-body > select, .activity-row-body > textarea, .activity-when-row input { min-height: 40px; }
+.activity-when-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.activity-when-row input[type="date"] { flex: 1 1 150px; }
+.activity-when-row input[type="time"] { flex: 1 1 110px; }
+.activity-when-row span { color: #5a6177; }
+.activity-priority, .activity-assignee { justify-self: start; min-width: 200px; }
+.activity-add-links { margin: 0; padding-top: 10px; color: #20243a; font-size: 13px; }
+.activity-add-links .link-button { color: #1f6fd1; font-size: 13px; font-weight: 650; }
+.activity-add-links .link-button:disabled { color: #8b91a5; cursor: default; }
+.activity-note { min-height: 100px; border-color: #f2dd9e; background: #fff6d5; }
+.activity-note:focus { border-color: #e3c25c; outline: 2px solid #fdf0bf; }
+.activity-files { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.activity-files li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid #eceef4; border-radius: 7px; font-size: 12.5px; }
+.activity-files li a, .activity-files li span { flex: 1 1 auto; overflow: hidden; color: #1f6fd1; text-overflow: ellipsis; white-space: nowrap; }
+.activity-files li.is-pending span { color: #20243a; }
+.activity-files li small { color: #8b91a5; font-size: 11px; white-space: nowrap; }
+.activity-files li .icon-button { width: 24px; height: 24px; }
+.activity-links-fields { display: grid; gap: 8px; }
+.activity-link-search { position: relative; }
+.activity-link-field { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 10px 0 12px; border: 1px solid #e3e6ee; border-radius: 8px; background: #fff; color: #3d4359; font-size: 13px; }
+.activity-link-field input { flex: 1 1 auto; min-width: 0; min-height: 36px; padding: 0; border: 0; outline: 0; background: none; }
+.activity-link-field span { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.activity-link-field.is-set { border-color: #c9cff7; background: #f5f6ff; color: #20243a; font-weight: 600; }
+.activity-link-field.is-readonly { background: #fafbfd; color: #8b91a5; }
+.activity-outcome-select { justify-self: stretch; }
+.activity-dialog-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; margin: 4px -22px 0 -4px; padding: 14px 22px 4px 4px; border-top: 1px solid #eceef4; }
+.activity-dialog-footer .activity-done { margin-right: auto; }
+.activity-save { min-width: 84px; }
+/* The day beside it. */
+.day-agenda { display: grid; grid-template-rows: auto auto auto minmax(0, 1fr); min-width: 0; padding-left: 16px; }
+.day-agenda-head { display: flex; align-items: center; gap: 6px; padding-bottom: 12px; border-bottom: 1px solid #eceef4; }
+.day-agenda-head strong { flex: 1 1 auto; color: #20243a; font-size: 14px; font-weight: 600; }
+.day-agenda-owner { padding-top: 6px; color: #5a6177; font-size: 11.5px; }
+.day-agenda-banner { display: flex; align-items: center; gap: 8px; margin: 12px 0 8px; padding: 8px 12px; border-radius: 6px; background: #586be3; color: #fff; font-size: 14px; font-weight: 700; }
+.day-agenda-banner span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.day-agenda-grid { display: grid; grid-template-columns: 54px minmax(0, 1fr); max-height: 560px; overflow-y: auto; border-top: 1px solid #eceef4; }
+.day-agenda-hours span { display: block; padding-right: 8px; color: #8b91a5; font-size: 11px; text-align: right; transform: translateY(-7px); }
+.day-agenda-column { position: relative; border-left: 1px solid #eceef4; background: repeating-linear-gradient(#fff 0 39px, #eceef4 39px 40px); }
+.day-agenda-event { position: absolute; display: flex; align-items: flex-start; gap: 4px; overflow: hidden; padding: 3px 6px; border-radius: 5px; background: #e4e8ff; color: #2f3ca6; font-size: 11px; font-weight: 600; white-space: nowrap; text-overflow: ellipsis; }
+.day-agenda-event.is-draft { z-index: 1; background: #586be3; color: #fff; box-shadow: 0 2px 6px #586be340; }
+.day-agenda-event.is-done { background: #eef0f6; color: #8b91a5; text-decoration: line-through; }
+@media (max-width: 860px) {
+  .activity-dialog { grid-template-columns: 1fr; }
+  .activity-dialog-main { padding-right: 4px; border-right: 0; }
+  .activity-dialog-footer { margin-right: -4px; padding-right: 4px; }
+  .day-agenda { padding: 16px 0 0; border-top: 1px solid #eceef4; }
+  .day-agenda-grid { max-height: 320px; }
+}
+.modal-wide:has(.activity-dialog) { width: min(100%, 1100px); }
+/* Schedule an activity: its fields, in the app's form style (the dialog is not inside .lead-form). */
+/* :where keeps this base style weak, so the fields' own rules (icon padding, the deal search) win over it. */
+.activity-dialog :where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea) {
+  width: 100%; min-height: 40px; padding: 0 12px; border: 1px solid #e3e6ee; border-radius: 8px; background: #fff; color: #20243a; font: inherit; font-size: 13px;
+}
+.activity-dialog textarea { padding: 10px 12px; resize: vertical; }
+.activity-dialog :where(input, select, textarea):focus { border-color: #586be3; outline: 2px solid #e4e8ff; outline-offset: 0; }
+.activity-dialog .activity-link-field input:focus { outline: 0; }
+/* The note: a collapsible section, folded by default. */
+.activity-note-section { display: grid; gap: 8px; }
+.activity-note-toggle { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px; border: 1px solid #f2dd9e; border-radius: 8px; background: #fffaf0; color: #20243a; font-size: 13px; text-align: left; cursor: pointer; }
+.activity-note-toggle:hover { background: #fff6d5; }
+.activity-note-chevron { flex: 0 0 auto; color: #6b5a12; transform: rotate(-90deg); transition: transform .15s ease; }
+.activity-note-section.is-open .activity-note-chevron { transform: rotate(0deg); }
+.activity-note-preview { overflow: hidden; color: #8a7a3c; text-overflow: ellipsis; white-space: nowrap; }
+.activity-dialog input:disabled { background: #f7f8fb; color: #8b91a5; }
+.activity-dialog .activity-subject-input { min-height: 50px; font-size: 20px; }
+.activity-dialog .activity-when-row { display: grid; grid-template-columns: minmax(140px, 1.3fr) minmax(100px, 1fr) auto minmax(100px, 1fr); }
+.activity-dialog .suggest-field.has-icon > input { padding-left: 36px; }
+.activity-dialog .suggest-field.is-new > input { padding-right: 84px; }
+.activity-dialog .activity-link-field input { min-height: 36px; padding: 0; border: 0; outline: 0; }
+.activity-dialog .activity-link-field input:focus { outline: 0; }
+.activity-dialog .natural-date-field { display: grid; gap: 4px; }
+.activity-dialog .natural-date-field .field-label { color: #5a6177; font-size: 11.5px; font-weight: 600; }
+.activity-dialog .natural-date-field .field-hint { color: #8b91a5; font-size: 11px; }
+.activity-dialog .activity-assignee { justify-self: start; width: auto; min-width: 240px; }
+.activity-dialog .activity-note { border-color: #f2dd9e; background: #fff6d5; }
+.activity-dialog .activity-outcome-select { width: 100%; }
+/* Several people: chips above the field that adds one more. */
+.activity-people { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.activity-people li { display: inline-flex; align-items: center; gap: 5px; padding: 3px 4px 3px 9px; border: 1px solid #c9cff7; border-radius: 14px; background: #f0f1ff; color: #2f3ca6; font-size: 12px; font-weight: 600; }
+.activity-people li .suggest-new-badge { padding: 1px 6px; font-size: 9px; }
+.activity-people li button { display: grid; place-items: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 9px; background: none; color: #5a6177; cursor: pointer; }
+.activity-people li button:hover { background: #dfe2fb; color: #20243a; }
+/* Priority as coloured chips. */
+.priority-picker { position: relative; justify-self: start; }
+.priority-trigger { display: inline-flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 12px 0 14px; border: 1px solid #e3e6ee; border-radius: 8px; background: #fff; color: #20243a; font-size: 13px; font-weight: 600; cursor: pointer; }
+.priority-trigger:hover { background: #f8f9fc; }
+.priority-menu { position: absolute; z-index: 60; top: calc(100% + 6px); left: 0; display: grid; gap: 2px; min-width: 240px; margin: 0; padding: 8px; border: 1px solid #e8eaf0; border-radius: 10px; background: #fff; box-shadow: 0 14px 34px #20243a24; list-style: none; }
+.priority-menu button { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 36px; padding: 4px 8px; border: 0; border-radius: 6px; background: none; cursor: pointer; }
+.priority-menu button:hover { background: #f3f5fb; }
+.priority-check { color: #1f6fd1; }
+.priority-none { color: #20243a; font-size: 13px; font-weight: 600; }
+.priority-chip { display: inline-flex; align-items: center; gap: 4px; }
+.priority-chip-high { background: #d93025; color: #fff; }
+.priority-chip-medium { background: #f9d71c; color: #3a2f00; }
+.priority-chip-low { background: #3d5fd9; color: #fff; }
+/* Each activity type has its colour (request of November 18, 2026): the type buttons, the calendar's quick add, the chips. */
+.activity-type-call { --type-color: #16a34a; }
+.activity-type-meeting { --type-color: #7c3aed; }
+.activity-type-task { --type-color: #0284c7; }
+.activity-type-deadline { --type-color: #dc2626; }
+.activity-type-email { --type-color: #ea580c; }
+.activity-type-lunch { --type-color: #ca8a04; }
+.activity-type-visit { --type-color: #db2777; }
+.activity-type-buttons button[class*="activity-type-"] svg, .calendar-draft-types button[class*="activity-type-"] svg, .activity-type-chips button[class*="activity-type-"] svg { color: var(--type-color); }
+.activity-type-buttons button[class*="activity-type-"].is-active, .calendar-draft-types button[class*="activity-type-"].is-active {
+  background: color-mix(in srgb, var(--type-color) 14%, #fff); box-shadow: inset 0 0 0 1.5px var(--type-color);
+}
+/* Assigned to: team members as chips; the first one (whose day is shown) is marked. */
+.activity-assignees { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.activity-assignees .activity-people { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.activity-people li.is-first { border-color: #9aa6f0; background: #e4e8ff; }
+.activity-dialog .activity-assignee-add { width: auto; min-width: 200px; min-height: 34px; border-style: dashed; color: #4352c9; font-weight: 600; }
+/* Schedule an activity: Description, Checklist, Note and Files in one row of links before the outcome; a click opens that
+   section in the same place, one at a time. */
+.activity-details { display: grid; gap: 8px; }
+.activity-detail-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.activity-detail-tabs button { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 12px; border: 1px solid #e3e6ee; border-radius: 17px; background: #fff; color: #1f6fd1; font-size: 12.5px; font-weight: 650; cursor: pointer; }
+.activity-detail-tabs button:hover { background: #f3f6fd; }
+.activity-detail-tabs button.is-filled { border-color: #b8cdf2; background: #eef4fd; }
+.activity-detail-tabs button.is-filled::after { content: ""; width: 6px; height: 6px; border-radius: 3px; background: #1f6fd1; }
+.activity-detail-tabs button.is-active { border-color: #586be3; background: #586be3; color: #fff; }
+.activity-detail-tabs button.is-active::after { background: #fff; }
+.activity-detail-panel { padding: 2px 0 0; }
+.activity-detail-panel .checklist-editor { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid #e3e6ee; border-radius: 8px; }
+.activity-files-panel { display: grid; gap: 8px; justify-items: start; }
+.activity-files-panel .activity-files { width: 100%; }
+/* The date typed in words, in its own row of Schedule an activity: no title, no examples; the confirmation once typed. */
+.natural-date-field.is-compact { display: grid; gap: 4px; }
+.activity-dialog .natural-date-field.is-compact .natural-date-hint { font-size: 11.5px; }
+
+/* The details row's "..." folds the open Description, Checklist, Note or Files section. */
+button.activity-row-icon.is-button { border: 0; background: none; padding: 0; width: 100%; color: #3d4359; cursor: pointer; border-radius: 6px; }
+button.activity-row-icon.is-button:hover, button.activity-row-icon.is-button:focus-visible { color: var(--blue); background: var(--line); }

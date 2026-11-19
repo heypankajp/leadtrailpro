@@ -177,6 +177,13 @@ export class Page {
     throw new Error(`No visible field labelled "${label}"`);
   }
 
+  /** A field of the topmost dialog by its accessible name (aria-label), as Schedule an activity labels its fields. */
+  async fillNamed(name, value) {
+    const element = await this.wait(By.css(`section[role="dialog"] [aria-label=${JSON.stringify(name)}]`));
+    await this.setValue(element, value);
+    return element;
+  }
+
   async fill(label, value, { global = false } = {}) {
     const element = await this.driver.wait(() => this.control(label, global).catch(() => null), DEFAULT_TIMEOUT, `Field "${label}" not found`);
     await this.setValue(element, value);

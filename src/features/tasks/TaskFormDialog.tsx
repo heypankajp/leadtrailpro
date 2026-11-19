@@ -1,113 +1,450 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
-import { Plus, Search, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Building2, Sparkles, Check, ChevronDown, ChevronsDown, ChevronsUp, Circle, CircleDollarSign, Clock3, FileText, Flag, Link2, ListChecks, MoreHorizontal, Paperclip, Plus, Search, StickyNote, Target, UserRound, X } from "lucide-react";
 import { errorMessage } from "@/lib/api";
-import { fromLocalInput, toLocalInput } from "@/lib/format";
-import { fetchLeads } from "@/features/leads/client";
+import { useAsyncData } from "@/lib/useAsyncData";
+import { fetchLead, fetchLeads } from "@/features/leads/client";
+import { createOrganization, createPerson, fetchOrganization, fetchOrganizations } from "@/features/contacts/client";
+import { contactKey, type OrganizationRow, type PersonRow } from "@/features/contacts/model";
+import SuggestInput from "@/features/shell/SuggestInput";
 import type { LeadSummary } from "@/features/leads/model";
 import { useApp } from "@/features/shell/AppContext";
-import { Dialog, ErrorText, Field } from "@/features/shell/components";
-import { createTask, updateTask } from "./client";
-import { taskPriorities, type ChecklistItem, type Task, type TaskPriority } from "./model";
+import { Dialog, ErrorText } from "@/features/shell/components";
+import { createTask, fetchTaskAttachments, removeTaskAttachment, taskAttachmentUrl, updateTask, uploadTaskAttachment } from "./client";
+import DayAgenda from "./DayAgenda";
 import NaturalDateField from "./NaturalDateField";
+import { taskActivityLabels, taskActivityTypes, type ChecklistItem, type Task, type TaskActivityType, type TaskAttachment, type TaskPriority } from "./model";
+import { ymdOf } from "./periods";
+import { activityIcons } from "./ScheduleActivity";
 import TaskComments from "./TaskComments";
 
-type Props = { task?: Task; leadId?: number | null; leadName?: string | null; defaultAssigneeId?: number; onClose: () => void; onSaved: (task: Task) => void };
+/** `defaults`: starting values for a new activity, from a slot of the Activity Calendar (Details...). */
+type Props = {
+  task?: Task; leadId?: number | null; leadName?: string | null; defaultAssigneeId?: number;
+  defaults?: { title?: string; activityType?: TaskActivityType; dueAt?: string | null; endsAt?: string | null };
+  onClose: () => void; onSaved: (task: Task) => void;
+};
 
-export default function TaskFormDialog({ task, leadId, leadName, defaultAssigneeId, onClose, onSaved }: Props) {
-  const { reference, user } = useApp();
-  const [title, setTitle] = useState(task?.title ?? "");
-  const [description, setDescription] = useState(task?.description ?? "");
-  const [assigneeId, setAssigneeId] = useState(String(task?.assigneeId ?? defaultAssigneeId ?? user.id));
-  const [dueAt, setDueAt] = useState(toLocalInput(task?.dueAt));
+/** The deal an activity is linked to (optional). */
+type LinkedDeal = { id: number; name: string };
+/** An organization or person picked (`id`), or added as new from the list (`isNew`), or only typed (neither). */
+type LinkedRecord = { id: number | null; isNew: boolean };
+
+/** The file types an activity accepts, as for a deal's documents (the server checks them again). */
+const acceptedFiles = ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp,.txt";
+const pad = (value: number) => String(value).padStart(2, "0");
+const timeOf = (iso: string | null | undefined) => { if (!iso) return ""; const date = new Date(iso); return date.getHours() || date.getMinutes() ? `${pad(date.getHours())}:${pad(date.getMinutes())}` : ""; };
+const priorityIcons: Record<TaskPriority, ReactNode> = { high: <ChevronsUp size={13} />, medium: <Circle size={11} />, low: <ChevronsDown size={13} />, normal: null };
+const priorities: { value: TaskPriority; label: string }[] = [{ value: "normal", label: "None" }, { value: "high", label: "High" }, { value: "medium", label: "Medium" }, { value: "low", label: "Low" }];
+
+/**
+ * Priority as coloured chips, after Pipedrive: None, HIGH (red), MEDIUM (yellow), LOW (blue); the button shows the chip
+ * chosen. The stored values stay normal / high / medium / low.
+ */
+function PriorityPicker({ value, onChange }: { value: TaskPriority; onChange: (value: TaskPriority) => void }) {
+  const [open, setOpen] = useState(false);
+  const anchor = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: Event) => {
+      if (event.type === "keydown" && (event as KeyboardEvent).key !== "Escape") return;
+      if (event.type === "mousedown" && anchor.current?.contains(event.target as Node)) return;
+      setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", close);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", close); };
+  }, [open]);
+  const chip = (item: TaskPriority) => (item === "normal" ? <span className="priority-none">None</span> : <span className={`priority-chip priority-chip-${item}`}>{priorityIcons[item]} {item}</span>);
+  return (
+    <div className="priority-picker" ref={anchor}>
+      <button type="button" className="priority-trigger" aria-haspopup="listbox" aria-expanded={open} aria-label="Priority" onClick={() => setOpen((current) => !current)}>
+        {value === "normal" ? <span>Priority</span> : chip(value)} <ChevronDown size={14} />
+      </button>
+      {open && (
+        <ul className="priority-menu" role="listbox" aria-label="Priority">
+          {priorities.map((item) => (
+            <li key={item.value} role="option" aria-selected={value === item.value}>
+              <button type="button" onClick={() => { onChange(item.value); setOpen(false); }}>{chip(item.value)}{value === item.value && <Check size={15} className="priority-check" />}</button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** One row of the form: its icon on the left, its fields on the right. */
+function Row({ icon, label, children, onIcon }: { icon: ReactNode; label: string; children: ReactNode; onIcon?: () => void }) {
+  return (
+    <div className="activity-row">
+      {onIcon
+        ? <button type="button" className="activity-row-icon is-button" title={label} aria-label={label} onClick={onIcon}>{icon}</button>
+        : <span className="activity-row-icon" title={label} aria-hidden="true">{icon}</span>}
+      <div className="activity-row-body">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * Schedule an activity (request of November 18, 2026), after Pipedrive's form, for every activity: new ones (Activities,
+ * the top bar's "+ Activity", a calendar slot's Details..., a deal page) and edits. The subject and its type; the date
+ * with a start and an end time; priority; Add Description, Checklist and files; the yellow note; who does it; the deal
+ * it is linked to, with its contact and organization; Mark as done with its outcome. On the right, the assignee's day.
+ */
+export default function TaskFormDialog({ task, leadId, leadName, defaultAssigneeId, defaults, onClose, onSaved }: Props) {
+  const { reference, user, can } = useApp();
+  const initialDue = task?.dueAt ?? defaults?.dueAt ?? null;
+  const [type, setType] = useState<TaskActivityType>(task?.activityType ?? defaults?.activityType ?? "call");
+  const [title, setTitle] = useState(task?.title ?? defaults?.title ?? "");
+  const [date, setDate] = useState(initialDue ? ymdOf(new Date(initialDue)) : reference.today);
+  const [start, setStart] = useState(timeOf(initialDue));
+  const [end, setEnd] = useState(timeOf(task?.endsAt ?? defaults?.endsAt));
   const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? "normal");
+  const [description, setDescription] = useState(task?.description ?? "");
+  // Which of Description, Checklist, Note and Files is open in the details row (none to start with).
+  const [section, setSection] = useState<"description" | "checklist" | "note" | "files" | null>(null);
+  const [note, setNote] = useState(task?.note ?? "");
   const [checklist, setChecklist] = useState<ChecklistItem[]>(task?.checklist ?? []);
   const [newItem, setNewItem] = useState("");
-  const [lead, setLead] = useState<{ id: number; name: string } | null>(task?.leadId ? { id: task.leadId, name: task.leadName ?? `Deal ${task.leadId}` } : leadId ? { id: leadId, name: leadName ?? `Deal ${leadId}` } : null);
-  const [leadSearch, setLeadSearch] = useState("");
-  const [leadResults, setLeadResults] = useState<LeadSummary[]>([]);
+  const owners = reference.users.filter((item) => item.role !== "recruiter" || item.id === (task?.assigneeId ?? user.id));
+  // Several team members (request of November 18, 2026): chips; the first one's day is shown on the right.
+  const [assigneeIds, setAssigneeIds] = useState<number[]>(task?.assignees?.length ? task.assignees.map((item) => item.id) : [task?.assigneeId ?? defaultAssigneeId ?? user.id]);
+  const assigneeId = String(assigneeIds[0] ?? user.id);
+  const nameOf = (id: number) => { const found = reference.users.find((item) => item.id === id); return found ? (found.id === user.id ? `${found.name} (You)` : found.name) : task?.assignees?.find((item) => item.id === id)?.name ?? `User ${id}`; };
+  const [deal, setDeal] = useState<LinkedDeal | null>(task?.leadId ? { id: task.leadId, name: task.leadName ?? `Deal ${task.leadId}` } : leadId ? { id: leadId, name: leadName ?? `Deal ${leadId}` } : null);
+  // The organization and the person (request of November 18, 2026): picked from the list, or added as new (NEW badge).
+  // The person is looked up only among the organization's contacts, and a new person is added inside the organization.
+  const [orgName, setOrgName] = useState(task?.organizationId ? task.organization ?? "" : "");
+  const [org, setOrg] = useState<LinkedRecord>({ id: task?.organizationId ?? null, isNew: false });
+  // Several people (request of November 18, 2026): chips, each picked from the organization's contacts or added as new.
+  const [chosen, setChosen] = useState<{ id: number | null; name: string }[]>(
+    task?.people?.length ? task.people : task?.personId ? [{ id: task.personId, name: task.contactName ?? "" }] : [],
+  );
+  const [personName, setPersonName] = useState("");
+  const [orgRows, setOrgRows] = useState<{ q: string; rows: OrganizationRow[] } | null>(null);
+  const [people, setPeople] = useState<PersonRow[]>([]);
+  const [dealSearch, setDealSearch] = useState("");
+  const [dealResults, setDealResults] = useState<LeadSummary[]>([]);
+  const [done, setDone] = useState(task?.status === "done");
+  const [outcomeId, setOutcomeId] = useState(task?.outcomeId ? String(task.outcomeId) : "");
+  const outcomes = reference.listValues.activity_outcome.filter((item) => item.active || item.id === task?.outcomeId);
+  const [files, setFiles] = useState<File[]>([]);
+  const fileInput = useRef<HTMLInputElement>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // A new activity started from a deal page takes the deal's organization and contact.
   useEffect(() => {
-    const term = leadSearch.trim();
+    if (task || !leadId) return;
+    let cancelled = false;
+    fetchLead(leadId).then(({ lead }) => { if (!cancelled) linkDeal(lead); }).catch(() => undefined);
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, for the deal the page gave
+  }, []);
+  // The organizations that match what is typed.
+  const typedOrg = org.id || org.isNew ? "" : orgName.trim();
+  useEffect(() => {
+    if (typedOrg.length < 2) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => { fetchOrganizations(typedOrg, 1).then((page) => { if (!cancelled) setOrgRows({ q: typedOrg, rows: page.rows.slice(0, 8) }); }).catch(() => undefined); }, 250);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [typedOrg]);
+  // The contacts of the organization picked.
+  useEffect(() => {
+    if (!org.id) return;
+    let cancelled = false;
+    fetchOrganization(org.id).then((detail) => { if (!cancelled) setPeople(detail.people); }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [org.id]);
+  useEffect(() => {
+    const term = dealSearch.trim();
     if (!term) return;
     let cancelled = false;
-    const timer = window.setTimeout(() => {
-      fetchLeads({ q: term, pageSize: 6 }).then((page) => { if (!cancelled) setLeadResults(page.leads); }).catch(() => undefined);
-    }, 250);
+    const timer = window.setTimeout(() => { fetchLeads({ q: term, pageSize: 6 }).then((page) => { if (!cancelled) setDealResults(page.leads); }).catch(() => undefined); }, 250);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [leadSearch]);
-  const visibleResults = leadSearch.trim() ? leadResults : [];
+  }, [dealSearch]);
+  const attachmentsFetcher = useCallback(() => (task ? fetchTaskAttachments(task.id).then((result) => result.attachments) : Promise.resolve([] as TaskAttachment[])), [task]);
+  const { data: attachments, reload: reloadAttachments } = useAsyncData<TaskAttachment[]>(attachmentsFetcher);
 
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setBusy(true);
-    setError("");
-    const input = { leadId: lead?.id ?? null, title: title.trim(), description: description.trim(), assigneeId: Number(assigneeId), dueAt: fromLocalInput(dueAt), priority, checklist };
-    try {
-      const result = task ? await updateTask(task.id, input) : await createTask(input);
-      onSaved(result.task);
-    } catch (caught) {
-      setError(errorMessage(caught, "Could not save the task."));
-      setBusy(false);
-    }
+  const fileCount = (attachments?.length ?? 0) + files.length;
+  const detailTabs: { id: "description" | "checklist" | "note" | "files"; label: string; icon: ReactNode; filled: boolean; count?: number }[] = [
+    { id: "description", label: "Description", icon: <FileText size={14} />, filled: Boolean(description.trim()) },
+    { id: "checklist", label: "Checklist", icon: <ListChecks size={14} />, filled: checklist.length > 0, count: checklist.length },
+    { id: "note", label: "Note", icon: <StickyNote size={14} />, filled: Boolean(note.trim()) },
+    { id: "files", label: "Files", icon: <Paperclip size={14} />, filled: fileCount > 0, count: fileCount },
+  ];
+  // The title follows the type until the person writes their own.
+  const changeType = (next: TaskActivityType) => {
+    if (!title.trim() || title === taskActivityLabels[type]) setTitle(taskActivityLabels[next]);
+    setType(next);
   };
-
   const addItem = () => {
     const text = newItem.trim();
     if (!text) return;
     setChecklist((current) => [...current, { text, done: false }]);
     setNewItem("");
   };
+  /** A deal picked (or given): its organization and contact become the activity's. */
+  function linkDeal(lead: LeadSummary) {
+    setDeal({ id: lead.id, name: lead.clientName });
+    if (lead.organizationId) { setOrg({ id: lead.organizationId, isNew: false }); setOrgName(lead.clientName); }
+    setChosen(lead.personId ? [{ id: lead.personId, name: lead.clientExecutive }] : []);
+    setPersonName("");
+  }
+  const changeOrgName = (value: string) => { setOrgName(value); setOrg({ id: null, isNew: false }); setPeople([]); setChosen([]); setPersonName(""); };
+  const clearOrg = () => changeOrgName("");
+  const orgPeople = org.id ? people : [];
+  const orgExact = orgRows && orgRows.q === typedOrg ? orgRows.rows.find((row) => contactKey(row.name) === contactKey(typedOrg)) ?? null : null;
+  const orgCreate = typedOrg.length >= 2 && orgRows?.q === typedOrg && !orgExact ? { label: `Add '${typedOrg}' as new organization`, onCreate: () => setOrg({ id: null, isNew: true }) } : null;
+  const orgChosen = Boolean(org.id || org.isNew || orgName.trim());
+  const typedPerson = personName.trim();
+  const isChosen = (name: string) => chosen.some((item) => contactKey(item.name) === contactKey(name));
+  const personExact = orgPeople.find((item) => contactKey(item.name) === contactKey(typedPerson)) ?? null;
+  const addPerson = (item: { id: number | null; name: string }) => { if (!isChosen(item.name)) setChosen((current) => [...current, item]); setPersonName(""); };
+  const personCreate = typedPerson.length >= 2 && !personExact && !isChosen(typedPerson) ? { label: `Add '${typedPerson}' as new person`, onCreate: () => addPerson({ id: null, name: typedPerson }) } : null;
 
+  /**
+   * The organization and person ids to save: what was picked, an exact name typed, or records created now (the
+   * organization first, then the person inside it). A name that is neither picked nor added as new is refused.
+   */
+  const resolveLinks = async (): Promise<{ organizationId: number | null; personIds: number[] }> => {
+    let organizationId = org.id ?? orgExact?.id ?? null;
+    const typedOrgName = orgName.trim();
+    if (!organizationId && typedOrgName) {
+      if (!org.isNew) throw new Error(`Pick “${typedOrgName}” from the list, or add it as a new organization.`);
+      organizationId = (await createOrganization({ name: typedOrgName, website: "", address: "", cityId: null, industry: "", companySizeId: null })).organization.id;
+    }
+    if (typedPerson) throw new Error(`Pick “${typedPerson}” from the list, or add them as a new person.`);
+    const personIds: number[] = [];
+    for (const item of chosen) {
+      if (item.id) { personIds.push(item.id); continue; }
+      if (!organizationId) throw new Error("Choose the organization first: people are added inside it.");
+      personIds.push((await createPerson({ name: item.name, organizationName: typedOrgName || orgName, emails: [], phone: "", altPhone: "", remark: "" })).person.id);
+    }
+    return { organizationId, personIds };
+  };
+
+  const removeSaved = async (attachment: TaskAttachment) => {
+    try { await removeTaskAttachment(attachment.id); reloadAttachments(); } catch (caught) { setError(errorMessage(caught, "Could not remove the file.")); }
+  };
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!date) { setError("Choose the date."); return; }
+    if (end && !start) { setError("Give a start time with the end time."); return; }
+    if (start && end && end <= start) { setError("The end time must be after the start."); return; }
+    setBusy(true);
+    setError("");
+    // No start time: the activity is due that day (an all-day item on the calendar).
+    const dueAt = new Date(`${date}T${start || "00:00"}`).toISOString();
+    const endsAt = start && end ? new Date(`${date}T${end}`).toISOString() : null;
+    try {
+      const links = await resolveLinks();
+      const common = {
+        leadId: deal?.id ?? null, title: title.trim() || taskActivityLabels[type], description: description.trim(), note: note.trim(), assigneeId: Number(assigneeId), assigneeIds,
+        dueAt, endsAt, activityType: type, priority, checklist, organizationId: links.organizationId, personIds: links.personIds,
+      };
+      const saved = task
+        ? (await updateTask(task.id, { ...common, ...(done !== (task.status === "done") ? { status: done ? "done" : "open" } : {}), outcomeId: done && outcomeId ? Number(outcomeId) : null })).task
+        : (await createTask({ ...common, done, outcomeId: done && outcomeId ? Number(outcomeId) : null })).task;
+      // Files chosen in the form are uploaded once the activity exists.
+      for (const file of files) await uploadTaskAttachment(saved.id, file);
+      onSaved(saved);
+    } catch (caught) {
+      setError(errorMessage(caught, "Could not save the activity."));
+      setBusy(false);
+    }
+  };
+
+  const visibleResults = dealSearch.trim() ? dealResults : [];
   return (
-    <Dialog title={task ? "Edit task" : "Create task"} eyebrow={lead ? `DEAL · ${lead.name.toUpperCase()}` : "TASKS & REMINDERS"} onClose={onClose}>
-      <form className="lead-form" onSubmit={submit}>
-        <Field label="Title" required wide><input value={title} onChange={(event) => setTitle(event.target.value)} required maxLength={200} placeholder="Follow up on the staffing proposal" autoFocus /></Field>
-        <Field label="Assignee" required>
-          <select value={assigneeId} onChange={(event) => setAssigneeId(event.target.value)}>{reference.users.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select>
-        </Field>
-        <Field label="Priority"><select value={priority} onChange={(event) => setPriority(event.target.value as TaskPriority)}>{taskPriorities.map((option) => <option key={option} value={option}>{option[0].toUpperCase()}{option.slice(1)}</option>)}</select></Field>
-        <NaturalDateField onResolve={(result, time) => setDueAt(`${result.date}T${time}`)} />
-        <Field label="Due date and time" hint="Confirm or adjust the date before saving."><input type="datetime-local" value={dueAt} onChange={(event) => setDueAt(event.target.value)} /></Field>
-        <Field label="Deal" hint={lead ? undefined : "Optional. Search by client name."}>
-          {lead ? (
-            <span className="chip-value">{lead.name}{!leadId && <button type="button" aria-label="Remove deal" onClick={() => setLead(null)}><X size={12} /></button>}</span>
-          ) : (
-            <span className="lead-picker">
-              <span className="search-field"><Search size={14} /><input value={leadSearch} onChange={(event) => setLeadSearch(event.target.value)} placeholder="Search deals..." /></span>
-              {visibleResults.length > 0 && (
-                <span className="lead-picker-results">
-                  {visibleResults.map((result) => <button type="button" key={result.id} onClick={() => { setLead({ id: result.id, name: result.clientName }); setLeadSearch(""); setLeadResults([]); }}>{result.clientName} <small>{result.ownerName}</small></button>)}
-                </span>
+    <Dialog title={task ? "Edit Activity" : "Schedule an Activity"} onClose={onClose} size="wide">
+      <form className="activity-dialog" onSubmit={submit}>
+        <div className="activity-dialog-main">
+          <input className="activity-subject-input" aria-label="Subject" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={200} placeholder={taskActivityLabels[type]} autoFocus />
+          <div className="activity-type-buttons" role="group" aria-label="Activity type">
+            {taskActivityTypes.map((item) => (
+              <button key={item} type="button" className={`activity-type-${item} ${type === item ? "is-active" : ""}`} aria-pressed={type === item} aria-label={taskActivityLabels[item]} title={taskActivityLabels[item]} onClick={() => changeType(item)}>{activityIcons[item]}</button>
+            ))}
+          </div>
+
+          <Row icon={<Clock3 size={20} />} label="When">
+            <div className="activity-when-row">
+              <input type="date" aria-label="Date" value={date} onChange={(event) => setDate(event.target.value)} required />
+              <input type="time" aria-label="Start time" value={start} onChange={(event) => setStart(event.target.value)} />
+              <span aria-hidden="true">–</span>
+              <input type="time" aria-label="End time" value={end} min={start || undefined} onChange={(event) => setEnd(event.target.value)} />
+            </div>
+          </Row>
+
+          {/* TASK-03: a date typed in words ("next Monday at 10am") fills the date and the start time; its name shows on hover. */}
+          <Row icon={<Sparkles size={20} />} label="Type a due date">
+            <NaturalDateField compact onResolve={(result, time) => { setDate(result.date); setStart(time); }} />
+          </Row>
+
+          <Row icon={<Flag size={20} />} label="Priority">
+            <PriorityPicker value={priority} onChange={setPriority} />
+          </Row>
+
+          <Row icon={<UserRound size={20} />} label="Assigned to">
+            <div className="activity-assignees">
+              <ul className="activity-people" aria-label="Assigned to">
+                {assigneeIds.map((id, index) => (
+                  <li key={id} className={index === 0 ? "is-first" : undefined} title={index === 0 ? "Their day is shown on the right" : undefined}>
+                    <UserRound size={13} /> <span>{nameOf(id)}</span>
+                    {assigneeIds.length > 1 && <button type="button" aria-label={`Remove ${nameOf(id)}`} title="Remove" onClick={() => setAssigneeIds((current) => current.filter((other) => other !== id))}><X size={12} /></button>}
+                  </li>
+                ))}
+              </ul>
+              {owners.some((item) => !assigneeIds.includes(item.id)) && (
+                <select className="activity-assignee-add" aria-label="Add a team member" value="" onChange={(event) => { const id = Number(event.target.value); if (id) setAssigneeIds((current) => [...current, id]); }}>
+                  <option value="">+ Add a team member</option>
+                  {owners.filter((item) => !assigneeIds.includes(item.id)).map((item) => <option key={item.id} value={item.id}>{item.id === user.id ? `${item.name} (You)` : item.name}</option>)}
+                </select>
               )}
-            </span>
+            </div>
+          </Row>
+
+          {/* Linked to (request of November 18, 2026): the organization, a person inside it, and optionally a deal. */}
+          <Row icon={<Link2 size={20} />} label="Linked to">
+            <div className="activity-links-fields">
+              <SuggestInput
+                aria-label="Organization" value={orgName} onChange={changeOrgName}
+                suggestions={orgRows && orgRows.q === typedOrg ? orgRows.rows.map((row) => ({ key: String(row.id), label: row.name, detail: [row.city, row.people ? `${row.people} ${row.people === 1 ? "contact" : "contacts"}` : null].filter(Boolean).join(" · ") || undefined, icon: <Building2 size={14} /> })) : []}
+                onPick={(suggestion) => { setOrgName(suggestion.label); setOrg({ id: Number(suggestion.key), isNew: false }); setChosen([]); setPersonName(""); }}
+                loading={typedOrg.length >= 2 && orgRows?.q !== typedOrg}
+                icon={<Building2 size={16} />} create={orgCreate} isNew={org.isNew} onClear={clearOrg}
+                maxLength={200} placeholder="Organization"
+              />
+              {chosen.length > 0 && (
+                <ul className="activity-people" aria-label="People">
+                  {chosen.map((item) => (
+                    <li key={`${item.id ?? "new"}-${item.name}`}>
+                      <UserRound size={13} /> <span>{item.name}</span>{!item.id && <span className="suggest-new-badge">NEW</span>}
+                      <button type="button" aria-label={`Remove ${item.name}`} title="Remove" onClick={() => setChosen((current) => current.filter((other) => other !== item))}><X size={12} /></button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <SuggestInput
+                aria-label="Person" value={personName} onChange={setPersonName}
+                suggestions={orgPeople.filter((item) => !isChosen(item.name) && (!typedPerson || contactKey(item.name).includes(contactKey(typedPerson)))).map((item) => ({ key: String(item.id), label: item.name, detail: item.email ?? undefined, icon: <UserRound size={14} /> }))}
+                onPick={(suggestion) => addPerson({ id: Number(suggestion.key), name: suggestion.label })}
+                minChars={0} disabled={!orgChosen}
+                icon={<UserRound size={16} />} create={orgChosen ? personCreate : null}
+                maxLength={160} placeholder={!orgChosen ? "People (choose the organization first)" : chosen.length ? "Add another person" : "People"}
+              />
+              {deal ? (
+                <div className="activity-link-field is-set"><CircleDollarSign size={16} /> <span>{deal.name}</span>{!leadId && <button type="button" className="suggest-clear" aria-label="Remove the deal" title="Remove" onClick={() => setDeal(null)}><X size={15} /></button>}</div>
+              ) : (
+                <div className="activity-link-search">
+                  <div className="activity-link-field"><CircleDollarSign size={16} /><input aria-label="Deal" value={dealSearch} onChange={(event) => setDealSearch(event.target.value)} placeholder="Deal (optional)" /><Search size={14} /></div>
+                  {visibleResults.length > 0 && (
+                    <ul className="suggest-list">
+                      {visibleResults.map((result) => (
+                        <li key={result.id} onMouseDown={(event) => { event.preventDefault(); linkDeal(result); setDealSearch(""); setDealResults([]); }}>
+                          <CircleDollarSign size={14} /><span className="suggest-text"><strong>{result.clientName}</strong><small>{[result.clientExecutive, result.ownerName].filter(Boolean).join(" · ")}</small></span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+          </Row>
+
+          {/* Description, Checklist, Note and Files (request of November 18, 2026): one row of links before the outcome;
+              a click opens that section here, one at a time, and a second click folds it. A link with content is marked. */}
+          <Row icon={<MoreHorizontal size={20} />} label={section ? "Close the section" : "Details"} onIcon={section ? () => setSection(null) : undefined}>
+            <div className="activity-details">
+              <div className="activity-detail-tabs" role="tablist" aria-label="Details">
+                {detailTabs.map((tab) => (
+                  <button
+                    key={tab.id} type="button" role="tab" aria-selected={section === tab.id} aria-controls="activity-detail-panel"
+                    className={`${section === tab.id ? "is-active" : ""} ${tab.filled ? "is-filled" : ""}`}
+                    onClick={() => setSection((current) => (current === tab.id ? null : tab.id))}
+                  >
+                    {tab.icon} {tab.label}{tab.count ? ` (${tab.count})` : ""}
+                  </button>
+                ))}
+              </div>
+              <input ref={fileInput} type="file" multiple hidden accept={acceptedFiles} onChange={(event) => { const chosen = Array.from(event.target.files ?? []); setFiles((current) => [...current, ...chosen]); event.target.value = ""; setSection("files"); }} />
+              {section && (
+                <div className={`activity-detail-panel is-${section}`} id="activity-detail-panel" role="tabpanel">
+                  {section === "description" && (
+              <textarea aria-label="Description" rows={4} autoFocus value={description} onChange={(event) => setDescription(event.target.value)} maxLength={5000} placeholder="Description" />
+                  )}
+                  {section === "checklist" && (
+              <div className="checklist-editor">
+                {checklist.map((item, index) => (
+                  <label key={`${item.text}-${index}`} className="checklist-item">
+                    <input type="checkbox" checked={item.done} onChange={(event) => setChecklist((current) => current.map((entry, position) => (position === index ? { ...entry, done: event.target.checked } : entry)))} />
+                    <span className={item.done ? "is-done" : ""}>{item.text}</span>
+                    <button type="button" aria-label={`Remove ${item.text}`} onClick={() => setChecklist((current) => current.filter((_, position) => position !== index))}><X size={12} /></button>
+                  </label>
+                ))}
+                <span className="checklist-add">
+                  <input value={newItem} onChange={(event) => setNewItem(event.target.value)} maxLength={200} placeholder="Add a checklist item" onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addItem(); } }} />
+                  <button type="button" className="button button-outline button-small" onClick={addItem}><Plus size={13} /> Add</button>
+                </span>
+              </div>
+                  )}
+                  {section === "note" && (
+                    <textarea className="activity-note" aria-label="Note" rows={4} autoFocus value={note} onChange={(event) => setNote(event.target.value)} maxLength={5000} placeholder="Notes are visible within LeadTrailPro" />
+                  )}
+                  {section === "files" && (
+                    <div className="activity-files-panel">
+              <ul className="activity-files">
+                {(attachments ?? []).map((attachment) => (
+                  <li key={attachment.id}>
+                    <a href={taskAttachmentUrl(attachment.id)} target="_blank" rel="noreferrer">{attachment.fileName}</a>
+                    <small>{Math.max(1, Math.round(attachment.sizeBytes / 1024))} KB</small>
+                    {can("manage_tasks") && <button type="button" className="icon-button" aria-label={`Remove ${attachment.fileName}`} title="Remove" onClick={() => void removeSaved(attachment)}><X size={13} /></button>}
+                  </li>
+                ))}
+                {files.map((file, index) => (
+                  <li key={`${file.name}-${index}`} className="is-pending">
+                    <span>{file.name}</span>
+                    <small>{Math.max(1, Math.round(file.size / 1024))} KB · uploaded on save</small>
+                    <button type="button" className="icon-button" aria-label={`Remove ${file.name}`} title="Remove" onClick={() => setFiles((current) => current.filter((_, position) => position !== index))}><X size={13} /></button>
+                  </li>
+                ))}
+              </ul>
+                      <button type="button" className="button button-outline button-small" onClick={() => fileInput.current?.click()}><Paperclip size={13} /> Choose files</button>
+                      <small className="field-hint">PDF, Word, Excel, PowerPoint, images or text, up to 15 MB each.</small>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </Row>
+
+          {done && (
+            <Row icon={<Target size={20} />} label="Outcome">
+              <select className="activity-outcome-select" aria-label="Outcome" value={outcomeId} onChange={(event) => setOutcomeId(event.target.value)}>
+                <option value="">Outcome: None</option>
+                {outcomes.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
+              </select>
+            </Row>
           )}
-        </Field>
-        <Field label="Description" wide><textarea rows={3} value={description} onChange={(event) => setDescription(event.target.value)} maxLength={5000} placeholder="What needs to happen?" /></Field>
-        <div className="field-wide checklist-editor">
-          <span className="field-label">Checklist</span>
-          {checklist.map((item, index) => (
-            <label key={`${item.text}-${index}`} className="checklist-item">
-              <input type="checkbox" checked={item.done} onChange={(event) => setChecklist((current) => current.map((entry, position) => position === index ? { ...entry, done: event.target.checked } : entry))} />
-              <span className={item.done ? "is-done" : ""}>{item.text}</span>
-              <button type="button" aria-label={`Remove ${item.text}`} onClick={() => setChecklist((current) => current.filter((_, position) => position !== index))}><X size={12} /></button>
-            </label>
-          ))}
-          <span className="checklist-add">
-            <input value={newItem} onChange={(event) => setNewItem(event.target.value)} maxLength={200} placeholder="Add a checklist item" onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addItem(); } }} />
-            <button type="button" className="button button-outline button-small" onClick={addItem}><Plus size={13} /> Add</button>
-          </span>
+
+          <ErrorText message={error} />
+          <div className="activity-dialog-footer">
+            <label className="checklist-item activity-done"><input type="checkbox" checked={done} onChange={(event) => setDone(event.target.checked)} /> Mark as done</label>
+            <button type="button" className="button button-outline" onClick={onClose}>Cancel</button>
+            <button type="submit" className="button button-primary activity-save" disabled={busy}>{busy ? "Saving..." : "Save"}</button>
+          </div>
+          {task && <TaskComments task={task} />}
         </div>
-        <ErrorText message={error} />
-        <div className="modal-actions">
-          <button type="button" className="button button-outline" onClick={onClose}>Cancel</button>
-          <button type="submit" className="button button-primary" disabled={busy}>{busy ? "Saving..." : task ? "Save task" : "Create task"}</button>
-        </div>
+        <DayAgenda
+          date={date} onDate={setDate} assigneeId={Number(assigneeId)} skipTaskId={task?.id}
+          ownerLabel={Number(assigneeId) === user.id ? undefined : `${owners.find((item) => item.id === Number(assigneeId))?.name ?? "Their"}'s day`}
+          draft={{ title: title || taskActivityLabels[type], icon: activityIcons[type], start, end }}
+        />
       </form>
-      {task && <TaskComments task={task} />}
     </Dialog>
   );
 }
+

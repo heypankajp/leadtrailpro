@@ -1,4 +1,4 @@
-export const listKeys = ["lead_type", "status", "bd_action", "stage", "client_response", "lead_category", "company_size", "city", "lost_reason", "disqualified_reason", "business_type", "opportunity_reason", "todo_list", "archival_reason", "recent_trips_limit", "trip_max_radius_km", "trip_max_results"] as const;
+export const listKeys = ["lead_type", "status", "bd_action", "stage", "client_response", "lead_category", "company_size", "city", "lost_reason", "disqualified_reason", "business_type", "opportunity_reason", "todo_list", "archival_reason", "recent_trips_limit", "trip_max_radius_km", "trip_max_results", "activity_outcome"] as const;
 export type ListKey = (typeof listKeys)[number];
 
 // Title Case, as the left list of the List of Values page shows them (review of November 18, 2026).
@@ -20,6 +20,7 @@ export const listKeyLabels: Record<ListKey, string> = {
   recent_trips_limit: "Recent Planned Trips (How Many)",
   trip_max_radius_km: "Max Radius (km)",
   trip_max_results: "Number of Results (max)",
+  activity_outcome: "Activity Outcome",
 };
 
 /**

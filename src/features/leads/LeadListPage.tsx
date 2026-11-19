@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/lib/api";
 import { useAsyncData } from "@/lib/useAsyncData";
 import { ChevronDown, Filter, Kanban, ListChecks, MapPinned, Plus, Search, SlidersHorizontal, UserRound, X } from "lucide-react";
@@ -10,6 +10,7 @@ import { Dialog, ErrorText, Field, Loading, Pagination, PromptDialog } from "@/f
 import { entryStageCode } from "@/features/list-values/model";
 import { stageChoices } from "@/features/pipeline/model";
 import UserDirectoryDialog from "@/features/users/UserDirectoryDialog";
+import { indexLetters } from "@/features/contacts/model";
 import { AddToTripDialog } from "@/features/visit-trips/TripDialogs";
 import type { UserSummary } from "@/features/users/model";
 import ArchiveDialog from "./ArchiveDialog";
@@ -90,6 +91,8 @@ export default function LeadListPage({ view, embedded = false }: { view: LeadLis
   const [bulkTodoId, setBulkTodoId] = useState("");
   // PIPE-11: bulk move to a stage; the entry stage is pre-selected.
   const [bulkStageId, setBulkStageId] = useState("");
+  // The A–Z index shows on the Pipeline page's list view only (My deals / Everyone), not on the other lists.
+  const azIndex = embedded && (view === "leads" || view === "all-leads");
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedQ(filters.q), 300);
@@ -112,11 +115,32 @@ export default function LeadListPage({ view, embedded = false }: { view: LeadLis
       firstContactFrom: filters.firstContactFrom || undefined, firstContactTo: filters.firstContactTo || undefined, followUpFrom: filters.followUpFrom || undefined, followUpTo: filters.followUpTo || undefined,
       contractSignedFrom: filters.contractSignedFrom || undefined, contractSignedTo: filters.contractSignedTo || undefined,
       quick: filters.quick ?? undefined,
+      // The A–Z index on the Pipeline list (request of November 18, 2026).
+      letters: azIndex || undefined,
     };
-  }, [view, page, filters, debouncedQ, todoScope, todoTab]);
+  }, [view, page, filters, debouncedQ, todoScope, todoTab, azIndex]);
 
   const fetcher = useCallback(() => fetchLeads(query), [query]);
   const { data, error, loading } = useAsyncData<LeadPage>(fetcher, dataVersion);
+  // A–Z index: a letter sorts the list by client name A–Z, opens the page where that letter starts and scrolls to it.
+  const nameSorted = filters.sort === "client_name";
+  const letterPages = data?.letterPages ?? {};
+  const jumpTo = useRef<string | null>(null);
+  const scrollToLetter = (letter: string) => document.getElementById(`deals-letter-${letter === "#" ? "other" : letter}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const jump = (letter: string) => {
+    const target = letterPages[letter];
+    if (!target) return;
+    if (nameSorted && filters.direction === "asc" && target === page) { scrollToLetter(letter); return; }
+    jumpTo.current = letter;
+    setFilters((current) => ({ ...current, sort: "client_name", direction: "asc" }));
+    setSelected([]);
+    setPage(target);
+  };
+  useEffect(() => {
+    if (!jumpTo.current || !data || data.page !== page || !nameSorted) return;
+    scrollToLetter(jumpTo.current);
+    jumpTo.current = null;
+  }, [data, page, nameSorted]);
   const todoCountsFetcher = useCallback((): Promise<TodoCounts | null> => (view === "todo" ? fetchTodoCounts() : Promise.resolve(null)), [view]);
   const todoCounts = useAsyncData<TodoCounts | null>(todoCountsFetcher, dataVersion).data ?? null;
   const todoLists = reference.listValues.todo_list;
@@ -259,6 +283,7 @@ export default function LeadListPage({ view, embedded = false }: { view: LeadLis
 
           <ErrorText message={error} />
           {loading && !data ? <Loading text="Loading deals..." /> : data && (
+            <div className={azIndex ? "contacts-az" : undefined}>
             <LeadTable
               leads={data.leads}
               selected={selected}
@@ -272,7 +297,16 @@ export default function LeadListPage({ view, embedded = false }: { view: LeadLis
               onOpen={(lead) => openLead(lead.id)}
               onReview={(lead, approve) => setDialog({ kind: "review", lead, approve })}
               onRestore={(lead) => setDialog({ kind: "restore", ids: [lead.id] })}
+              letterAnchors={azIndex && nameSorted ? "deals-letter-" : undefined}
             />
+            {azIndex && (
+              <nav className="az-index" aria-label="Jump to deals by the first letter of the client">
+                {indexLetters.map((letter) => (
+                  <button key={letter} type="button" disabled={!letterPages[letter]} title={nameSorted ? undefined : "Sorts the list by client name"} aria-label={letter === "#" ? "Clients starting with another character" : `Clients starting with ${letter}`} onClick={() => jump(letter)}>{letter}</button>
+                ))}
+              </nav>
+            )}
+            </div>
           )}
           {data && (
             <div className="table-footer">

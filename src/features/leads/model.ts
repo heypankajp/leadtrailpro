@@ -84,7 +84,11 @@ export type LeadSummary = LeadInput & {
   updatedAt: string;
 };
 
-export type LeadPage = { leads: LeadSummary[]; total: number; page: number; pageSize: number };
+/**
+ * `letterPages` (asked with `letters=1`, the Pipeline list's A–Z index): for each first letter of the client names in the
+ * list (A–Z, "#" for anything else), the page its first deal is on when the list is sorted by client name A–Z.
+ */
+export type LeadPage = { leads: LeadSummary[]; total: number; page: number; pageSize: number; letterPages?: Record<string, number> };
 
 export const activityTypes = [
   "created", "call", "email", "visit", "note", "status_change", "bd_action", "client_response", "follow_up",
@@ -135,6 +139,8 @@ export type LeadSortKey = (typeof leadSortKeys)[number];
 
 export type LeadFilters = {
   state: LeadRecordState;
+  /** Also return `letterPages` for the A–Z index. */
+  letters: boolean;
   q: string;
   mine: boolean;
   statusCode: string | null;
@@ -335,6 +341,7 @@ export function parseLeadFilters(params: URLSearchParams): LeadFilters {
     contractSignedFrom: date("contractSignedFrom"),
     contractSignedTo: date("contractSignedTo"),
     quick: isQuickFilterKey(params.get("quick")) ? (params.get("quick") as QuickFilterKey) : null,
+    letters: params.get("letters") === "1" || params.get("letters") === "true",
     sort: leadSortKeys.includes(sort as LeadSortKey) ? (sort as LeadSortKey) : "last_activity",
     direction: params.get("direction") === "asc" ? "asc" : "desc",
     page: Number.isInteger(page) && page > 0 ? page : 1,

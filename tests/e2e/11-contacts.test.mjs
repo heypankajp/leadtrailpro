@@ -29,8 +29,9 @@ describe("Contacts first", () => {
     await page.wait(By.css('div[aria-label="Contacts list"]'));
     await page.clickButton("Contact", { global: true });
     await page.dialogTitle("Add contact");
-    await page.fill("Name", person);
+    // The organization comes first: the name is looked up among its contacts.
     await page.fill("Organization", organization);
+    await page.fill("Name", person);
     await page.fill("Email(s)", `adam.${runId}@northern.example`);
     await page.fill("Phone", "+1 645 697 5476");
     await page.clickButton("Save contact");
@@ -111,8 +112,8 @@ describe("Contacts first", () => {
     await page.click(By.xpath('.//div[@aria-label="Contacts list"]/button[normalize-space()="Contacts"]'), { global: true });
     await page.clickButton("Contact", { global: true });
     await page.dialogTitle("Add contact");
-    await page.fill("Name", newcomer);
     await page.fill("Organization", `Trade Fair Leads ${runId}`);
+    await page.fill("Name", newcomer);
     await page.clickButton("Save contact");
     await page.clickButton("Create organization and save");
     await page.toast(`${newcomer} added`);

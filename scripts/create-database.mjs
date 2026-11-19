@@ -1148,6 +1148,89 @@ const migrations = [
       await client.query("INSERT INTO list_values (list_key, code, value, sort_order) VALUES ('trip_max_results', 'count', '50', 1) ON CONFLICT DO NOTHING");
     },
   },
+  {
+    version: 33,
+    name: "Activity outcome (request of November 18, 2026): what came of an activity marked as done, from a list of values",
+    async run(client) {
+      for (const [index, [code, value]] of [["connected", "Connected"], ["left_voicemail", "Left voicemail"], ["no_answer", "No answer"]].entries()) {
+        await client.query("INSERT INTO list_values (list_key, code, value, sort_order) VALUES ('activity_outcome', $1, $2, $3) ON CONFLICT DO NOTHING", [code, value, index + 1]);
+      }
+      await addColumnIfMissing(client, "tasks", "outcome_id", "INTEGER NULL REFERENCES list_values(id) ON DELETE SET NULL");
+    },
+  },
+  {
+    version: 34,
+    name: "Schedule an activity (request of November 18, 2026): a note next to the description, and files uploaded on an activity",
+    async run(client) {
+      // The yellow note of the activity form; the description stays the longer text shown to everyone.
+      await addColumnIfMissing(client, "tasks", "note", "TEXT NULL");
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS task_attachments (
+          id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          task_id INTEGER NOT NULL,
+          uploaded_by INTEGER NULL,
+          file_name VARCHAR(255) NOT NULL,
+          mime_type VARCHAR(120) NOT NULL,
+          size_bytes INTEGER NOT NULL,
+          storage_key VARCHAR(300) NOT NULL,
+          created_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW},
+          CONSTRAINT fk_task_attachments_task FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+          CONSTRAINT fk_task_attachments_user FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL
+        )
+      `);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_task_attachments_task ON task_attachments (task_id)");
+    },
+  },
+  {
+    version: 35,
+    name: "Activities linked to an organization and a person (request of November 18, 2026), with or without a deal",
+    async run(client) {
+      await addColumnIfMissing(client, "tasks", "organization_id", "INTEGER NULL REFERENCES organizations(id) ON DELETE SET NULL");
+      await addColumnIfMissing(client, "tasks", "person_id", "INTEGER NULL REFERENCES persons(id) ON DELETE SET NULL");
+      // Activities on a deal take the deal's organization and contact person.
+      await client.query(`UPDATE tasks t SET organization_id = l.organization_id, person_id = l.person_id
+        FROM leads l WHERE l.id = t.lead_id AND t.organization_id IS NULL AND t.person_id IS NULL`);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_tasks_organization ON tasks (organization_id) WHERE organization_id IS NOT NULL");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_tasks_person ON tasks (person_id) WHERE person_id IS NOT NULL");
+    },
+  },
+  {
+    version: 36,
+    name: "Several people on an activity (request of November 18, 2026): the contacts of its organization taking part, in order",
+    async run(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS task_persons (
+          task_id INTEGER NOT NULL,
+          person_id INTEGER NOT NULL,
+          position SMALLINT NOT NULL DEFAULT 0,
+          PRIMARY KEY (task_id, person_id),
+          CONSTRAINT fk_task_persons_task FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+          CONSTRAINT fk_task_persons_person FOREIGN KEY (person_id) REFERENCES persons(id) ON DELETE CASCADE
+        )
+      `);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_task_persons_person ON task_persons (person_id)");
+      // tasks.person_id stays the first person (the activity's contact in lists); it is copied in as the first of the list.
+      await client.query("INSERT INTO task_persons (task_id, person_id, position) SELECT id, person_id, 0 FROM tasks WHERE person_id IS NOT NULL ON CONFLICT DO NOTHING");
+    },
+  },
+  {
+    version: 37,
+    name: "Several team members assigned to an activity (request of November 18, 2026), the first one being tasks.assignee_id",
+    async run(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS task_assignees (
+          task_id INTEGER NOT NULL,
+          user_id INTEGER NOT NULL,
+          position SMALLINT NOT NULL DEFAULT 0,
+          PRIMARY KEY (task_id, user_id),
+          CONSTRAINT fk_task_assignees_task FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+          CONSTRAINT fk_task_assignees_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+      `);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_task_assignees_user ON task_assignees (user_id)");
+      await client.query("INSERT INTO task_assignees (task_id, user_id, position) SELECT id, assignee_id, 0 FROM tasks ON CONFLICT DO NOTHING");
+    },
+  },
 ];
 
 if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port > 65535 || !/^[a-z_][a-z0-9_]*$/.test(databaseName)) {

@@ -14,6 +14,9 @@ type Props = {
   defaultTime?: string;
   /** Called each time the text resolves to a date (TASK-03: the caller shows it for confirmation). */
   onResolve: (result: NaturalDateResult, time: string) => void;
+  /** Schedule an activity (request of November 18, 2026): no visible title (the label is the field's name and its
+   * tooltip) and no examples line; the confirmation of what was understood still shows once something is typed. */
+  compact?: boolean;
 };
 
 export const naturalDateExamples = "“next Monday at 10am”, “in two weeks”, “Feb 1”, “end of month”, “January”";
@@ -24,7 +27,7 @@ export function describeNaturalDate(date: string, time: string | null, adjusted 
 }
 
 /** A free-text date field: "tomorrow", "next Friday 3pm", "six months", "January". Resolves against the business calendar. */
-export default function NaturalDateField({ label = "Type a due date", placeholder, anchor, defaultTime = "09:00", onResolve }: Props) {
+export default function NaturalDateField({ label = "Type a due date", placeholder, anchor, defaultTime = "09:00", onResolve, compact = false }: Props) {
   const { reference } = useApp();
   const [text, setText] = useState("");
   const [result, setResult] = useState<NaturalDateResult | null>(null);
@@ -47,6 +50,14 @@ export default function NaturalDateField({ label = "Type a due date", placeholde
     tone = "is-unresolved";
   }
 
+  if (compact) {
+    return (
+      <div className="natural-date-field is-compact">
+        <input aria-label={label} title={label} value={text} onChange={(event) => change(event.target.value)} placeholder={placeholder ?? "next Monday at 10am, in two weeks, Feb 1..."} maxLength={200} autoComplete="off" />
+        {text.trim() && <small className={`field-hint natural-date-hint ${tone}`}>{hint}</small>}
+      </div>
+    );
+  }
   return (
     <label className="field-wide natural-date-field">
       <span className="field-label">{label}</span>

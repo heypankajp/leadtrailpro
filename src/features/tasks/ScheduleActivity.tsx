@@ -1,36 +1,25 @@
 "use client";
 
 import { useCallback, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { Building2, CalendarCheck2, CheckSquare, ChevronLeft, ChevronRight, CircleDollarSign, Mail, MapPin, Phone, UserRound } from "lucide-react";
+import { Building2, CalendarCheck2, Target, CircleDollarSign, Clock3, Flag, Mail, MapPin, Phone, UserRound, Users, UtensilsCrossed } from "lucide-react";
 import { errorMessage } from "@/lib/api";
 import { fromLocalInput } from "@/lib/format";
 import { useAsyncData } from "@/lib/useAsyncData";
 import { updateLead } from "@/features/leads/client";
-import { activityTitles } from "@/features/pipeline/model";
 import { useApp } from "@/features/shell/AppContext";
 import { Dialog, ErrorText, Field } from "@/features/shell/components";
 import { createTask, fetchTasks } from "./client";
-import { taskActivityLabels, taskActivityTypes, taskPriorities, type Task, type TaskActivityType, type TaskPriority } from "./model";
+import DayAgenda from "./DayAgenda";
+import { taskActivityLabels, taskActivityTypes, taskPriorities, taskTitleWords, type Task, type TaskActivityType, type TaskPriority } from "./model";
 
 /** The deal an activity is scheduled on: a board card or the deal itself. */
 export type ActivityDeal = { id: number; clientName: string; clientExecutive: string; ownerId: number; followUpDate: string | null };
 
 export const activityIcons: Record<TaskActivityType, ReactNode> = {
-  call: <Phone size={14} />, email: <Mail size={14} />, visit: <MapPin size={14} />, task: <CheckSquare size={14} />,
+  call: <Phone size={14} />, meeting: <Users size={14} />, task: <Clock3 size={14} />, deadline: <Flag size={14} />,
+  email: <Mail size={14} />, lunch: <UtensilsCrossed size={14} />, visit: <MapPin size={14} />,
 };
 
-const pad = (value: number) => String(value).padStart(2, "0");
-const shiftDay = (ymd: string, days: number) => {
-  const [y, m, d] = ymd.split("-").map(Number);
-  const date = new Date(y, m - 1, d + days);
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-};
-const dayLabel = (ymd: string) => {
-  const [y, m, d] = ymd.split("-").map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
-};
-const timeOf = (iso: string) => { const date = new Date(iso); return `${pad(date.getHours())}:${pad(date.getMinutes())}`; };
-const agendaHours = Array.from({ length: 14 }, (_, index) => index + 7);
 
 /**
  * Schedule an activity (PD-29, SPEC §10.20), after Pipedrive's form: the type (call, email, visit, task) with a title
@@ -41,7 +30,7 @@ const agendaHours = Array.from({ length: 14 }, (_, index) => index + 7);
 export function ScheduleActivityForm({ deal, canSetFollowUp, onCancel, onSaved }: { deal: ActivityDeal; canSetFollowUp: boolean; onCancel: () => void; onSaved: (message: string) => void | Promise<void> }) {
   const { reference, user } = useApp();
   const who = deal.clientExecutive.trim() || deal.clientName;
-  const titleFor = (type: TaskActivityType) => `${activityTitles[type]} ${who}`;
+  const titleFor = (type: TaskActivityType) => `${taskTitleWords[type]} ${who}`;
   const [type, setType] = useState<TaskActivityType>("call");
   const [title, setTitle] = useState(titleFor("call"));
   const [date, setDate] = useState(deal.followUpDate && deal.followUpDate >= reference.today ? deal.followUpDate : reference.today);
@@ -52,6 +41,9 @@ export function ScheduleActivityForm({ deal, canSetFollowUp, onCancel, onSaved }
   const [assigneeId, setAssigneeId] = useState(String(owners.some((item) => item.id === deal.ownerId) ? deal.ownerId : user.id));
   const [note, setNote] = useState("");
   const [done, setDone] = useState(false);
+  // What came of it, when the activity is recorded as done (List of Values → Activity Outcome).
+  const [outcomeId, setOutcomeId] = useState("");
+  const outcomes = reference.listValues.activity_outcome.filter((item) => item.active);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -81,6 +73,7 @@ export function ScheduleActivityForm({ deal, canSetFollowUp, onCancel, onSaved }
       await createTask({
         leadId: deal.id, title: title.trim() || titleFor(type), description: note, assigneeId: Number(assigneeId) || deal.ownerId, priority, checklist: [],
         dueAt: fromLocalInput(`${date}T${start}`), endsAt: end ? fromLocalInput(`${date}T${end}`) : null, activityType: type, done,
+        outcomeId: done && outcomeId ? Number(outcomeId) : null,
       });
       // An open activity is the deal's next step, as Schedule follow-up was.
       if (!done && canSetFollowUp) await updateLead(deal.id, { followUpDate: date });
@@ -91,7 +84,6 @@ export function ScheduleActivityForm({ deal, canSetFollowUp, onCancel, onSaved }
     }
   };
 
-  const draftHour = Number(start.slice(0, 2));
   return (
     <form className="schedule-activity" onSubmit={submit}>
       <div className="schedule-activity-main">
@@ -120,6 +112,15 @@ export function ScheduleActivityForm({ deal, canSetFollowUp, onCancel, onSaved }
           <li><UserRound size={14} /> <span>Contact</span> <strong>{deal.clientExecutive || "No contact yet"}</strong></li>
           <li><Building2 size={14} /> <span>Organization</span> <strong>{deal.clientName}</strong></li>
         </ul>
+        {done && (
+          <label className="activity-outcome">
+            <Target size={16} aria-hidden="true" />
+            <select aria-label="Outcome" value={outcomeId} onChange={(event) => setOutcomeId(event.target.value)}>
+              <option value="">Outcome: None</option>
+              {outcomes.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
+            </select>
+          </label>
+        )}
         <ErrorText message={error} />
         <div className="modal-actions activity-actions">
           <label className="checklist-item activity-done"><input type="checkbox" checked={done} onChange={(event) => { setDone(event.target.checked); if (event.target.checked && date > reference.today) setDate(reference.today); }} /> Mark as done</label>
@@ -127,28 +128,11 @@ export function ScheduleActivityForm({ deal, canSetFollowUp, onCancel, onSaved }
           <button type="submit" className="button button-primary" disabled={busy}><CalendarCheck2 size={15} /> {busy ? "Saving..." : "Save activity"}</button>
         </div>
       </div>
-      <aside className="activity-agenda" aria-label="The day's agenda">
-        <div className="activity-agenda-head">
-          <button type="button" className="icon-button" aria-label="Previous day" onClick={() => setDate((current) => (done || shiftDay(current, -1) >= reference.today ? shiftDay(current, -1) : current))}><ChevronLeft size={15} /></button>
-          <strong>{dayLabel(date)}</strong>
-          <button type="button" className="icon-button" aria-label="Next day" onClick={() => setDate((current) => (done && shiftDay(current, 1) > reference.today ? current : shiftDay(current, 1)))}><ChevronRight size={15} /></button>
-        </div>
-        <small className="activity-agenda-owner">{agendaOwner}</small>
-        <ol className="activity-agenda-hours">
-          {agendaHours.map((hour) => {
-            const items = (agenda?.tasks ?? []).filter((task) => task.dueAt && new Date(task.dueAt).getHours() === hour);
-            return (
-              <li key={hour}>
-                <span className="activity-hour">{hour === 12 ? "12 PM" : hour > 12 ? `${hour - 12} PM` : `${hour} AM`}</span>
-                <div className="activity-slot">
-                  {draftHour === hour && <span className="activity-chip is-draft">{activityIcons[type]} {start} {title || taskActivityLabels[type]}</span>}
-                  {items.map((task) => <span key={task.id} className={`activity-chip ${task.status === "done" ? "is-done" : ""}`} title={task.leadName ?? undefined}>{activityIcons[task.activityType]} {timeOf(task.dueAt!)} {task.title}</span>)}
-                </div>
-              </li>
-            );
-          })}
-        </ol>
-      </aside>
+      {/* The assignee's day, as in the full Schedule an activity dialog. */}
+      <DayAgenda
+        date={date} onDate={(next) => setDate((current) => (done ? (next > reference.today ? current : next) : (next >= reference.today ? next : current)))}
+        assigneeId={shownId} ownerLabel={agendaOwner} draft={{ title: title || taskActivityLabels[type], icon: activityIcons[type], start, end }}
+      />
     </form>
   );
 }
@@ -156,7 +140,7 @@ export function ScheduleActivityForm({ deal, canSetFollowUp, onCancel, onSaved }
 /** The same form as a dialog: the board card's Add follow-up (PD-22, PD-29). */
 export function ScheduleActivityDialog({ deal, canSetFollowUp, onClose, onSaved }: { deal: ActivityDeal; canSetFollowUp: boolean; onClose: () => void; onSaved: (message: string) => void }) {
   return (
-    <Dialog title="Schedule an activity" eyebrow={deal.clientName.toUpperCase()} size="wide" onClose={onClose}>
+    <Dialog title="Schedule an Activity" eyebrow={deal.clientName.toUpperCase()} size="wide" onClose={onClose}>
       <ScheduleActivityForm deal={deal} canSetFollowUp={canSetFollowUp} onCancel={onClose} onSaved={onSaved} />
     </Dialog>
   );

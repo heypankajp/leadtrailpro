@@ -63,6 +63,10 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
   });
   const [duplicate, setDuplicate] = useState<DuplicateNotice | null>(null);
   const [confirm, setConfirm] = useState<ConfirmNotice | null>(null);
+  // "+ Add 'Acme' as new organization / contact" picked from the list (request of November 18, 2026): the new record is
+  // confirmed already, shown with a blue NEW badge; typing another name drops it.
+  const [newOrganization, setNewOrganization] = useState(false);
+  const [newContact, setNewContact] = useState(false);
   // "Save anyway" on a similar company is kept when the new organization is then confirmed.
   const allowSimilarChosen = useRef(false);
   const [error, setError] = useState("");
@@ -126,6 +130,10 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
       .filter((person) => person.email && person.email.toLowerCase().includes(typedEmail))
       .map((person) => ({ key: `e${person.id}`, label: person.email ?? person.name, detail: person.name, icon: <Mail size={14} /> }))
     : [];
+  // The "+ Add … as new …" lines: offered once the lookup has answered and nothing of that name exists.
+  const organizationIsNew = lookup && typedOrganization.length >= 2 && orgRows?.q === typedOrganization
+    && !orgRows.rows.some((row) => contactKey(row.name) === contactKey(typedOrganization));
+  const contactIsNew = contactLookup && form.clientExecutive.trim().length >= 2 && !people.some((person) => contactKey(person.name) === contactKey(form.clientExecutive));
   // The contact is chosen after the organization: the field waits until a name is typed there.
   const organizationChosen = !contactLookup || form.clientName.trim().length > 0;
 
@@ -188,7 +196,7 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
       const result = lead ? await updateLead(lead.id, input) : await createLead({
         ...input, ownerId: can("reassign_leads") ? Number(form.ownerId) : null, opportunityId: opportunityId ?? null,
         organizationId: contact?.organizationId ?? matchedOrganization?.organization.id ?? null, personId: contact?.personId ?? matchedPerson?.id ?? null,
-        allowSimilar, createOrganization: confirmed, createContact: confirmed,
+        allowSimilar, createOrganization: confirmed || newOrganization, createContact: confirmed || newContact,
       });
       onSaved(result.lead);
     } catch (caught) {
@@ -213,14 +221,16 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
       {/* Pipedrive's add-deal layout: the deal on the left, the person and the organization on the right. */}
       <form className="lead-form deal-form" onSubmit={submit}>
         <div className="deal-form-col">
-          <Field label="Organization" required wide hint={lookup ? "Start typing the company's name: the organizations that match appear in a list. Pick one, or keep typing a new name (you are asked before it is created)." : undefined}>
+          <Field label="Organization" required wide hint={lookup ? (newOrganization ? "A new organization: it is created with the deal." : "Start typing the company's name: pick one of the organizations that match, or add it as a new one.") : undefined}>
             {lookup
               ? <SuggestInput
-                  value={form.clientName} onChange={(value) => { setForm((current) => ({ ...current, clientName: value })); setDuplicate(null); setConfirm(null); }}
-                  suggestions={orgSuggestions} onPick={(suggestion) => { setForm((current) => ({ ...current, clientName: suggestion.label })); setDuplicate(null); setConfirm(null); }}
+                  value={form.clientName} onChange={(value) => { setForm((current) => ({ ...current, clientName: value })); setDuplicate(null); setConfirm(null); setNewOrganization(false); }}
+                  suggestions={orgSuggestions} onPick={(suggestion) => { setForm((current) => ({ ...current, clientName: suggestion.label })); setDuplicate(null); setConfirm(null); setNewOrganization(false); }}
                   loading={!orgRows || orgRows.q !== typedOrganization}
-                  empty={`No organization called “${typedOrganization}” yet: saving adds it after you confirm.`}
-                  required maxLength={200} placeholder="Type to search organizations…" autoFocus
+                  icon={<Building2 size={16} />}
+                  create={organizationIsNew ? { label: `Add '${typedOrganization}' as new organization`, onCreate: () => { setNewOrganization(true); setConfirm(null); } } : null}
+                  isNew={newOrganization} onClear={() => { setForm((current) => ({ ...current, clientName: "" })); setNewOrganization(false); setNewContact(false); setConfirm(null); }}
+                  required maxLength={200} placeholder="Organization" autoFocus
                 />
               : <input value={form.clientName} onChange={(event) => { set("clientName")(event); setDuplicate(null); setConfirm(null); }} required maxLength={200} placeholder="Company name" autoFocus />}
           </Field>
@@ -238,14 +248,17 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
           <Field label="Contact" wide hint={!contactLookup ? undefined : matchedOrganization ? (matchedOrganization.people.length ? `Click or type to pick one of ${matchedOrganization.organization.name}'s contacts, or type a new name.` : `${matchedOrganization.organization.name} has no contacts yet: type a name to add one.`) : organizationChosen ? "A new organization has no contacts yet: type a name. The organization is created first and the contact is added inside it." : "Choose the organization first: contacts are looked up inside it."}>
             {contactLookup
               ? <SuggestInput
-                  value={form.clientExecutive} onChange={(value) => { setForm((current) => ({ ...current, clientExecutive: value })); setConfirm(null); }}
+                  value={form.clientExecutive} onChange={(value) => { setForm((current) => ({ ...current, clientExecutive: value })); setConfirm(null); setNewContact(false); }}
                   suggestions={contactSuggestions}
                   onPick={(suggestion) => {
                     const person = people.find((item) => `p${item.id}` === suggestion.key);
-                    if (person) pickContact(person.name);
+                    if (person) { pickContact(person.name); setNewContact(false); }
                   }}
                   minChars={0} disabled={!organizationChosen}
-                  maxLength={160} placeholder={!organizationChosen ? "Choose the organization first" : matchedOrganization ? "Pick or type a contact…" : "Type the contact's name"}
+                  icon={<UserRound size={16} />}
+                  create={contactIsNew ? { label: `Add '${form.clientExecutive.trim()}' as new contact`, onCreate: () => { setNewContact(true); setConfirm(null); } } : null}
+                  isNew={newContact} onClear={() => { setForm((current) => ({ ...current, clientExecutive: "" })); setNewContact(false); setConfirm(null); }}
+                  maxLength={160} placeholder={!organizationChosen ? "Choose the organization first" : "Contact person"}
                 />
               : <input value={form.clientExecutive} onChange={(event) => { set("clientExecutive")(event); setConfirm(null); }} maxLength={160} placeholder="Contact person" />}
           </Field>

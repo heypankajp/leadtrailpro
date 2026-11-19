@@ -1,28 +1,44 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { Check, ListTodo, MessageSquare, Pencil, Plus } from "lucide-react";
+import { CalendarDays, Check, LayoutDashboard, List, ListTodo, MessageSquare, Pencil, Plus } from "lucide-react";
 import { errorMessage } from "@/lib/api";
 import { formatDateTime, localToday } from "@/lib/format";
 import { useAsyncData } from "@/lib/useAsyncData";
 import { useApp } from "@/features/shell/AppContext";
 import { EmptyState, ErrorText, Loading } from "@/features/shell/components";
 import { fetchTasks, updateTask } from "./client";
-import type { Task } from "./model";
+import type { Task, TaskActivityType } from "./model";
 import TaskFormDialog from "./TaskFormDialog";
+import ActivityCalendar from "./ActivityCalendar";
+import ActivityList from "./ActivityList";
 
 type Column = { title: string; tone: string; tasks: Task[] };
 
+/**
+ * Activities in three views (request of November 18, 2026), switched by the icons at the top right, whose names show on
+ * hover: Activity Dashboard (the columns Overdue, Today, Upcoming, Done), Activity List (a table with type and period
+ * filters) and Activity Calendar (a week). The address carries the view: #/activities, #/activities/list,
+ * #/activities/calendar; #/activities/<id> opens that task on the dashboard.
+ */
+type ActivityView = "dashboard" | "list" | "calendar";
+const views: { id: ActivityView; label: string; icon: React.ReactNode }[] = [
+  { id: "dashboard", label: "Activity Dashboard", icon: <LayoutDashboard size={16} /> },
+  { id: "list", label: "Activity List", icon: <List size={16} /> },
+  { id: "calendar", label: "Activity Calendar", icon: <CalendarDays size={16} /> },
+];
+
 export default function TasksPage() {
-  const { can, route, openLead, notify, dataVersion, bumpData } = useApp();
+  const { can, user, route, navigate, openLead, notify, dataVersion, bumpData } = useApp();
+  const view: ActivityView = route.param === "list" ? "list" : route.param === "calendar" ? "calendar" : "dashboard";
   const [scope, setScope] = useState<"mine" | "all">("mine");
   const fetcher = useCallback(() => fetchTasks({ scope }).then((result) => result.tasks), [scope]);
   const { data: tasks, error } = useAsyncData<Task[]>(fetcher, dataVersion);
-  const [dialog, setDialog] = useState<{ task?: Task } | null>(null);
+  const [dialog, setDialog] = useState<{ task?: Task; defaults?: { title: string; activityType: TaskActivityType; dueAt: string; endsAt: string } } | null>(null);
   const [consumedParam, setConsumedParam] = useState<string | null>(null);
 
   // Deep link from the action center: #/tasks/<id> opens that task once the list is loaded.
-  if (route.param && tasks && consumedParam !== route.param) {
+  if (route.param && /^\d+$/.test(route.param) && tasks && consumedParam !== route.param) {
     setConsumedParam(route.param);
     const task = tasks.find((item) => item.id === Number(route.param));
     if (task) setDialog({ task });
@@ -51,17 +67,33 @@ export default function TasksPage() {
   return (
     <>
       <div className="page-heading">
-        <div><div className="eyebrow">YOUR WORKDAY <span className="eyebrow-dot">·</span> {open.length} OPEN</div><h1>Activities</h1><p>Every next step, organized so nothing slips through the cracks.</p></div>
+        <div><div className="eyebrow">YOUR WORKDAY <span className="eyebrow-dot">·</span> {open.length} OPEN</div><h1>{views.find((item) => item.id === view)!.label}</h1><p>Every next step, organized so nothing slips through the cracks.</p></div>
         <div className="heading-actions">
+          <div className="view-switch" role="group" aria-label="Activities view">
+            {views.map((item) => (
+              <button key={item.id} type="button" className={view === item.id ? "is-active" : ""} aria-pressed={view === item.id} aria-label={item.label} title={item.label} onClick={() => navigate("activities", item.id === "dashboard" ? null : item.id)}>{item.icon}</button>
+            ))}
+          </div>
           {can("view_team_reports") && (
             <div className="scope-toggle" role="group" aria-label="Task scope"><button className={scope === "mine" ? "is-active" : ""} onClick={() => setScope("mine")}>Mine</button><button className={scope === "all" ? "is-active" : ""} onClick={() => setScope("all")}>Team</button></div>
           )}
-          {can("manage_tasks") && <button className="button button-primary" onClick={() => setDialog({})}><Plus size={17} /> Create task</button>}
+          {can("manage_tasks") && <button className="button button-primary" onClick={() => setDialog({})}><Plus size={17} /> Schedule an Activity</button>}
         </div>
       </div>
       <ErrorText message={error} />
       {!tasks && !error && <Loading text="Loading tasks..." />}
-      {tasks && (
+      {tasks && view === "list" && (
+        <ActivityList tasks={tasks} showAssignee={scope === "all"} onToggle={(task) => void toggle(task)} onOpen={(task) => (can("manage_tasks") ? setDialog({ task }) : task.leadId && openLead(task.leadId))} />
+      )}
+      {tasks && view === "calendar" && (
+        <ActivityCalendar
+          tasks={tasks} showAssignee={scope === "all"} assigneeId={user.id}
+          onOpen={(task) => (can("manage_tasks") ? setDialog({ task }) : task.leadId && openLead(task.leadId))}
+          onDetails={(defaults) => setDialog({ defaults })}
+          onAdded={(message) => { bumpData(); notify(message); }}
+        />
+      )}
+      {tasks && view === "dashboard" && (
         <div className="task-columns">
           {columns.map((column) => (
             <section className="panel task-column" key={column.title}>
@@ -92,7 +124,7 @@ export default function TasksPage() {
           ))}
         </div>
       )}
-      {dialog && <TaskFormDialog task={dialog.task} onClose={() => setDialog(null)} onSaved={() => { setDialog(null); bumpData(); notify(dialog.task ? "Task updated" : "Task created"); }} />}
+      {dialog && <TaskFormDialog task={dialog.task} defaults={dialog.defaults} onClose={() => setDialog(null)} onSaved={() => { setDialog(null); bumpData(); notify(dialog.task ? "Task updated" : "Task created"); }} />}
     </>
   );
 }

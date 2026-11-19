@@ -37,12 +37,14 @@ describe("Team, roles, and deal ownership", () => {
 
   uiTest("admin assigns a task to the new sales manager", async () => {
     await page.nav("Activities");
-    await page.heading("Activities");
-    await page.clickButton("Create task", { global: true });
-    await page.dialogTitle("Create task");
-    await page.fill("Title", `Welcome call ${runId}`);
-    await page.fill("Assignee", manager.name);
-    await page.clickButton("Create task");
+    await page.heading("Activity Dashboard");
+    await page.clickButton("Schedule an Activity", { global: true });
+    await page.dialogTitle("Schedule an Activity");
+    await page.fillNamed("Subject", `Welcome call ${runId}`);
+    // Several team members can be assigned: add the manager, then take the admin (the default) off.
+    await page.fillNamed("Add a team member", manager.name);
+    await page.click(By.css(`section[role="dialog"] button[aria-label=${JSON.stringify(`Remove ${admin.name} (You)`)}]`));
+    await page.clickButton("Save");
     await page.toast("Task created");
     // Back to User management, where the next test edits the account.
     await page.nav("User Management");

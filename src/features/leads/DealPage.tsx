@@ -225,7 +225,7 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
             <section className="deal-block" aria-label="Focus">
               <div className="deal-block-head">
                 <h2>Focus</h2>
-                {can("manage_tasks") && lead.recordState !== "archived" && <button className="button button-outline button-small" onClick={() => setDialog({ kind: "task" })}><Plus size={14} /> Create task</button>}
+                {can("manage_tasks") && lead.recordState !== "archived" && <button className="button button-outline button-small" onClick={() => setDialog({ kind: "task" })}><Plus size={14} /> Schedule an Activity</button>}
               </div>
               {lead.followUpDate && lead.recordState === "active" && (
                 <p className={`focus-follow-up ${overdue ? "overdue" : lead.followUpDate === reference.today ? "due-today" : ""}`}><CalendarCheck2 size={14} /> Next follow-up {formatDate(lead.followUpDate)}{overdue ? " · overdue" : lead.followUpDate === reference.today ? " · today" : ""}</p>
@@ -525,7 +525,7 @@ function Composer({ detail, canEdit, onLogged, onScheduled }: {
         {canLog && tabButton("call", "Log call", <Phone size={14} />)}
         {tabButton("emails", "Emails", <Mail size={14} />, mode === "emails" || mode === "email")}
         {canLog && tabButton("visit", "Log visit", <MapPin size={14} />)}
-        {canFollowUp && tabButton("follow-up", "Schedule activity", <CalendarCheck2 size={14} />)}
+        {canFollowUp && tabButton("follow-up", "Schedule an Activity", <CalendarCheck2 size={14} />)}
       </div>
       {!mode && <p className="composer-hint">Choose what to add: a note, a call or a visit you had{canFollowUp ? ", or the next follow-up" : ""}. Emails shows the mail with every contact of {lead.clientName}.</p>}
       {mode === "emails" && (

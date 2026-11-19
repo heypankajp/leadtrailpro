@@ -3,10 +3,19 @@ import { parseMessageInput, type Mention, type MessageAttachment } from "@/featu
 export const taskPriorities = ["low", "normal", "medium", "high"] as const;
 export type TaskPriority = (typeof taskPriorities)[number];
 export const taskStatuses = ["open", "done"] as const;
-/** PD-29: what the activity is, as in Pipedrive's Schedule an activity (call, email, visit / meeting, or a plain task). */
-export const taskActivityTypes = ["call", "email", "visit", "task"] as const;
+/**
+ * PD-29: what the activity is, as in Pipedrive's Schedule an activity. Since November 18, 2026 Pipedrive's six types,
+ * in its order (Call, Meeting, Task, Deadline, Email, Lunch), and Visit, which the app had already (sales trips, visits).
+ */
+export const taskActivityTypes = ["call", "meeting", "task", "deadline", "email", "lunch", "visit"] as const;
 export type TaskActivityType = (typeof taskActivityTypes)[number];
-export const taskActivityLabels: Record<TaskActivityType, string> = { call: "Call", email: "Email", visit: "Visit", task: "Task" };
+export const taskActivityLabels: Record<TaskActivityType, string> = {
+  call: "Call", meeting: "Meeting", task: "Task", deadline: "Deadline", email: "Email", lunch: "Lunch", visit: "Visit",
+};
+/** How a title starts for each type in Schedule an activity ("Call Elena Vasquez", "Lunch with Elena Vasquez"). */
+export const taskTitleWords: Record<TaskActivityType, string> = {
+  call: "Call", meeting: "Meeting with", task: "Follow up with", deadline: "Deadline:", email: "Email", lunch: "Lunch with", visit: "Visit",
+};
 export type TaskStatus = (typeof taskStatuses)[number];
 
 export type ChecklistItem = { text: string; done: boolean };
@@ -43,6 +52,8 @@ export type Task = {
   description: string;
   assigneeId: number;
   assigneeName: string;
+  /** Everyone assigned, in order (the first is `assigneeId`); request of November 18, 2026. */
+  assignees?: { id: number; name: string }[];
   creatorId: number;
   creatorName: string;
   dueAt: string | null;
@@ -55,6 +66,23 @@ export type Task = {
   completedAt: string | null;
   /** Live comments on the task (TASK-04). */
   commentCount: number;
+  /** The organization and person the activity is linked to (with or without a deal), or null. */
+  organizationId?: number | null;
+  personId?: number | null;
+  /** Everyone taking part, in order (the first is `personId`). */
+  people?: { id: number; name: string }[];
+  /** The contact and organization shown with the activity: its own, else its deal's (request of November 18, 2026). */
+  contactName?: string | null;
+  contactEmail?: string | null;
+  /** The yellow note of Schedule an activity (the description is the longer text). */
+  note?: string;
+  /** Files uploaded on the activity. */
+  attachmentCount?: number;
+  /** What came of a done activity (List of Values → Activity Outcome), or null. */
+  outcomeId?: number | null;
+  outcome?: string | null;
+  contactPhone?: string | null;
+  organization?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -72,7 +100,20 @@ export type TaskInput = {
   endsAt?: string | null;
   /** PD-29 "Mark as done": the activity is recorded as already done. */
   done?: boolean;
+  /** The outcome of a done activity (an `activity_outcome` value), or null. */
+  outcomeId?: number | null;
+  note?: string;
+  /** The organization and the person (a contact of that organization) the activity is linked to. */
+  organizationId?: number | null;
+  personId?: number | null;
+  /** Several people, contacts of the organization, in order; replaces `personId` when given. */
+  personIds?: number[];
+  /** Several team members, in order; replaces `assigneeId` when given (the first becomes it). */
+  assigneeIds?: number[];
 };
+
+/** A file uploaded on an activity (request of November 18, 2026). */
+export type TaskAttachment = { id: number; taskId: number; fileName: string; mimeType: string; sizeBytes: number; uploadedByName: string | null; createdAt: string };
 
 export const isTaskActivityType = (value: unknown): value is TaskActivityType => typeof value === "string" && taskActivityTypes.includes(value as TaskActivityType);
 const isPriority = (value: unknown): value is TaskPriority => typeof value === "string" && taskPriorities.includes(value as TaskPriority);
@@ -97,6 +138,12 @@ const parseDueAt = (value: unknown, errors: string[]): string | null => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) { errors.push("Due date is not a valid date and time."); return null; }
   return date.toISOString();
+};
+
+/** A list of ids without duplicates (at most 20), or undefined when none was sent. */
+const parseIds = (value: unknown): number[] | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  return [...new Set(value.map(Number).filter((id) => Number.isSafeInteger(id) && id > 0))].slice(0, 20);
 };
 
 const optionalId = (value: unknown): number | null => {
@@ -125,6 +172,9 @@ export function parseTaskInput(value: unknown): { input: TaskInput; errors: stri
       leadId: optionalId(body.leadId), title, description, assigneeId: optionalId(body.assigneeId),
       dueAt, priority, checklist: parseChecklist(body.checklist, errors),
       activityType: isTaskActivityType(body.activityType) ? body.activityType : "task", endsAt, done: body.done === true,
+      outcomeId: body.done === true ? optionalId(body.outcomeId) : null,
+      note: typeof body.note === "string" ? body.note.trim().slice(0, 5000) : "",
+      organizationId: optionalId(body.organizationId), personId: optionalId(body.personId), personIds: parseIds(body.personIds), assigneeIds: parseIds(body.assigneeIds),
     },
     errors,
   };
@@ -154,5 +204,11 @@ export function parseTaskPatch(value: unknown): { changes: TaskPatch; errors: st
   if (has("priority")) { if (isPriority(body.priority)) changes.priority = body.priority; else errors.push("Priority is not valid."); }
   if (has("checklist")) changes.checklist = parseChecklist(body.checklist, errors);
   if (has("status")) { if (body.status === "open" || body.status === "done") changes.status = body.status; else errors.push("Status is not valid."); }
+  if (has("outcomeId")) changes.outcomeId = optionalId(body.outcomeId);
+  if (has("organizationId")) changes.organizationId = optionalId(body.organizationId);
+  if (has("personId")) changes.personId = optionalId(body.personId);
+  if (has("personIds")) changes.personIds = parseIds(body.personIds) ?? [];
+  if (has("assigneeIds")) { const ids = parseIds(body.assigneeIds) ?? []; if (!ids.length) errors.push("Assign the activity to someone."); else changes.assigneeIds = ids; }
+  if (has("note")) changes.note = typeof body.note === "string" ? body.note.trim().slice(0, 5000) : "";
   return { changes, errors };
 }

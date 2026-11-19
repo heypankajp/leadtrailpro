@@ -5,7 +5,7 @@ import { statusLabel } from "@/features/list-values/model";
 import { hasPrivilege, type UserAccount } from "@/features/users/model";
 import { copyOrganizationToDeals, copyPersonToDeals } from "../../../scripts/lib/contacts-sync.mjs";
 import {
-  contactKey, type ContactActivity, type ContactActivityInput, type ContactDeal, type ContactPage, type ContactPermissions, type ContactQuery, type Organization, type OrganizationDetail, type OrganizationInput,
+  contactKey, emailKey, phoneKey, type ContactActivity, type ContactActivityInput, type ContactDeal, type ContactPage, type ContactPermissions, type ContactQuery, type Organization, type OrganizationDetail, type OrganizationInput,
   type OrganizationRow, type Person, type PersonDetail, type PersonInput, type PersonRow, contactActivityTypes, timelineMonths, type ContactActivityType, type ContactsTimeline, type TimelineRow,
 } from "./model";
 
@@ -30,6 +30,20 @@ const personSelect = `
 type Stats = { deals: number; openDeals: number; lastActivityAt: string | null; dealId: number | null };
 const withStats = <Row extends Stats>(row: Row): Row => ({ ...row, deals: Number(row.deals), openDeals: Number(row.openDeals), dealId: row.dealId === null ? null : Number(row.dealId), lastActivityAt: fromSqlDateTime(row.lastActivityAt) });
 
+/** The index letter of a `name_key` (stored in lower case) in SQL, the same as `indexLetter`. */
+const letterOf = (column: string) => `CASE WHEN LEFT(${column}, 1) BETWEEN 'a' AND 'z' THEN UPPER(LEFT(${column}, 1)) ELSE '#' END`;
+
+/** For each index letter, the page of the list (same filter, same order) its first name is on. */
+async function letterPages(db: Queryable, from: string, nameKey: string, order: string, params: unknown[], pageSize: number): Promise<Record<string, number>> {
+  const { rows } = await db.query(
+    `SELECT letter, MIN(position)::int AS first FROM (
+       SELECT ${letterOf(nameKey)} AS letter, ROW_NUMBER() OVER (ORDER BY ${order}) - 1 AS position ${from}
+     ) ranked GROUP BY letter`,
+    params,
+  );
+  return Object.fromEntries((rows as { letter: string; first: number }[]).map((row) => [row.letter, Math.floor(Number(row.first) / pageSize) + 1]));
+}
+
 export async function listOrganizations(query: ContactQuery, db: Queryable = getDatabasePool()): Promise<ContactPage<OrganizationRow>> {
   const clauses = ["TRUE"];
   const params: unknown[] = [];
@@ -43,10 +57,11 @@ export async function listOrganizations(query: ContactQuery, db: Queryable = get
   const { rows } = await db.query(
     `SELECT o.id, o.name, ci.value AS city, NULLIF(o.industry, '') AS industry, ${fullName("u")} AS "ownerName",
        (SELECT COUNT(*)::int FROM persons p WHERE p.organization_id = o.id) AS people,${dealStats("l.organization_id = o.id", "c.organization_id = o.id OR c.person_id IN (SELECT id FROM persons WHERE organization_id = o.id)")}
-     ${from} ORDER BY o.name_key LIMIT ? OFFSET ?`,
+     ${from} ORDER BY o.name_key, o.id LIMIT ? OFFSET ?`,
     [...params, query.pageSize, (query.page - 1) * query.pageSize],
   );
-  return { rows: (rows as OrganizationRow[]).map((row) => withStats({ ...row, people: Number(row.people) })), total: Number(total.rows[0]?.total ?? 0), page: query.page, pageSize: query.pageSize };
+  const letters = await letterPages(db, from, "o.name_key", "o.name_key, o.id", params, query.pageSize);
+  return { rows: (rows as OrganizationRow[]).map((row) => withStats({ ...row, people: Number(row.people) })), total: Number(total.rows[0]?.total ?? 0), page: query.page, pageSize: query.pageSize, letterPages: letters };
 }
 
 export async function listPeople(query: ContactQuery, db: Queryable = getDatabasePool()): Promise<ContactPage<PersonRow>> {
@@ -60,7 +75,8 @@ export async function listPeople(query: ContactQuery, db: Queryable = getDatabas
   const where = `WHERE ${clauses.join(" AND ")}`;
   const total = await db.query(`SELECT COUNT(*)::int AS total FROM persons p LEFT JOIN organizations o ON o.id = p.organization_id ${where}`, params);
   const { rows } = await db.query(`${personSelect} ${where} ORDER BY p.name_key, p.id LIMIT ? OFFSET ?`, [...params, query.pageSize, (query.page - 1) * query.pageSize]);
-  return { rows: (rows as PersonRow[]).map(withStats), total: Number(total.rows[0]?.total ?? 0), page: query.page, pageSize: query.pageSize };
+  const letters = await letterPages(db, `FROM persons p LEFT JOIN organizations o ON o.id = p.organization_id ${where}`, "p.name_key", "p.name_key, p.id", params, query.pageSize);
+  return { rows: (rows as PersonRow[]).map(withStats), total: Number(total.rows[0]?.total ?? 0), page: query.page, pageSize: query.pageSize, letterPages: letters };
 }
 
 const organizationSelect = `
@@ -239,12 +255,53 @@ export async function newContactNames(clientName: string, clientExecutive: strin
   return { organization, contact };
 }
 
+/**
+ * No two contacts share an email address or a phone number (request of November 18, 2026). Returns the first other
+ * contact that already has one of these emails or phones (`excludeId`: the contact being edited), or null.
+ */
+export async function findContactClash(db: Queryable, emails: string[], phones: string[], excludeId: number | null = null): Promise<{ id: number; name: string; organization: string | null; field: "email" | "phone"; value: string } | null> {
+  const emailKeys = [...new Set(emails.map(emailKey).filter(Boolean))];
+  if (emailKeys.length) {
+    const { rows } = await db.query(
+      `SELECT p.id, p.name, o.name AS organization, e.value FROM persons p LEFT JOIN organizations o ON o.id = p.organization_id
+       CROSS JOIN LATERAL jsonb_array_elements_text(p.emails) AS e(value)
+       WHERE LOWER(TRIM(e.value)) = ANY(?::text[]) AND p.id <> ? LIMIT 1`,
+      [emailKeys, excludeId ?? 0],
+    );
+    const row = (rows as { id: number; name: string; organization: string | null; value: string }[])[0];
+    if (row) return { id: Number(row.id), name: row.name, organization: row.organization, field: "email", value: row.value };
+  }
+  const phoneKeys = [...new Set(phones.map(phoneKey).filter((key): key is string => Boolean(key)))];
+  if (phoneKeys.length) {
+    const digits = (column: string) => `RIGHT(REGEXP_REPLACE(${column}, '[^0-9]', '', 'g'), 10)`;
+    const { rows } = await db.query(
+      `SELECT p.id, p.name, o.name AS organization, CASE WHEN ${digits("p.phone")} = ANY(?::text[]) THEN p.phone ELSE p.alt_phone END AS value
+       FROM persons p LEFT JOIN organizations o ON o.id = p.organization_id
+       WHERE p.id <> ? AND ((LENGTH(REGEXP_REPLACE(p.phone, '[^0-9]', '', 'g')) >= 7 AND ${digits("p.phone")} = ANY(?::text[]))
+         OR (LENGTH(REGEXP_REPLACE(p.alt_phone, '[^0-9]', '', 'g')) >= 7 AND ${digits("p.alt_phone")} = ANY(?::text[]))) LIMIT 1`,
+      [phoneKeys, excludeId ?? 0, phoneKeys, phoneKeys],
+    );
+    const row = (rows as { id: number; name: string; organization: string | null; value: string }[])[0];
+    if (row) return { id: Number(row.id), name: row.name, organization: row.organization, field: "phone", value: row.value };
+  }
+  return null;
+}
+
+/** Refuses contact details another contact already has, naming that contact (409 `contact_exists`). */
+export async function assertNoContactClash(db: Queryable, emails: string[], phones: string[], excludeId: number | null = null): Promise<void> {
+  const clash = await findContactClash(db, emails, phones, excludeId);
+  if (!clash) return;
+  const who = `${clash.name}${clash.organization ? ` (${clash.organization})` : ""}`;
+  throw new HttpError(409, `${clash.value} is already the ${clash.field === "email" ? "email address" : "phone number"} of ${who}. Two contacts cannot share ${clash.field === "email" ? "an email address" : "a phone number"}: open ${clash.name} instead.`, { code: "contact_exists", personId: clash.id });
+}
+
 export async function createPerson(input: PersonInput, actor: UserAccount): Promise<Person> {
   requireCreate(actor);
   return withTransaction(async (connection) => {
     const organizationId = await organizationFor(connection, input.organizationName, actor, input.createOrganization);
     const clash = await connection.query("SELECT id FROM persons WHERE organization_id = ? AND name_key = ?", [organizationId, contactKey(input.name)]);
     if (clash.rows.length) throw new HttpError(409, `${input.name} is already a contact at ${input.organizationName}. Open them from the list.`, { personId: Number(clash.rows[0].id) });
+    await assertNoContactClash(connection, input.emails, [input.phone, input.altPhone]);
     const result = await connection.query(
       "INSERT INTO persons (organization_id, name, name_key, emails, phone, alt_phone, remark, owner_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
       [organizationId, input.name, contactKey(input.name), JSON.stringify(input.emails), input.phone, input.altPhone, input.remark, actor.id, actor.id],
@@ -265,6 +322,10 @@ export async function updatePerson(id: number, input: PersonInput, actor: UserAc
       const clash = await connection.query("SELECT id FROM persons WHERE organization_id = ? AND name_key = ? AND id <> ?", [before.organizationId, contactKey(input.name), id]);
       if (clash.rows.length) throw new HttpError(409, `Another contact at ${before.organization} is already called ${input.name}.`);
     }
+    // Only the details this edit adds are checked, so contacts that shared one before can still be edited otherwise.
+    const addedEmails = input.emails.filter((email) => !before.emails.some((old) => emailKey(old) === emailKey(email)));
+    const addedPhones = [input.phone, input.altPhone].filter((phone) => { const key = phoneKey(phone); return key && key !== phoneKey(before.phone) && key !== phoneKey(before.altPhone); });
+    await assertNoContactClash(connection, addedEmails, addedPhones, id);
     // Filing a person under another organization is a correction, allowed while they have no deals. Their deals name the
     // organization they belong to; someone who changed employer is added as a new person there (SPEC §10.16).
     let organizationId = before.organizationId;

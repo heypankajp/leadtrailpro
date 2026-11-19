@@ -215,7 +215,22 @@ export async function listLeads(filters: LeadFilters, viewer: UserAccount): Prom
     db.query(`${leadSelect} WHERE ${where} ORDER BY ${orderBy} LIMIT ${filters.pageSize} OFFSET ${offset}`, params),
   ]);
   const total = Number((countRows as { total: number }[])[0].total);
-  return { leads: (rows as LeadRow[]).map(toLead), total, page: filters.page, pageSize: filters.pageSize };
+  // The A–Z index: where each first letter starts when the list is sorted by client name A–Z (as the list sorts it).
+  let letterPages: Record<string, number> | undefined;
+  if (filters.letters) {
+    const initial = "UPPER(LEFT(TRIM(l.client_name), 1))";
+    const { rows: letterRows } = await db.query(
+      `SELECT letter, MIN(position)::int AS first FROM (
+         SELECT CASE WHEN ${initial} ~ '^[A-Z]$' THEN ${initial} ELSE '#' END AS letter, ROW_NUMBER() OVER (ORDER BY l.client_name ASC, l.id DESC) - 1 AS position
+         FROM leads l JOIN users o ON o.id = l.owner_id JOIN list_values st ON st.id = l.status_id JOIN list_values lt ON lt.id = l.lead_type_id
+         LEFT JOIN list_values sr ON sr.id = l.status_reason_id LEFT JOIN list_values ba ON ba.id = l.bd_action_id LEFT JOIN list_values cr ON cr.id = l.client_response_id LEFT JOIN list_values ci ON ci.id = l.city_id
+         WHERE ${where}
+       ) ranked GROUP BY letter`,
+      params,
+    );
+    letterPages = Object.fromEntries((letterRows as { letter: string; first: number }[]).map((row) => [row.letter, Math.floor(Number(row.first) / filters.pageSize) + 1]));
+  }
+  return { leads: (rows as LeadRow[]).map(toLead), total, page: filters.page, pageSize: filters.pageSize, letterPages };
 }
 
 // ---- Activities ----

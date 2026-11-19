@@ -59,7 +59,7 @@ describe("Accessibility", () => {
 
   uiTest("tasks, reports, settings, list of values, and the trip planner", async () => {
     await page.nav("Activities");
-    await page.heading("Activities");
+    await page.heading("Activity Dashboard");
     await audit("tasks");
     await page.nav("Insights");
     await page.heading("Insights");

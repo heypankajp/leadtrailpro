@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 
@@ -44,6 +44,24 @@ export async function saveAttachmentFile(leadId: number, fileName: string, bytes
   await mkdir(path.dirname(target), { recursive: true });
   await writeFile(target, bytes, { flag: "wx" });
   return storageKey;
+}
+
+/** An activity's file (request of November 18, 2026): stored under tasks/<task id>/ next to the deals' folders. */
+export async function saveTaskAttachmentFile(taskId: number, fileName: string, bytes: Uint8Array): Promise<string> {
+  const extension = fileName.toLowerCase().split(".").pop() ?? "bin";
+  const storageKey = `tasks/${taskId}/${Date.now().toString(36)}-${randomBytes(8).toString("hex")}.${extension.replace(/[^a-z0-9]/g, "")}`;
+  const target = path.join(attachmentRoot(), storageKey);
+  await mkdir(path.dirname(target), { recursive: true });
+  await writeFile(target, bytes, { flag: "wx" });
+  return storageKey;
+}
+
+/** Removes a stored file; a file already gone is not an error. */
+export async function removeAttachmentFile(storageKey: string): Promise<void> {
+  const root = attachmentRoot();
+  const target = path.resolve(root, storageKey);
+  if (!target.startsWith(root + path.sep)) return;
+  await rm(target, { force: true });
 }
 
 export async function readAttachmentFile(storageKey: string): Promise<Buffer> {

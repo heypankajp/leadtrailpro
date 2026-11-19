@@ -22,19 +22,19 @@ describe("Tasks and reminders", () => {
   });
   after(async () => { await driver?.quit(); });
 
-  uiTest("creates a task linked to a deal", async () => {
+  uiTest("schedules an activity linked to a deal", async () => {
     await page.nav("Activities");
-    await page.heading("Activities");
-    await page.clickButton("Create task", { global: true });
-    await page.dialogTitle("Create task");
-    await page.fill("Title", title);
-    await page.fill("Priority", "High");
-    await page.fill("Due date and time", localDateTime(2, "10:00"));
-    const picker = await (await page.dialog()).findElement(By.css(".lead-picker input"));
-    await picker.sendKeys(leadName);
-    await page.click(By.xpath(`.//span[contains(@class,"lead-picker-results")]//button[starts-with(normalize-space(.), ${xq(leadName)})]`));
-    await page.wait(By.xpath(`//span[contains(@class,"chip-value") and starts-with(normalize-space(.), ${xq(leadName)})]`));
-    await page.clickButton("Create task");
+    await page.heading("Activity Dashboard");
+    await page.clickButton("Schedule an Activity", { global: true });
+    await page.dialogTitle("Schedule an Activity");
+    await page.fillNamed("Subject", title);
+    await page.fillNamed("Priority", "Priority: High");
+    await page.fillNamed("Date", localDateTime(2, "10:00").slice(0, 10));
+    await page.fillNamed("Start time", "10:00");
+    await (await page.wait(By.css('section[role="dialog"] input[aria-label="Deal"]'))).sendKeys(leadName);
+    await page.click(By.xpath(`//section[@role="dialog"]//ul[contains(@class,"suggest-list")]//li[.//strong[normalize-space()=${xq(leadName)}]]`));
+    await page.wait(By.xpath(`//div[contains(@class,"activity-link-field") and contains(@class,"is-set")][contains(normalize-space(.), ${xq(leadName)})]`));
+    await page.clickButton("Save");
     await page.toast("Task created");
     const card = await page.wait(By.xpath(
       `//section[contains(@class,"task-column")][.//h2[contains(normalize-space(.),"Upcoming")]]//article[contains(@class,"task-card")][.//strong[normalize-space()=${xq(title)}]]`,
@@ -51,16 +51,16 @@ describe("Tasks and reminders", () => {
 
   uiTest("edits the task", async () => {
     await page.click(By.css(`button[aria-label="Edit ${title}"]`), { global: true });
-    await page.dialogTitle("Edit task");
-    await page.fill("Title", `${title} (updated)`);
-    await page.clickButton("Save task");
+    await page.dialogTitle("Edit Activity");
+    await page.fillNamed("Subject", `${title} (updated)`);
+    await page.clickButton("Save");
     await page.toast("Task updated");
     await page.wait(By.xpath(`//strong[normalize-space()=${xq(`${title} (updated)`)}]`));
   });
 
   uiTest("comments on the task with a mention, edits the comment, and removes it", async () => {
     await page.click(By.css(`button[aria-label="Edit ${title} (updated)"]`), { global: true });
-    await page.dialogTitle("Edit task");
+    await page.dialogTitle("Edit Activity");
     const editor = await page.wait(By.css('.task-comment-composer textarea[aria-label="Comment"]'));
     await editor.sendKeys("Please review before the call @Ada");
     await page.click(By.xpath('.//div[contains(@class,"mention-menu")]//button[.//strong[normalize-space()="Ada Admin"]]'));
@@ -86,15 +86,17 @@ describe("Tasks and reminders", () => {
 
   uiTest("understands a due date typed in words", async () => {
     const typed = `Send the proposal ${runId}`;
-    await page.clickButton("Create task", { global: true });
-    await page.dialogTitle("Create task");
-    await page.fill("Title", typed);
+    await page.clickButton("Schedule an Activity", { global: true });
+    await page.dialogTitle("Schedule an Activity");
+    await page.fillNamed("Subject", typed);
     // "in two weeks" always lands in Upcoming whatever the weekday or the browser's timezone ("next Monday" is "today" on a Sunday evening).
-    await page.fill("Type a due date", "in two weeks at 10am");
+    await page.fillNamed("Type a due date", "in two weeks at 10am");
     const hint = await page.wait(By.css(".natural-date-hint.is-resolved"));
     assert.match(await hint.getText(), /Understood \u201cin two weeks\u201d as .* 10:00 AM/);
-    assert.match(await (await page.control("Due date and time")).getAttribute("value"), /^\d{4}-\d{2}-\d{2}T10:00$/, "the resolved date is shown in the date picker for confirmation");
-    await page.clickButton("Create task");
+    // The resolved date and time are shown in the date and start fields for confirmation.
+    assert.match(await (await page.wait(By.css('section[role="dialog"] input[aria-label="Date"]'))).getAttribute("value"), /^\d{4}-\d{2}-\d{2}$/);
+    assert.equal(await (await page.wait(By.css('section[role="dialog"] input[aria-label="Start time"]'))).getAttribute("value"), "10:00");
+    await page.clickButton("Save");
     await page.toast("Task created");
     await page.wait(By.xpath(`//section[contains(@class,"task-column")][.//h2[contains(normalize-space(.),"Upcoming")]]//strong[normalize-space()=${xq(typed)}]`));
   });

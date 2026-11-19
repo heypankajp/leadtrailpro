@@ -1,9 +1,11 @@
 "use client";
 
+import { Fragment } from "react";
 import { Clock3, ListChecks, MailOpen, MoreHorizontal } from "lucide-react";
 import { formatDate, relativeTime } from "@/lib/format";
 import { Avatar, StatusPill } from "@/features/shell/components";
 import { replyWaiting } from "@/features/gmail/watch-model";
+import { indexLetter } from "@/features/contacts/model";
 import type { LeadSummary } from "./model";
 
 export type LeadTableProps = {
@@ -19,9 +21,18 @@ export type LeadTableProps = {
   onOpen: (lead: LeadSummary) => void;
   onReview: (lead: LeadSummary, approve: boolean) => void;
   onRestore: (lead: LeadSummary) => void;
+  /** The list is sorted by client name: a letter heading ("U") goes before each first letter, with this id prefix. */
+  letterAnchors?: string;
 };
 
-export default function LeadTable({ leads, selected, today, view, canSelect, canReview, canRestore, onToggle, onToggleAll, onOpen, onReview, onRestore }: LeadTableProps) {
+export default function LeadTable({ leads, selected, today, view, canSelect, canReview, canRestore, onToggle, onToggleAll, onOpen, onReview, onRestore, letterAnchors }: LeadTableProps) {
+  const columns = (canSelect ? 9 : 8) + (view === "archive" ? 1 : 0);
+  const heading = (index: number) => {
+    if (!letterAnchors) return null;
+    const letter = indexLetter(leads[index].clientName);
+    if (index > 0 && indexLetter(leads[index - 1].clientName) === letter) return null;
+    return <tr className="contacts-letter-row" id={`${letterAnchors}${letter === "#" ? "other" : letter}`}><td colSpan={columns}>{letter}</td></tr>;
+  };
   const allSelected = leads.length > 0 && leads.every((lead) => selected.includes(lead.id));
   return (
     <div className="table-scroll">
@@ -41,11 +52,13 @@ export default function LeadTable({ leads, selected, today, view, canSelect, can
           </tr>
         </thead>
         <tbody>
-          {leads.map((lead) => {
+          {leads.map((lead, index) => {
             const overdue = Boolean(lead.followUpDate && lead.followUpDate < today);
             const dueToday = lead.followUpDate === today;
             return (
-              <tr key={lead.id} className={overdue && view !== "archive" ? "row-due" : ""}>
+              <Fragment key={lead.id}>
+              {heading(index)}
+              <tr className={overdue && view !== "archive" ? "row-due" : ""}>
                 {canSelect && <td><input aria-label={`Select ${lead.clientName}`} type="checkbox" checked={selected.includes(lead.id)} onChange={() => onToggle(lead.id)} /></td>}
                 <td>
                   <button className="client-cell" onClick={() => onOpen(lead)}>
@@ -77,6 +90,7 @@ export default function LeadTable({ leads, selected, today, view, canSelect, can
                   )}
                 </td>
               </tr>
+              </Fragment>
             );
           })}
           {!leads.length && <tr><td colSpan={(canSelect ? 9 : 8) + (view === "archive" ? 1 : 0)} className="empty-state">No deals match these filters.</td></tr>}

@@ -163,7 +163,7 @@ describe("Pipeline board (PIPE-*)", () => {
     await driver.actions().sendKeys(Key.ESCAPE).perform();
     await page.openCardMenu(valued);
     await page.click(By.xpath('//div[contains(@class,"card-menu")]//button[normalize-space()="Add follow-up"]'), { global: true });
-    await page.dialogTitle("Schedule an activity");
+    await page.dialogTitle("Schedule an Activity");
     await page.fill("Note", "Send the rate card.");
     await page.clickButton("Save activity");
     await page.toast(`· ${valued}`);

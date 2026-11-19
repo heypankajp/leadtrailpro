@@ -13,6 +13,8 @@ export type LeadQuery = Partial<{
   sort: LeadSortKey; direction: "asc" | "desc"; page: number; pageSize: number;
   /** PD-30: a ready-made or data cleanup filter. */
   quick: QuickFilterKey;
+  /** The Pipeline list's A–Z index: also return `letterPages`. */
+  letters: boolean;
 }>;
 
 export type LeadDetail = {

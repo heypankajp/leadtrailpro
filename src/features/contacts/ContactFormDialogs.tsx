@@ -1,17 +1,17 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { Building2, Plus, Save } from "lucide-react";
+import { Building2, Plus, Save, UserRound } from "lucide-react";
 import { ApiError, errorMessage } from "@/lib/api";
 import { useApp } from "@/features/shell/AppContext";
 import { Dialog, ErrorText, Field } from "@/features/shell/components";
 import SuggestInput from "@/features/shell/SuggestInput";
-import { createOrganization, createPerson, fetchOrganizations, updateOrganization, updatePerson } from "./client";
-import type { Organization, Person } from "./model";
+import { createOrganization, createPerson, fetchOrganization, fetchOrganizations, updateOrganization, updatePerson } from "./client";
+import { contactKey, type Organization, type OrganizationRow, type Person, type PersonRow } from "./model";
 
 /** Add or edit an organization (SPEC §10.14). Saving an edit updates the company details on every deal of the organization. */
 export function OrganizationFormDialog({ organization, onClose, onSaved }: { organization?: Organization; onClose: () => void; onSaved: (organization: Organization) => void }) {
-  const { reference } = useApp();
+  const { reference, openContact } = useApp();
   const [form, setForm] = useState({
     name: organization?.name ?? "", industry: organization?.industry ?? "", companySizeId: organization?.companySizeId ? String(organization.companySizeId) : "",
     cityId: organization?.cityId ? String(organization.cityId) : "", address: organization?.address ?? "", website: organization?.website ?? "",
@@ -19,9 +19,23 @@ export function OrganizationFormDialog({ organization, onClose, onSaved }: { org
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const set = (key: keyof typeof form) => (event: { target: { value: string } }) => setForm((current) => ({ ...current, [key]: event.target.value }));
+  // A new organization (request of November 18, 2026): the name looks up the organizations that exist, so one is not
+  // added twice (picking it opens it); "+ Add 'Acme' as new organization" marks the name NEW.
+  const [isNew, setIsNew] = useState(false);
+  const [matches, setMatches] = useState<{ q: string; rows: OrganizationRow[] } | null>(null);
+  const typed = organization || isNew ? "" : form.name.trim();
+  useEffect(() => {
+    if (typed.length < 2) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => { fetchOrganizations(typed, 1).then((page) => { if (!cancelled) setMatches({ q: typed, rows: page.rows.slice(0, 8) }); }).catch(() => undefined); }, 250);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [typed]);
+  const found = matches && matches.q === typed ? matches.rows : [];
+  const exists = found.find((row) => contactKey(row.name) === contactKey(typed)) ?? null;
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!organization && exists) { setError(`${exists.name} is already an organization: pick it in the list to open it.`); return; }
     setSaving(true);
     setError("");
     const input = { name: form.name, industry: form.industry, companySizeId: form.companySizeId ? Number(form.companySizeId) : null, cityId: form.cityId ? Number(form.cityId) : null, address: form.address, website: form.website };
@@ -37,7 +51,20 @@ export function OrganizationFormDialog({ organization, onClose, onSaved }: { org
   return (
     <Dialog title={organization ? `Edit ${organization.name}` : "Add organization"} eyebrow={organization ? "ORGANIZATION" : undefined} onClose={onClose}>
       <form className="lead-form" onSubmit={submit}>
-        <Field label="Name" required wide><input value={form.name} onChange={set("name")} required maxLength={200} placeholder="Company name" autoFocus /></Field>
+        <Field label="Name" required wide hint={organization ? undefined : isNew ? "A new organization." : "Start typing: the organizations that exist are listed. Pick one to open it, or add the name as a new organization."}>
+          {organization
+            ? <input value={form.name} onChange={set("name")} required maxLength={200} placeholder="Company name" autoFocus />
+            : <SuggestInput
+                value={form.name} onChange={(value) => { setForm((current) => ({ ...current, name: value })); setIsNew(false); setError(""); }}
+                suggestions={found.map((row) => ({ key: String(row.id), label: row.name, detail: [row.city, "already exists: open it"].filter(Boolean).join(" · "), icon: <Building2 size={14} /> }))}
+                onPick={(suggestion) => { onClose(); openContact("organization", Number(suggestion.key)); }}
+                loading={typed.length >= 2 && matches?.q !== typed}
+                icon={<Building2 size={16} />}
+                create={typed.length >= 2 && matches?.q === typed && !exists ? { label: `Add '${typed}' as new organization`, onCreate: () => setIsNew(true) } : null}
+                isNew={isNew} onClear={() => { setForm((current) => ({ ...current, name: "" })); setIsNew(false); }}
+                required maxLength={200} placeholder="Organization" autoFocus
+              />}
+        </Field>
         <Field label="Industry"><input value={form.industry} onChange={set("industry")} maxLength={120} placeholder="e.g. Healthcare" /></Field>
         <Field label="Company size">
           <select value={form.companySizeId} onChange={set("companySizeId")}><option value="">Not set</option>{reference.listValues.company_size.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}</select>
@@ -69,11 +96,18 @@ export function PersonFormDialog({ person, organizationName, movable = false, on
   const [form, setForm] = useState({
     name: person?.name ?? "", organizationName: fixedOrganization ?? person?.organization ?? "", emails: person?.emails.join(", ") ?? "", phone: person?.phone ?? "", altPhone: person?.altPhone ?? "", remark: person?.remark ?? "",
   });
-  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const { openContact } = useApp();
+  const [suggestions, setSuggestions] = useState<OrganizationRow[]>([]);
+  // The contacts of the organization chosen (request of November 18, 2026): a name already there opens that contact,
+  // "+ Add 'Ana' as new person" marks the name NEW and the person is added inside the organization.
+  const [orgPeople, setOrgPeople] = useState<PersonRow[]>([]);
+  const [newPerson, setNewPerson] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   // PD-15 / PD-17: the organization name that is new and waits for the user's confirmation.
   const [confirmNew, setConfirmNew] = useState<string | null>(null);
+  // "+ Add 'Acme' as new organization" picked from the list: the new organization is confirmed already (NEW badge).
+  const [newOrganization, setNewOrganization] = useState(false);
   const set = (key: keyof typeof form) => (event: { target: { value: string } }) => setForm((current) => ({ ...current, [key]: event.target.value }));
 
   // Organizations that match what is being typed, offered as suggestions.
@@ -82,15 +116,29 @@ export function PersonFormDialog({ person, organizationName, movable = false, on
     if (typed.length < 2) return;
     let cancelled = false;
     const timer = window.setTimeout(() => {
-      fetchOrganizations(typed, 1).then((page) => { if (!cancelled) setSuggestions(page.rows.slice(0, 12).map((row) => row.name)); }).catch(() => { /* suggestions are optional */ });
+      fetchOrganizations(typed, 1).then((page) => { if (!cancelled) setSuggestions(page.rows.slice(0, 12)); }).catch(() => { /* suggestions are optional */ });
     }, 250);
     return () => { cancelled = true; window.clearTimeout(timer); };
   }, [typed]);
 
+  // The organization named exactly, when it exists: its contacts are looked up for the name.
+  const chosenOrg = person ? null : suggestions.find((row) => contactKey(row.name) === contactKey(form.organizationName)) ?? null;
+  const chosenOrgId = chosenOrg?.id ?? null;
+  useEffect(() => {
+    if (!chosenOrgId) return;
+    let cancelled = false;
+    fetchOrganization(chosenOrgId).then((detail) => { if (!cancelled) setOrgPeople(detail.people); }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [chosenOrgId]);
+  const people = chosenOrgId ? orgPeople : [];
+  const typedName = person || newPerson ? "" : form.name.trim();
+  const sameName = people.find((item) => contactKey(item.name) === contactKey(typedName)) ?? null;
+  const organizationGiven = Boolean(fixedOrganization || form.organizationName.trim());
+
   const save = async (createOrganization: boolean) => {
     setSaving(true);
     setError("");
-    const input = { name: form.name, organizationName: form.organizationName, emails: form.emails.split(/[,;\s]+/).filter(Boolean), phone: form.phone, altPhone: form.altPhone, remark: form.remark, createOrganization };
+    const input = { name: form.name, organizationName: form.organizationName, emails: form.emails.split(/[,;\s]+/).filter(Boolean), phone: form.phone, altPhone: form.altPhone, remark: form.remark, createOrganization: createOrganization || newOrganization };
     try {
       const result = person ? await updatePerson(person.id, input) : await createPerson(input);
       onSaved(result.person);
@@ -101,20 +149,39 @@ export function PersonFormDialog({ person, organizationName, movable = false, on
       setSaving(false);
     }
   };
-  const submit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); void save(false); };
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!person && sameName) { setError(`${sameName.name} is already a contact of ${form.organizationName.trim()}: pick the name in the list to open it.`); return; }
+    void save(false);
+  };
 
   return (
     <Dialog title={person ? `Edit ${person.name}` : "Add contact"} eyebrow={person ? "CONTACT" : undefined} onClose={onClose}>
       <form className="lead-form" onSubmit={submit}>
-        <Field label="Name" required wide><input value={form.name} onChange={set("name")} required maxLength={160} placeholder="Contact person" autoFocus /></Field>
         <Field label="Organization" required wide hint={fixedOrganization ? (person ? "They have deals with this organization, so they stay there. Someone who changed employer is added as a new contact at the new organization." : undefined) : "Start typing the company's name: the organizations that match appear in a list. Pick one, or keep typing a new name (you are asked before it is created)."}>
           {fixedOrganization
             ? <input value={form.organizationName} maxLength={200} disabled required />
             : <SuggestInput
-                value={form.organizationName} onChange={(value) => { setForm((current) => ({ ...current, organizationName: value })); setConfirmNew(null); }}
-                suggestions={typed.length >= 2 ? suggestions.map((name) => ({ key: name, label: name })) : []} onPick={(suggestion) => { setForm((current) => ({ ...current, organizationName: suggestion.label })); setConfirmNew(null); }}
-                empty={`No organization called “${typed}” yet: saving adds it after you confirm.`}
-                maxLength={200} placeholder="Type to search organizations…" required
+                value={form.organizationName} onChange={(value) => { setForm((current) => ({ ...current, organizationName: value })); setConfirmNew(null); setNewOrganization(false); }}
+                suggestions={typed.length >= 2 ? suggestions.map((row) => ({ key: String(row.id), label: row.name, icon: <Building2 size={14} /> })) : []} onPick={(suggestion) => { setForm((current) => ({ ...current, organizationName: suggestion.label })); setConfirmNew(null); setNewOrganization(false); }}
+                icon={<Building2 size={16} />}
+                create={typed.length >= 2 && !suggestions.some((row) => contactKey(row.name) === contactKey(typed)) ? { label: `Add '${typed}' as new organization`, onCreate: () => { setNewOrganization(true); setConfirmNew(null); } } : null}
+                isNew={newOrganization} onClear={() => { setForm((current) => ({ ...current, organizationName: "" })); setNewOrganization(false); }}
+                maxLength={200} placeholder="Organization" required
+              />}
+        </Field>
+        <Field label="Name" required wide hint={person ? undefined : newPerson ? "A new person, added inside the organization." : organizationGiven ? "Start typing: the organization's contacts are listed. Pick one to open it, or add the name as a new person." : "Choose the organization first: the person is added inside it."}>
+          {person
+            ? <input value={form.name} onChange={set("name")} required maxLength={160} placeholder="Contact person" autoFocus />
+            : <SuggestInput
+                value={form.name} onChange={(value) => { setForm((current) => ({ ...current, name: value })); setNewPerson(false); setError(""); }}
+                suggestions={people.filter((item) => !typedName || contactKey(item.name).includes(contactKey(typedName))).map((item) => ({ key: String(item.id), label: item.name, detail: [item.email, "already a contact: open it"].filter(Boolean).join(" · "), icon: <UserRound size={14} /> }))}
+                onPick={(suggestion) => { onClose(); openContact("person", Number(suggestion.key)); }}
+                minChars={chosenOrgId ? 0 : 2} disabled={!organizationGiven}
+                icon={<UserRound size={16} />}
+                create={organizationGiven && typedName.length >= 2 && !sameName ? { label: `Add '${typedName}' as new person`, onCreate: () => setNewPerson(true) } : null}
+                isNew={newPerson} onClear={() => { setForm((current) => ({ ...current, name: "" })); setNewPerson(false); }}
+                required maxLength={160} placeholder={organizationGiven ? "Person" : "Choose the organization first"}
               />}
         </Field>
         <Field label="Email(s)" wide hint="Separate several addresses with commas."><input value={form.emails} onChange={set("emails")} placeholder="name@company.com" /></Field>
