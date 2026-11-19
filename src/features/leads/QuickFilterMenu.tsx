@@ -48,7 +48,7 @@ export default function QuickFilterMenu({ value, onChange, followUp }: { value: 
   return (
     <div className="menu-anchor quick-filter" ref={anchor}>
       <button ref={button} type="button" className={`button button-outline button-small ${value ? "is-active" : ""}`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
-        <ListFilter size={14} /> {label ? <span className="quick-filter-label">{label}</span> : "Filter"} <ChevronDown size={13} />
+        <ListFilter size={14} /> {label ? <span className="quick-filter-label">{label}</span> : "Quick filters"} <ChevronDown size={13} />
       </button>
       {value && <button type="button" className="icon-button quick-filter-clear" aria-label="Clear the filter" title="Clear the filter" onClick={() => onChange(null)}><X size={13} /></button>}
       {followUp && followUpSet && (
@@ -60,7 +60,7 @@ export default function QuickFilterMenu({ value, onChange, followUp }: { value: 
         </span>
       )}
       {open && (
-        <div className="menu-dropdown quick-filter-menu" role="menu" aria-label="Filter deals">
+        <div className="menu-dropdown quick-filter-menu" role="menu" aria-label="Quick filters">
           <div className="card-menu-label">Filters</div>
           {quickFilters.filter((filter) => filter.group === "ready").flatMap((filter) => [item(filter.key, filter.label, filter.hint), filter.key === "open" ? byFollowUp : null])}
           <button type="button" role="menuitem" onClick={() => { setOpen(false); navigate("deals", "archive"); }}><Archive size={13} /> Archived deals</button>

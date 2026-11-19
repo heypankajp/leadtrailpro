@@ -155,17 +155,15 @@ describe("Pipeline board (PIPE-*)", () => {
     await page.wait(cardIn("New Deal", valued));
   });
 
-  uiTest("the card's menu adds a follow-up, puts the deal on a To Do list and archives it (PD-22, PD-33, PD-34)", async () => {
+  uiTest("the card's menu adds a follow-up, puts the deal on a To Do list and archives it (PD-22, PD-33, PD-34, PD-57)", async () => {
     const valued = `Cedar Foods ${runId}`;
-    // PD-33: the menu no longer offers the stages.
-    await page.openCardMenu(valued);
-    assert.equal((await driver.findElements(By.xpath('//div[contains(@class,"card-menu")]//*[normalize-space()="Move to stage"]'))).length, 0, "no Move to stage in the card menu");
-    await driver.actions().sendKeys(Key.ESCAPE).perform();
+    // PD-57: Add follow-up opens the Schedule an Activity dialog with the deal linked (Move to stage has its own test, PD-55).
     await page.openCardMenu(valued);
     await page.click(By.xpath('//div[contains(@class,"card-menu")]//button[normalize-space()="Add follow-up"]'), { global: true });
     await page.dialogTitle("Schedule an Activity");
-    await page.fill("Note", "Send the rate card.");
-    await page.clickButton("Save activity");
+    await page.click(By.xpath('//section[@role="dialog"]//button[@role="tab" and starts-with(normalize-space(.), "Note")]'));
+    await page.fillNamed("Note", "Send the rate card.");
+    await page.clickButton("Save");
     await page.toast(`· ${valued}`);
     await page.waitText(cardIn("New Deal", valued), "Task");
     await page.openCardMenu(valued);
@@ -236,7 +234,7 @@ describe("Pipeline board (PIPE-*)", () => {
 
   uiTest("the Filter menu finds open deals with no next step and opens them in the list (PD-30)", async () => {
     await page.deals("board");
-    await page.click(By.xpath('//div[contains(@class,"pipeline-toolbar")]//div[contains(@class,"quick-filter")]/button[contains(normalize-space(.), "Filter")]'), { global: true });
+    await page.click(By.xpath('//div[contains(@class,"pipeline-toolbar")]//div[contains(@class,"quick-filter")]/button[contains(normalize-space(.), "Quick filters")]'), { global: true });
     await page.click(By.xpath('//div[contains(@class,"quick-filter-menu")]//button[normalize-space()="Open deals with no next step"]'), { global: true });
     await page.wait(By.xpath('//div[contains(@class,"pipeline-toolbar")]//span[contains(@class,"quick-filter-label") and normalize-space()="Open deals with no next step"]'));
     // This deal has an open task (the BD action test saved one), so the filter leaves it out.
@@ -267,12 +265,12 @@ describe("Pipeline board (PIPE-*)", () => {
     await page.deals("board");
     await page.wait(cardIn("Contact Made", name));
     const entry = (start) => By.xpath(`//div[contains(@class,"quick-filter-menu")]//button[starts-with(normalize-space(.), ${xq(start)})]`);
-    await page.clickButton("Filter", { global: true });
+    await page.clickButton("Quick filters", { global: true });
     await page.click(entry("Current (Q"), { global: true });
     await page.wait(cardIn("Contact Made", name));
     assert.equal((await driver.findElements(By.xpath('//button[normalize-space()="Deals older than 3 months"]'))).length, 0);
     await page.click(By.css('button[aria-label="Clear the filter"]'), { global: true });
-    await page.clickButton("Filter", { global: true });
+    await page.clickButton("Quick filters", { global: true });
     await page.click(entry("Quiet Deals ("), { global: true });
     await driver.wait(async () => (await driver.findElements(cardIn("Contact Made", name))).length === 0, 10000, "a deal first contacted today is not a quiet deal");
     await page.click(By.css('button[aria-label="Clear the filter"]'), { global: true });
@@ -293,7 +291,7 @@ describe("Pipeline board (PIPE-*)", () => {
     await page.closeDialog();
     await page.deals("board");
     await page.wait(cardIn("New Deal", other));
-    await page.clickButton("Filter", { global: true });
+    await page.clickButton("Quick filters", { global: true });
     await page.click(By.xpath('//div[contains(@class,"quick-filter-menu")]//button[normalize-space()="Followup"]'), { global: true });
     await page.pickPeriod("Followup", isoDate(0));
     await page.wait(By.xpath('//span[contains(@class,"follow-up-chip")]//span[starts-with(normalize-space(.), "Follow-up:")]'));
@@ -301,5 +299,21 @@ describe("Pipeline board (PIPE-*)", () => {
     await driver.wait(async () => (await driver.findElements(cardIn("New Deal", other))).length === 0, 10000, "a deal with no follow-up that day is left out");
     await page.click(By.css('button[aria-label="Clear the follow-up period"]'), { global: true });
     await page.wait(cardIn("New Deal", other));
+  });
+
+  // PD-55: a card cannot be dragged on a phone or with the keyboard, so its menu moves it too.
+  uiTest("Move to stage in the card's menu opens the stages and moves the deal (PD-55)", async () => {
+    const other = `Willow Print ${runId}`;
+    await page.deals("board");
+    await page.wait(cardIn("New Deal", other));
+    await page.openCardMenu(other);
+    const stageLine = By.xpath('//div[contains(@class,"card-menu")]//button[contains(@class,"card-menu-stage") and normalize-space()="Qualified"]');
+    assert.equal((await driver.findElements(stageLine)).length, 0, "the stages stay folded until Move to stage is clicked");
+    await page.click(By.xpath('//div[contains(@class,"card-menu")]//button[starts-with(normalize-space(.), "Move to stage")]'), { global: true });
+    await page.click(stageLine, { global: true });
+    await page.toast(`${other} moved to Qualified`);
+    await page.dialogTitle(`What's next for ${other}?`);
+    await page.clickButton("Skip");
+    await page.wait(cardIn("Qualified", other));
   });
 });

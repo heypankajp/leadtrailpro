@@ -28,7 +28,7 @@ import UserDirectoryDialog from "@/features/users/UserDirectoryDialog";
 import type { UserSummary } from "@/features/users/model";
 import ArchiveDialog from "./ArchiveDialog";
 import { attachmentUrl, fetchLead, logActivity, removeAttachment, reviewLead, setLeadState, setLeadTodo, transferLead, updateLead, uploadAttachment, type LeadDetail } from "./client";
-import { activityIcons, ScheduleActivityForm } from "@/features/tasks/ScheduleActivity";
+import { activityIcons } from "@/features/tasks/ScheduleActivity";
 import LeadFormDialog from "./LeadFormDialog";
 import { activityLabels, formatDealValue, type LeadActivity, type LeadSummary, type LoggableActivityType } from "./model";
 
@@ -219,7 +219,7 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
                 await refresh(message ?? "Activity recorded");
                 if (logged && logged.type !== "note" && !logged.taskCreated) offerNextStep(`You logged ${logged.type === "email" ? "an email" : `a ${logged.type}`}.`);
               }}
-              onScheduled={async (message) => { await refresh(message); }}
+              onSchedule={() => setDialog({ kind: "task" })}
             />
 
             <section className="deal-block" aria-label="Focus">
@@ -308,7 +308,7 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
         />
       )}
       {dialog?.kind === "task" && (
-        <TaskFormDialog task={dialog.task} leadId={lead.id} leadName={lead.clientName} defaultAssigneeId={lead.ownerId} onClose={() => setDialog(null)} onSaved={() => { setDialog(null); void refresh(dialog.task ? "Task updated" : "Task created"); }} />
+        <TaskFormDialog task={dialog.task} leadId={lead.id} leadName={lead.clientName} defaultAssigneeId={lead.ownerId} setFollowUp={canEdit} onClose={() => setDialog(null)} onSaved={(_, message) => { setDialog(null); void refresh(dialog.task ? "Task updated" : message); }} />
       )}
       {nextStep && (
         <NextStepDialog lead={nextStep.lead} reason={nextStep.reason} onClose={() => setNextStep(null)} onSaved={(message) => { setNextStep(null); void refresh(message); }} />
@@ -452,14 +452,14 @@ function SidePanels({ detail, canEdit, overdue, onQuickUpdate, onTodo }: {
 
 type FollowUpDraft = { key: string; enabled: boolean; title: string; date: string; time: string };
 /** "emails": the Emails tab (PD-25), the organization's mail; "email" is the form that logs an email by hand inside it. */
-type ComposerMode = LoggableActivityType | "follow-up" | "emails";
+type ComposerMode = LoggableActivityType | "emails";
 
 /** The box at the top of the right column: write a note, log a call or a visit, read and send the emails (PD-25), or schedule the follow-up. */
-function Composer({ detail, canEdit, onLogged, onScheduled }: {
+function Composer({ detail, canEdit, onLogged, onSchedule }: {
   detail: LeadDetail; canEdit: boolean;
   onLogged: (message?: string, logged?: { type: LoggableActivityType; taskCreated: boolean }) => Promise<void>;
-  /** PD-29: an activity was scheduled (or recorded as done) in the Schedule activity form. */
-  onScheduled: (message: string) => Promise<void>;
+  /** Opens the Schedule an Activity dialog for this deal (PD-57: the one form, in place of the composer's own). */
+  onSchedule: () => void;
 }) {
   const { can, reference } = useApp();
   const { lead } = detail;
@@ -474,7 +474,7 @@ function Composer({ detail, canEdit, onLogged, onScheduled }: {
   const canNote = can("add_notes") && lead.recordState !== "archived";
   const canSuggest = can("manage_tasks") && lead.recordState === "active";
   const canFollowUp = canEdit && can("manage_tasks") && lead.recordState === "active";
-  const type = mode && mode !== "follow-up" && mode !== "emails" ? mode : null;
+  const type = mode && mode !== "emails" ? mode : null;
   // PD-19: the deal's own addresses and those of every contact of its organization.
   const emailAddresses = [...new Set([...lead.clientEmails.map((address) => address.toLowerCase()), ...detail.organizationEmails])];
 
@@ -525,7 +525,7 @@ function Composer({ detail, canEdit, onLogged, onScheduled }: {
         {canLog && tabButton("call", "Log call", <Phone size={14} />)}
         {tabButton("emails", "Emails", <Mail size={14} />, mode === "emails" || mode === "email")}
         {canLog && tabButton("visit", "Log visit", <MapPin size={14} />)}
-        {canFollowUp && tabButton("follow-up", "Schedule an Activity", <CalendarCheck2 size={14} />)}
+        {canFollowUp && <button type="button" onClick={onSchedule}><CalendarCheck2 size={14} /> Schedule an Activity</button>}
       </div>
       {!mode && <p className="composer-hint">Choose what to add: a note, a call or a visit you had{canFollowUp ? ", or the next follow-up" : ""}. Emails shows the mail with every contact of {lead.clientName}.</p>}
       {mode === "emails" && (
@@ -562,7 +562,6 @@ function Composer({ detail, canEdit, onLogged, onScheduled }: {
         </form>
       )}
       {/* PD-29: Schedule an activity, in place of the old date-and-note follow-up form. */}
-      {mode === "follow-up" && <ScheduleActivityForm deal={lead} canSetFollowUp={canEdit} onCancel={() => setMode(null)} onSaved={async (message) => { setMode(null); await onScheduled(message); }} />}
     </section>
   );
 }

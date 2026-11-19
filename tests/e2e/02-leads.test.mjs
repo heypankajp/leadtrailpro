@@ -126,17 +126,21 @@ describe("Deals", () => {
     assert.match(await note.getText(), /Gmail is not configured/);
   });
 
-  uiTest("schedules an activity: the type sets the title, and the visit shows in Focus with its time slot and priority (PD-29)", async () => {
+  uiTest("schedules an activity from the deal: the type and the contact give the subject, and the visit shows in Focus with its priority (PD-29, PD-57)", async () => {
+    // PD-57: the deal page opens the same Schedule an Activity dialog as every other place, with the deal linked.
     await page.clickButton("Schedule an Activity");
-    await page.wait(By.css('div[aria-label="Activity type"]'));
-    assert.equal(await (await page.control("Title")).getAttribute("value"), `Call ${lead.executive}`);
-    await page.click(By.xpath('//div[@aria-label="Activity type"]/button[normalize-space()="Visit"]'));
-    assert.equal(await (await page.control("Title")).getAttribute("value"), `Visit ${lead.executive}`);
-    await page.setValue(await page.control("To"), "10:30");
-    await page.setValue(await page.control("Priority"), "High");
-    await page.fill("Note", "Bring the safety-shoe brochure.");
+    await page.dialogTitle("Schedule an Activity");
+    const subject = await page.wait(By.css('section[role="dialog"] input[aria-label="Subject"]'));
+    await driver.wait(async () => (await subject.getAttribute("placeholder")) === `Call ${lead.executive}`, 10000, "the subject offered names the deal's contact");
+    await page.click(By.css('section[role="dialog"] div[aria-label="Activity type"] button[aria-label="Visit"]'));
+    assert.equal(await subject.getAttribute("value"), `Visit ${lead.executive}`);
+    await page.fillNamed("Start time", "09:00");
+    await page.fillNamed("End time", "10:30");
+    await page.pickPriority("high");
+    await page.click(By.xpath('//section[@role="dialog"]//button[@role="tab" and starts-with(normalize-space(.), "Note")]'));
+    await page.fillNamed("Note", "Bring the safety-shoe brochure.");
     await page.wait(By.xpath('//aside[@aria-label="The day\'s activities"]//span[contains(@class,"is-draft")]'));
-    await page.clickButton("Save activity");
+    await page.clickButton("Save");
     await page.toast("Visit scheduled for");
     const card = await page.wait(By.xpath(`//article[contains(@class,"task-card")][.//strong[contains(normalize-space(.), ${xq(`Visit ${lead.executive}`)})]]`));
     assert.match(await card.getText(), /high priority/i);

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNod
 import { Building2, Sparkles, Check, ChevronDown, ChevronsDown, ChevronsUp, Circle, CircleDollarSign, Clock3, FileText, Flag, Link2, ListChecks, MoreHorizontal, Paperclip, Plus, Search, StickyNote, Target, UserRound, X } from "lucide-react";
 import { errorMessage } from "@/lib/api";
 import { useAsyncData } from "@/lib/useAsyncData";
-import { fetchLead, fetchLeads } from "@/features/leads/client";
+import { fetchLead, fetchLeads, updateLead } from "@/features/leads/client";
 import { createOrganization, createPerson, fetchOrganization, fetchOrganizations } from "@/features/contacts/client";
 import { contactKey, type OrganizationRow, type PersonRow } from "@/features/contacts/model";
 import SuggestInput from "@/features/shell/SuggestInput";
@@ -14,7 +14,7 @@ import { Dialog, ErrorText } from "@/features/shell/components";
 import { createTask, fetchTaskAttachments, removeTaskAttachment, taskAttachmentUrl, updateTask, uploadTaskAttachment } from "./client";
 import DayAgenda from "./DayAgenda";
 import NaturalDateField from "./NaturalDateField";
-import { taskActivityLabels, taskActivityTypes, type ChecklistItem, type Task, type TaskActivityType, type TaskAttachment, type TaskPriority } from "./model";
+import { taskActivityLabels, taskActivityTypes, taskTitleWords, type ChecklistItem, type Task, type TaskActivityType, type TaskAttachment, type TaskPriority } from "./model";
 import { ymdOf } from "./periods";
 import { activityIcons } from "./ScheduleActivity";
 import TaskComments from "./TaskComments";
@@ -23,7 +23,10 @@ import TaskComments from "./TaskComments";
 type Props = {
   task?: Task; leadId?: number | null; leadName?: string | null; defaultAssigneeId?: number;
   defaults?: { title?: string; activityType?: TaskActivityType; dueAt?: string | null; endsAt?: string | null };
-  onClose: () => void; onSaved: (task: Task) => void;
+  /** From a deal (its page, its board card): a new open activity also becomes the deal's next follow-up date. */
+  setFollowUp?: boolean;
+  /** `message` says what was saved ("Visit scheduled for 2026-11-23", "Call recorded as done", "Activity updated"). */
+  onClose: () => void; onSaved: (task: Task, message: string) => void;
 };
 
 /** The deal an activity is linked to (optional). */
@@ -89,11 +92,11 @@ function Row({ icon, label, children, onIcon }: { icon: ReactNode; label: string
 
 /**
  * Schedule an activity (request of November 18, 2026), for every activity: new ones (Activities,
- * the top bar's "+ Activity", a calendar slot's Details..., a deal page) and edits. The subject and its type; the date
+ * the top bar's "+ Activity", a calendar slot's Details..., a deal page, a board card's Add follow-up) and edits. The subject and its type; the date
  * with a start and an end time; priority; Add Description, Checklist and files; the yellow note; who does it; the deal
  * it is linked to, with its contact and organization; Mark as done with its outcome. On the right, the assignee's day.
  */
-export default function TaskFormDialog({ task, leadId, leadName, defaultAssigneeId, defaults, onClose, onSaved }: Props) {
+export default function TaskFormDialog({ task, leadId, leadName, defaultAssigneeId, defaults, setFollowUp, onClose, onSaved }: Props) {
   const { reference, user, can } = useApp();
   const initialDue = task?.dueAt ?? defaults?.dueAt ?? null;
   const [type, setType] = useState<TaskActivityType>(task?.activityType ?? defaults?.activityType ?? "call");
@@ -176,8 +179,10 @@ export default function TaskFormDialog({ task, leadId, leadName, defaultAssignee
     { id: "files", label: "Files", icon: <Paperclip size={14} />, filled: fileCount > 0, count: fileCount },
   ];
   // The title follows the type until the person writes their own.
+  // The subject an activity gets when none is typed: "Call Adam Brooks" once a person is linked, or the type alone.
+  const autoTitle = (of: TaskActivityType) => (chosen[0]?.name ? `${taskTitleWords[of]} ${chosen[0].name}` : taskActivityLabels[of]);
   const changeType = (next: TaskActivityType) => {
-    if (!title.trim() || title === taskActivityLabels[type]) setTitle(taskActivityLabels[next]);
+    if (!title.trim() || title === autoTitle(type) || title === taskActivityLabels[type]) setTitle(autoTitle(next));
     setType(next);
   };
   const addItem = () => {
@@ -243,7 +248,7 @@ export default function TaskFormDialog({ task, leadId, leadName, defaultAssignee
     try {
       const links = await resolveLinks();
       const common = {
-        leadId: deal?.id ?? null, title: title.trim() || taskActivityLabels[type], description: description.trim(), note: note.trim(), assigneeId: Number(assigneeId), assigneeIds,
+        leadId: deal?.id ?? null, title: title.trim() || autoTitle(type), description: description.trim(), note: note.trim(), assigneeId: Number(assigneeId), assigneeIds,
         dueAt, endsAt, activityType: type, priority, checklist, organizationId: links.organizationId, personIds: links.personIds,
       };
       const saved = task
@@ -251,7 +256,9 @@ export default function TaskFormDialog({ task, leadId, leadName, defaultAssignee
         : (await createTask({ ...common, done, outcomeId: done && outcomeId ? Number(outcomeId) : null })).task;
       // Files chosen in the form are uploaded once the activity exists.
       for (const file of files) await uploadTaskAttachment(saved.id, file);
-      onSaved(saved);
+      // An open activity scheduled from a deal is the deal's next step: its date becomes the follow-up date.
+      if (!task && !done && setFollowUp && deal) await updateLead(deal.id, { followUpDate: date }).catch(() => undefined);
+      onSaved(saved, task ? "Activity updated" : `${taskActivityLabels[type]} ${done ? "recorded as done" : `scheduled for ${date}`}`);
     } catch (caught) {
       setError(errorMessage(caught, "Could not save the activity."));
       setBusy(false);
@@ -263,7 +270,7 @@ export default function TaskFormDialog({ task, leadId, leadName, defaultAssignee
     <Dialog title={task ? "Edit Activity" : "Schedule an Activity"} onClose={onClose} size="wide">
       <form className="activity-dialog" onSubmit={submit}>
         <div className="activity-dialog-main">
-          <input className="activity-subject-input" aria-label="Subject" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={200} placeholder={taskActivityLabels[type]} autoFocus />
+          <input className="activity-subject-input" aria-label="Subject" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={200} placeholder={autoTitle(type)} autoFocus />
           <div className="activity-type-buttons" role="group" aria-label="Activity type">
             {taskActivityTypes.map((item) => (
               <button key={item} type="button" className={`activity-type-${item} ${type === item ? "is-active" : ""}`} aria-pressed={type === item} aria-label={taskActivityLabels[item]} title={taskActivityLabels[item]} onClick={() => changeType(item)}>{activityIcons[item]}</button>
@@ -441,7 +448,7 @@ export default function TaskFormDialog({ task, leadId, leadName, defaultAssignee
         <DayAgenda
           date={date} onDate={setDate} assigneeId={Number(assigneeId)} skipTaskId={task?.id}
           ownerLabel={Number(assigneeId) === user.id ? undefined : `${owners.find((item) => item.id === Number(assigneeId))?.name ?? "Their"}'s day`}
-          draft={{ title: title || taskActivityLabels[type], icon: activityIcons[type], start, end }}
+          draft={{ title: title || autoTitle(type), icon: activityIcons[type], start, end }}
         />
       </form>
     </Dialog>

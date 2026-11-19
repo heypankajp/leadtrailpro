@@ -347,11 +347,13 @@ export default function PipelinePage({ groupBy = "stage" }: { groupBy?: Pipeline
                             <strong>{card.clientName}</strong>
                             <small>{card.clientExecutive || "No contact yet"}{card.city ? ` · ${card.city}` : ""}</small>
                           </button>
-                          {/* PD-22: one menu for following up, To Do, converting to a client and archiving; it shows on hover or focus. */}
+                          {/* PD-22: one menu for moving, following up, To Do, converting to a client and archiving; it shows on hover or focus. */}
                           {!editable && (
                             <CardActions
                               card={card}
+                              stages={(byStatus ? pipelineStages : columns.filter((item) => item.active || item.id === card.stageId)).map((item) => ({ id: item.id, value: item.value }))}
                               canEdit={canMove(card)}
+                              onMove={(stageId) => void move(card, stageId)}
                               onConvert={clientStatus && card.statusCode !== "client" ? () => void convertToClient(card) : null}
                               onChanged={(message) => { notify(message); bumpData(); }}
                             />
