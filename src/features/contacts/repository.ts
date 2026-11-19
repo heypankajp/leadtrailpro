@@ -137,7 +137,7 @@ const permissionsFor = (viewer: UserAccount, ownerId: number, dealCount: number)
 
 export async function getOrganizationDetail(id: number, viewer: UserAccount, db: Queryable = getDatabasePool()): Promise<OrganizationDetail> {
   const organization = await findOrganization(id, db);
-  if (!organization) throw new HttpError(404, "Organization not found.");
+  if (!organization) throw new HttpError(404, "Company not found.");
   const [people, deals, activities] = await Promise.all([
     db.query(`${personSelect} WHERE p.organization_id = ? ORDER BY p.name_key`, [id]).then((result) => (result.rows as PersonRow[]).map(withStats)),
     dealsOf("l.organization_id", id, db), activitiesOf("organization", id, db),
@@ -160,13 +160,13 @@ export async function createOrganization(input: OrganizationInput, actor: UserAc
   requireCreate(actor);
   return withTransaction(async (connection) => {
     const clash = await connection.query("SELECT id FROM organizations WHERE name_key = ?", [contactKey(input.name)]);
-    if (clash.rows.length) throw new HttpError(409, `${input.name} is already an organization. Open it from the list.`, { organizationId: Number(clash.rows[0].id) });
+    if (clash.rows.length) throw new HttpError(409, `${input.name} is already a company. Open it from the list.`, { organizationId: Number(clash.rows[0].id) });
     const result = await connection.query(
       "INSERT INTO organizations (name, name_key, website, address, city_id, industry, company_size_id, owner_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
       [...organizationValues(input), actor.id, actor.id],
     );
     const organization = (await findOrganization(insertId(result), connection))!;
-    await recordAudit(connection, { actorId: actor.id, action: "organization.created", entityType: "organization", entityId: organization.id, after: { name: organization.name }, details: `${actor.name} added the organization ${organization.name}` });
+    await recordAudit(connection, { actorId: actor.id, action: "organization.created", entityType: "organization", entityId: organization.id, after: { name: organization.name }, details: `${actor.name} added the company ${organization.name}` });
     return organization;
   });
 }
@@ -174,10 +174,10 @@ export async function createOrganization(input: OrganizationInput, actor: UserAc
 export async function updateOrganization(id: number, input: OrganizationInput, actor: UserAccount): Promise<Organization> {
   return withTransaction(async (connection) => {
     const before = await findOrganization(id, connection);
-    if (!before) throw new HttpError(404, "Organization not found.");
+    if (!before) throw new HttpError(404, "Company not found.");
     requireEdit(actor, before.ownerId);
     const clash = await connection.query("SELECT id FROM organizations WHERE name_key = ? AND id <> ?", [contactKey(input.name), id]);
-    if (clash.rows.length) throw new HttpError(409, `Another organization is already called ${input.name}.`);
+    if (clash.rows.length) throw new HttpError(409, `Another company is already called ${input.name}.`);
     await connection.query("UPDATE organizations SET name = ?, name_key = ?, website = ?, address = ?, city_id = ?, industry = ?, company_size_id = ? WHERE id = ?", [...organizationValues(input), id]);
     // The sales tracker may still list the old name: it stays known, so the next import finds this organization's deal.
     if (contactKey(input.name) !== contactKey(before.name)) await rememberName(connection, id, [before.name]);
@@ -188,7 +188,7 @@ export async function updateOrganization(id: number, input: OrganizationInput, a
       actorId: actor.id, action: "organization.updated", entityType: "organization", entityId: id,
       before: { name: before.name, website: before.website, address: before.address, city: before.city, industry: before.industry, companySize: before.companySize },
       after: { name: after.name, website: after.website, address: after.address, city: after.city, industry: after.industry, companySize: after.companySize },
-      details: `${actor.name} updated the organization ${after.name}`,
+      details: `${actor.name} updated the company ${after.name}`,
     });
     return after;
   });
@@ -197,16 +197,16 @@ export async function updateOrganization(id: number, input: OrganizationInput, a
 export async function deleteOrganization(id: number, actor: UserAccount): Promise<void> {
   await withTransaction(async (connection) => {
     const before = await findOrganization(id, connection);
-    if (!before) throw new HttpError(404, "Organization not found.");
+    if (!before) throw new HttpError(404, "Company not found.");
     requireEdit(actor, before.ownerId);
     const deals = await connection.query("SELECT COUNT(*)::int AS count FROM leads WHERE organization_id = ?", [id]);
-    if (Number(deals.rows[0]?.count ?? 0) > 0) throw new HttpError(409, "An organization with deals cannot be removed. Archive or move its deals first.");
+    if (Number(deals.rows[0]?.count ?? 0) > 0) throw new HttpError(409, "A company with deals cannot be removed. Archive or move its deals first.");
     // PD-17: a contact cannot exist without its organization, so the contacts (none of them has a deal here) go with it.
     const contactDeals = await connection.query("SELECT COUNT(*)::int AS count FROM leads l JOIN persons p ON p.id = l.person_id WHERE p.organization_id = ?", [id]);
-    if (Number(contactDeals.rows[0]?.count ?? 0) > 0) throw new HttpError(409, "A contact of this organization still has deals. Move or merge that contact first.");
+    if (Number(contactDeals.rows[0]?.count ?? 0) > 0) throw new HttpError(409, "A contact of this company still has deals. Move or merge that contact first.");
     await connection.query("DELETE FROM persons WHERE organization_id = ?", [id]);
     await connection.query("DELETE FROM organizations WHERE id = ?", [id]);
-    await recordAudit(connection, { actorId: actor.id, action: "organization.removed", entityType: "organization", entityId: id, before: { name: before.name }, details: `${actor.name} removed the organization ${before.name} (it had no deals)` });
+    await recordAudit(connection, { actorId: actor.id, action: "organization.removed", entityType: "organization", entityId: id, before: { name: before.name }, details: `${actor.name} removed the company ${before.name} (it had no deals)` });
   });
 }
 
@@ -215,12 +215,12 @@ export async function deleteOrganization(id: number, actor: UserAccount): Promis
  * (PD-15, PD-17). Without the confirmation the answer is 409 `confirm_create`, which the form turns into a question.
  */
 async function organizationFor(connection: Queryable, name: string, actor: UserAccount, confirmed = false): Promise<number> {
-  if (!name) throw new HttpError(400, "Choose the contact's organization.");
+  if (!name) throw new HttpError(400, "Choose the contact's company.");
   const found = await connection.query("SELECT id FROM organizations WHERE name_key = ?", [contactKey(name)]);
   if (found.rows.length) return Number(found.rows[0].id);
-  if (!confirmed) throw new HttpError(409, `${name} is not an organization yet.`, { code: "confirm_create", organization: name, contact: null });
+  if (!confirmed) throw new HttpError(409, `${name} is not a company yet.`, { code: "confirm_create", organization: name, contact: null });
   const created = await connection.query("INSERT INTO organizations (name, name_key, owner_id, created_by) VALUES (?, ?, ?, ?) RETURNING id", [name, contactKey(name), actor.id, actor.id]);
-  await recordAudit(connection, { actorId: actor.id, action: "organization.created", entityType: "organization", entityId: insertId(created), after: { name }, details: `${actor.name} added the organization ${name} with a contact` });
+  await recordAudit(connection, { actorId: actor.id, action: "organization.created", entityType: "organization", entityId: insertId(created), after: { name }, details: `${actor.name} added the company ${name} with a contact` });
   return insertId(created);
 }
 
@@ -331,7 +331,7 @@ export async function updatePerson(id: number, input: PersonInput, actor: UserAc
     let organizationId = before.organizationId;
     if (contactKey(input.organizationName) !== contactKey(before.organization ?? "")) {
       const deals = await connection.query("SELECT COUNT(*)::int AS count FROM leads WHERE person_id = ?", [id]);
-      if (Number(deals.rows[0]?.count ?? 0) > 0) throw new HttpError(409, `${before.name} has deals with ${before.organization}, so they stay there. If they moved to another company, add them as a new contact at that organization.`);
+      if (Number(deals.rows[0]?.count ?? 0) > 0) throw new HttpError(409, `${before.name} has deals with ${before.organization}, so they stay there. If they moved to another company, add them as a new contact at that company.`);
       organizationId = await organizationFor(connection, input.organizationName, actor, input.createOrganization);
       const taken = await connection.query("SELECT id FROM persons WHERE organization_id = ? AND name_key = ? AND id <> ?", [organizationId, contactKey(input.name), id]);
       if (taken.rows.length) throw new HttpError(409, `${input.organizationName} already has a contact called ${input.name}.`);
@@ -379,7 +379,7 @@ export async function logContactActivity(kind: "organization" | "person", id: nu
   if (!hasPrivilege(actor, input.type === "note" ? "add_notes" : "log_activities")) throw new HttpError(403, input.type === "note" ? "You do not have permission to add notes." : "You do not have permission to log activities.");
   await withTransaction(async (connection) => {
     const name = kind === "organization" ? (await findOrganization(id, connection))?.name : (await findPerson(id, connection))?.name;
-    if (!name) throw new HttpError(404, kind === "organization" ? "Organization not found." : "Person not found.");
+    if (!name) throw new HttpError(404, kind === "organization" ? "Company not found." : "Person not found.");
     const defaults = { note: "Note", call: `Call with ${name}`, email: `Email to ${name}`, visit: `Visit to ${name}` };
     const summary = input.summary || defaults[input.type];
     await connection.query(
@@ -415,7 +415,7 @@ export async function mergePeople(keepId: number, otherId: number, actor: UserAc
     if (!keep || !other) throw new HttpError(404, "Person not found.");
     requireEdit(actor, keep.ownerId);
     requireEdit(actor, other.ownerId);
-    if (keep.organizationId && other.organizationId && keep.organizationId !== other.organizationId) throw new HttpError(409, `${keep.name} is at ${keep.organization} and ${other.name} at ${other.organization}. Merge the two organizations first if they are the same company.`);
+    if (keep.organizationId && other.organizationId && keep.organizationId !== other.organizationId) throw new HttpError(409, `${keep.name} is at ${keep.organization} and ${other.name} at ${other.organization}. Merge the two companies first if they are the same company.`);
     await foldPerson(connection, keepId, otherId);
     if (!keep.organizationId && other.organizationId) await connection.query("UPDATE persons SET organization_id = ? WHERE id = ?", [other.organizationId, keepId]);
     await recordAudit(connection, { actorId: actor.id, action: "person.merged", entityType: "person", entityId: keepId, before: { merged: other.name, organization: other.organization }, details: `${actor.name} merged the person ${other.name} into ${keep.name}` });
@@ -428,10 +428,10 @@ export async function mergePeople(keepId: number, otherId: number, actor: UserAc
  * together), empty details are filled from it, its name stays known for the import, and it is removed.
  */
 export async function mergeOrganizations(keepId: number, otherId: number, actor: UserAccount): Promise<Organization> {
-  if (keepId === otherId) throw new HttpError(400, "Choose a different organization to merge.");
+  if (keepId === otherId) throw new HttpError(400, "Choose a different company to merge.");
   return withTransaction(async (connection) => {
     const [keep, other] = [await findOrganization(keepId, connection), await findOrganization(otherId, connection)];
-    if (!keep || !other) throw new HttpError(404, "Organization not found.");
+    if (!keep || !other) throw new HttpError(404, "Company not found.");
     requireEdit(actor, keep.ownerId);
     requireEdit(actor, other.ownerId);
     const people = (await connection.query("SELECT id, name_key FROM persons WHERE organization_id = ?", [otherId])).rows as { id: number; name_key: string }[];
@@ -452,7 +452,7 @@ export async function mergeOrganizations(keepId: number, otherId: number, actor:
     await connection.query("DELETE FROM organizations WHERE id = ?", [otherId]);
     await rememberName(connection, keepId, [other.name, ...(Array.isArray(earlier) ? (earlier as string[]) : [])]);
     await copyOrganizationToDeals(run(connection), keepId);
-    await recordAudit(connection, { actorId: actor.id, action: "organization.merged", entityType: "organization", entityId: keepId, before: { merged: other.name }, details: `${actor.name} merged the organization ${other.name} into ${keep.name}` });
+    await recordAudit(connection, { actorId: actor.id, action: "organization.merged", entityType: "organization", entityId: keepId, before: { merged: other.name }, details: `${actor.name} merged the company ${other.name} into ${keep.name}` });
     return (await findOrganization(keepId, connection))!;
   });
 }

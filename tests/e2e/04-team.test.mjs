@@ -107,7 +107,7 @@ describe("Team, roles, and deal ownership", () => {
 
   uiTest("a historical first-contact date queues the deal for approval", async () => {
     await page.openAddDeal();
-    await page.fill("Organization", queuedLead);
+    await page.fill("Company", queuedLead);
     await page.fill("First contact date", isoDate(-10));
     await page.wait(By.xpath('//small[contains(@class,"field-hint") and contains(normalize-space(.), "queued for Admin approval")]'));
     await page.saveDeal();

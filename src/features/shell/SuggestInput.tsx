@@ -12,7 +12,7 @@ const createKey = "__create__";
  * (↓ ↑ to move, Enter to pick, Esc to close). The parent fetches the suggestions for what was typed; `empty` is the line
  * shown when nothing matches, so the list also says what will happen.
  *
- * After Pipedrive (request of November 18, 2026): `icon` sits inside the field on the left; `create` adds a last line
+ * Request of November 18, 2026: `icon` sits inside the field on the left; `create` adds a last line
  * "+ Add 'Acme' as new organization" that the user picks to add a new record; once picked (`isNew`), the field shows a
  * blue NEW badge and an × that clears it (`onClear`).
  */

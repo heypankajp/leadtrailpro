@@ -1,4 +1,4 @@
-// Contacts (People and Organizations), after Pipedrive's Contacts area (SPEC §10.13, §10.14). Since migration 23 they
+// Contacts (People and Organizations) (SPEC §10.13, §10.14). Since migration 23 they
 // are records of their own: an organization is a company, a person is a contact at one organization (or at none yet),
 // and a deal belongs to one organization and at most one person. Pure rules only, so the unit tests load this file directly.
 
@@ -95,7 +95,7 @@ export function parseOrganizationInput(value: unknown): { input: OrganizationInp
     name: text(body.name, 200), website: text(body.website, 2048), address: text(body.address, 500), cityId: optionalId(body.cityId), industry: text(body.industry, 120), companySizeId: optionalId(body.companySizeId),
   };
   const errors: string[] = [];
-  if (!input.name) errors.push("Enter the organization's name.");
+  if (!input.name) errors.push("Enter the company's name.");
   if (input.website && !/^https?:\/\/\S+$/i.test(input.website)) errors.push("The website must begin with http:// or https://.");
   return { input, errors };
 }
@@ -108,7 +108,7 @@ export function parsePersonInput(value: unknown): { input: PersonInput; errors: 
   const errors: string[] = [];
   if (!input.name) errors.push("Enter the contact's name.");
   // PD-17: a contact always belongs to an organization.
-  if (!input.organizationName) errors.push("Choose the contact's organization.");
+  if (!input.organizationName) errors.push("Choose the contact's company.");
   const bad = emails.filter((email) => !emailPattern.test(email));
   if (bad.length) errors.push(`Not an email address: ${bad.join(", ")}.`);
   if (emails.length > 10) errors.push("A contact can have up to 10 email addresses.");

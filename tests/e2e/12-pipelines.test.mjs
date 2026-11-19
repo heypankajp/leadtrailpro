@@ -45,7 +45,7 @@ describe("Several pipelines", () => {
 
   uiTest("a deal is added to the new pipeline and shows on its board, not on the default one", async () => {
     await page.openAddDeal();
-    await page.fill("Organization", deal);
+    await page.fill("Company", deal);
     // PD-31: with several pipelines the add-deal dialog asks for the pipeline, and its first stage is chosen.
     await page.setValue(await page.wait(By.css('section[role="dialog"] select[aria-label="Pipeline"]')), pipeline);
     assert.equal(await page.stagePicked(), "New");

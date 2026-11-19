@@ -26,7 +26,7 @@ const emptyFilters: Filters = { leadTypeId: "", ownerId: "", statusId: "", stage
 type LastMove = { leadId: number; clientName: string; toName: string } & ({ kind: "stage"; fromStageId: number } | { kind: "status"; fromStatusId: number; fromReasonId: number | null });
 
 /**
- * The board (PIPE-04..07, SPEC §10.11), laid out like Pipedrive's pipeline view. By stage (the default): one column per
+ * The board (PIPE-04..07, SPEC §10.11). By stage (the default): one column per
  * stage, a card per active deal whose status is neither Client nor closed; drag a card to another column or use the card's
  * menu to move it. By status (PD-24): one column per status, the stage a filter, and a drag changes the status (Lost and
  * Disqualified ask for the reason). Every move is a timeline entry and can be undone from the bar above the board.
@@ -319,7 +319,7 @@ export default function PipelinePage({ groupBy = "stage" }: { groupBy?: Pipeline
                     <header className="pipeline-column-head">
                       <h2>{column.value}{column.active ? "" : " (inactive)"}</h2>
                       <span>{column.valueTotal > 0 ? `${formatDealValue(column.valueTotal)} · ` : ""}{column.count} {column.count === 1 ? "deal" : "deals"}</span>
-                      {/* PD-28: the column's own menu, after Pipedrive's "…" on a stage. */}
+                      {/* PD-28: the column's own menu. */}
                       <ColumnMenu
                         name={column.value}
                         addLabel={byStatus ? "Add deal with this status" : "Add deal to this stage"}

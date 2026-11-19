@@ -1427,9 +1427,9 @@ h1 { margin: 9px 0 5px; color: #242941; font-size: 25px; font-weight: 690; lette
 .analytics-subheading p { margin: 3px 0 0; color: #636a7d; font-size: 9.5px; }
 
 /* ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   Pipedrive-style layout (2026-11-13): dark menu, page title + search + quick add in the top bar, the Deals page with
+   Layout of 2026-11-13: dark menu, page title + search + quick add in the top bar, the Deals page with
    its view switch, board cards, the deal page (panels left, composer / focus / history right) and Contacts.
-   The structure follows Pipedrive; the colours stay LeadTrailPro's own.
+   The colours are LeadTrailPro's own.
    ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────── */
 .sidebar { background: #1c2038; border-right: 0; }
 .brand-lockup { margin-bottom: 22px; }
@@ -1483,7 +1483,7 @@ h1 { margin: 9px 0 5px; color: #242941; font-size: 25px; font-weight: 690; lette
 .list-subhead h2 { margin: 0; color: #343a52; font-size: 14px; font-weight: 680; }
 .list-subhead span { color: #5f667b; font-size: 11.5px; }
 
-/* The board sits on the page itself, one grey lane per stage, as in Pipedrive's pipeline view. */
+/* The board sits on the page itself, one grey lane per stage. */
 .pipeline-panel { border: 0; background: transparent; }
 .pipeline-toolbar { padding: 0 0 12px; border-bottom: 0; }
 .pipeline-toolbar .scope-toggle button { font-size: 12px; }
@@ -1604,7 +1604,7 @@ h1 { margin: 9px 0 5px; color: #242941; font-size: 25px; font-weight: 690; lette
   .side-row { grid-template-columns: 104px minmax(0, 1fr); }
 }
 
-/* Add / edit deal: the deal on the left, the person and the organization on the right (Pipedrive's add-deal dialog). */
+/* Add / edit deal: the deal on the left, the person and the organization on the right. */
 .deal-form { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 14px 22px; }
 .deal-form-col { display: grid; grid-template-columns: 1fr 1fr; gap: 13px 12px; align-content: start; min-width: 0; }
 .deal-form-col .field-wide { grid-column: 1 / -1; }
@@ -1637,7 +1637,7 @@ h1 { margin: 9px 0 5px; color: #242941; font-size: 25px; font-weight: 690; lette
 .lead-form input, .lead-form select, .lead-form textarea { font-size: 12.5px; }
 .todo-badge, .reply-badge { font-size: 10.5px; }
 .lead-table .muted-cell, .lead-table .owner-cell, .lead-table .action-cell { font-size: 12px; }
-/* On a wide screen the deal's header stays in reach while its history scrolls, as in Pipedrive. */
+/* On a wide screen the deal's header stays in reach while its history scrolls. */
 @media (min-width: 981px) {
   .deal-header { position: sticky; top: 65px; z-index: 6; box-shadow: 0 6px 14px -12px #1f244055; }
 }
@@ -1749,7 +1749,7 @@ button.pipeline-move { padding: 0; cursor: pointer; }
 .composer-emails { display: grid; gap: 10px; }
 .composer-emails-head { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 .composer-emails-head .field-hint { margin: 0; }
-/* PD-29: Schedule an activity, after Pipedrive's form; the day's agenda on the right. */
+/* PD-29: Schedule an activity; the day's agenda on the right. */
 .schedule-activity { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 18px; }
 .schedule-activity-main { display: grid; gap: 12px; align-content: start; min-width: 0; }
 .activity-types { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -1808,7 +1808,7 @@ button.pipeline-move { padding: 0; cursor: pointer; }
 .suggest-list li.suggest-empty { color: #5a6177; font-size: 11.5px; cursor: default; }
 .suggest-list li.suggest-empty:hover { background: transparent; }
 
-/* Review of November 18, 2026: the add-deal form's Pipeline stage as green arrows (one per stage), after Pipedrive's. */
+/* Review of November 18, 2026: the add-deal form's Pipeline stage as green arrows (one per stage). */
 .stage-picker-field { display: grid; gap: 7px; color: #666c80; font-size: 9px; font-weight: 600; }
 .stage-picker-pipeline { justify-self: start; min-width: 200px; }
 /* A rounded bar cut into arrows: each arrow's point sits in the next one's notch with a thin white gap between them,
@@ -2000,7 +2000,7 @@ button.pipeline-move { padding: 0; cursor: pointer; }
   .calendar-day-name { font-size: 10.5px; }
   .calendar-event small { display: none; }
 }
-/* Suggestion fields with an icon, the "+ Add … as new …" line and the blue NEW badge, after Pipedrive (request of
+/* Suggestion fields with an icon, the "+ Add … as new …" line and the blue NEW badge (request of
    November 18, 2026). */
 .suggest-field.has-icon > input { padding-left: 36px; }
 .suggest-field-icon { position: absolute; top: 50%; left: 11px; display: grid; place-items: center; color: #3d4359; transform: translateY(-50%); pointer-events: none; }
@@ -2012,7 +2012,7 @@ button.pipeline-move { padding: 0; cursor: pointer; }
 .suggest-list li.suggest-create, .suggest-list li.suggest-create svg { color: #1f6fd1; }
 .suggest-list li.suggest-create strong { color: #1f6fd1; }
 
-/* Schedule an activity (request of November 18, 2026), after Pipedrive's dialog: the form on the left with an icon per
+/* Schedule an activity (request of November 18, 2026): the form on the left with an icon per
    row, the assignee's day on the right. */
 .activity-dialog { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(250px, 1fr); gap: 0; margin: -4px -4px 0; }
 .activity-dialog-main { display: grid; align-content: start; gap: 14px; padding: 4px 22px 4px 4px; border-right: 1px solid #eceef4; }

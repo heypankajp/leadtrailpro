@@ -10,7 +10,7 @@ import { quickFilterLabel, quickFilters, quickFilterText, type QuickFilterKey } 
 export type FollowUpPeriod = { from: string; to: string; onChange: (from: string, to: string) => void };
 
 /**
- * The Filter menu at the top right of the boards and the deal list (PD-30), after Pipedrive's: ready-made filters, then
+ * The Filter menu at the top right of the boards and the deal list (PD-30): ready-made filters, then
  * DATA CLEANUP. The chosen filter shows on the button with an × to clear it. Archived deals open the archive view.
  * "Followup" (review of November 18, 2026) opens the By Period calendar for the follow-up date; the period picked
  * shows next to the button and works together with the other filters.

@@ -10,7 +10,7 @@ import { fetchContactsTimeline } from "./client";
 import { timelineCell, timelineMonthLabel, type ContactsTimeline as Timeline } from "./model";
 
 /**
- * Contacts → Timeline, after Pipedrive's contacts timeline (SPEC §10.17): one row per person, one column per month of
+ * Contacts → Timeline (SPEC §10.17): one row per person, one column per month of
  * the last twelve, and in each cell how often the person was contacted (calls, emails, visits, notes on their deals
  * and on themselves). An empty stretch on the right is someone who has gone quiet.
  */
@@ -33,7 +33,7 @@ export default function ContactsTimeline() {
         <div className="lead-toolbar">
           <div className="search-field lead-search">
             <Search size={16} />
-            <input aria-label="Search the timeline" placeholder="Search name or organization..." value={q} onChange={(event) => search(event.target.value)} />
+            <input aria-label="Search the timeline" placeholder="Search name or company..." value={q} onChange={(event) => search(event.target.value)} />
             {q && <button className="clear-search" aria-label="Clear search" onClick={() => search("")}><X size={13} /></button>}
           </div>
         </div>
@@ -54,7 +54,7 @@ export default function ContactsTimeline() {
                     <td>
                       <button className="client-cell" onClick={() => openContact("person", row.id)}>
                         <Avatar name={row.name} seed={row.id} />
-                        <span><strong>{row.name}</strong><small>{row.organization ?? "No organization"}</small></span>
+                        <span><strong>{row.name}</strong><small>{row.organization ?? "No company"}</small></span>
                       </button>
                     </td>
                     {data.months.map((month) => {

@@ -22,7 +22,7 @@ export const activityIcons: Record<TaskActivityType, ReactNode> = {
 
 
 /**
- * Schedule an activity (PD-29, SPEC §10.20), after Pipedrive's form: the type (call, email, visit, task) with a title
+ * Schedule an activity (PD-29, SPEC §10.20): the type (call, email, visit, task) with a title
  * that follows it, a date with a start and an optional end time, priority, who does it, a note, the deal / contact /
  * organization it belongs to, and Mark as done. On the right, the assignee's day. Saving creates the task; an open one
  * also moves the deal's next follow-up to its date (the old Schedule follow-up), a done one is recorded on the timeline.
@@ -110,7 +110,7 @@ export function ScheduleActivityForm({ deal, canSetFollowUp, onCancel, onSaved }
         <ul className="activity-links" aria-label="Linked to">
           <li><CircleDollarSign size={14} /> <span>Deal</span> <strong>{deal.clientName}</strong></li>
           <li><UserRound size={14} /> <span>Contact</span> <strong>{deal.clientExecutive || "No contact yet"}</strong></li>
-          <li><Building2 size={14} /> <span>Organization</span> <strong>{deal.clientName}</strong></li>
+          <li><Building2 size={14} /> <span>Company</span> <strong>{deal.clientName}</strong></li>
         </ul>
         {done && (
           <label className="activity-outcome">

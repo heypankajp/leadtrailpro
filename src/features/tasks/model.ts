@@ -4,8 +4,8 @@ export const taskPriorities = ["low", "normal", "medium", "high"] as const;
 export type TaskPriority = (typeof taskPriorities)[number];
 export const taskStatuses = ["open", "done"] as const;
 /**
- * PD-29: what the activity is, as in Pipedrive's Schedule an activity. Since November 18, 2026 Pipedrive's six types,
- * in its order (Call, Meeting, Task, Deadline, Email, Lunch), and Visit, which the app had already (sales trips, visits).
+ * PD-29: what the activity is. Since November 18, 2026 six types,
+ * in this order (Call, Meeting, Task, Deadline, Email, Lunch), and Visit, which the app had already (sales trips, visits).
  */
 export const taskActivityTypes = ["call", "meeting", "task", "deadline", "email", "lunch", "visit"] as const;
 export type TaskActivityType = (typeof taskActivityTypes)[number];

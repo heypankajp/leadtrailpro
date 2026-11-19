@@ -1,5 +1,5 @@
-// The Activity List's periods and the Activity Calendar's weeks (request of November 18, 2026), after Pipedrive's
-// Activities. Days are the person's local days; a week runs Sunday to Saturday. Pure, so the unit tests load it directly.
+// The Activity List's periods and the Activity Calendar's weeks (request of November 18, 2026).
+// Days are the person's local days; a week runs Sunday to Saturday. Pure, so the unit tests load it directly.
 
 export const activityPeriods = ["todo", "overdue", "today", "tomorrow", "this_week", "next_week", "custom"] as const;
 export type ActivityPeriod = (typeof activityPeriods)[number];

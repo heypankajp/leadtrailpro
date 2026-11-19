@@ -39,7 +39,7 @@ const priorityIcons: Record<TaskPriority, ReactNode> = { high: <ChevronsUp size=
 const priorities: { value: TaskPriority; label: string }[] = [{ value: "normal", label: "None" }, { value: "high", label: "High" }, { value: "medium", label: "Medium" }, { value: "low", label: "Low" }];
 
 /**
- * Priority as coloured chips, after Pipedrive: None, HIGH (red), MEDIUM (yellow), LOW (blue); the button shows the chip
+ * Priority as coloured chips: None, HIGH (red), MEDIUM (yellow), LOW (blue); the button shows the chip
  * chosen. The stored values stay normal / high / medium / low.
  */
 function PriorityPicker({ value, onChange }: { value: TaskPriority; onChange: (value: TaskPriority) => void }) {
@@ -88,7 +88,7 @@ function Row({ icon, label, children, onIcon }: { icon: ReactNode; label: string
 }
 
 /**
- * Schedule an activity (request of November 18, 2026), after Pipedrive's form, for every activity: new ones (Activities,
+ * Schedule an activity (request of November 18, 2026), for every activity: new ones (Activities,
  * the top bar's "+ Activity", a calendar slot's Details..., a deal page) and edits. The subject and its type; the date
  * with a start and an end time; priority; Add Description, Checklist and files; the yellow note; who does it; the deal
  * it is linked to, with its contact and organization; Mark as done with its outcome. On the right, the assignee's day.
@@ -197,7 +197,7 @@ export default function TaskFormDialog({ task, leadId, leadName, defaultAssignee
   const clearOrg = () => changeOrgName("");
   const orgPeople = org.id ? people : [];
   const orgExact = orgRows && orgRows.q === typedOrg ? orgRows.rows.find((row) => contactKey(row.name) === contactKey(typedOrg)) ?? null : null;
-  const orgCreate = typedOrg.length >= 2 && orgRows?.q === typedOrg && !orgExact ? { label: `Add '${typedOrg}' as new organization`, onCreate: () => setOrg({ id: null, isNew: true }) } : null;
+  const orgCreate = typedOrg.length >= 2 && orgRows?.q === typedOrg && !orgExact ? { label: `Add '${typedOrg}' as new company`, onCreate: () => setOrg({ id: null, isNew: true }) } : null;
   const orgChosen = Boolean(org.id || org.isNew || orgName.trim());
   const typedPerson = personName.trim();
   const isChosen = (name: string) => chosen.some((item) => contactKey(item.name) === contactKey(name));
@@ -213,14 +213,14 @@ export default function TaskFormDialog({ task, leadId, leadName, defaultAssignee
     let organizationId = org.id ?? orgExact?.id ?? null;
     const typedOrgName = orgName.trim();
     if (!organizationId && typedOrgName) {
-      if (!org.isNew) throw new Error(`Pick “${typedOrgName}” from the list, or add it as a new organization.`);
+      if (!org.isNew) throw new Error(`Pick “${typedOrgName}” from the list, or add it as a new company.`);
       organizationId = (await createOrganization({ name: typedOrgName, website: "", address: "", cityId: null, industry: "", companySizeId: null })).organization.id;
     }
     if (typedPerson) throw new Error(`Pick “${typedPerson}” from the list, or add them as a new person.`);
     const personIds: number[] = [];
     for (const item of chosen) {
       if (item.id) { personIds.push(item.id); continue; }
-      if (!organizationId) throw new Error("Choose the organization first: people are added inside it.");
+      if (!organizationId) throw new Error("Choose the company first: people are added inside it.");
       personIds.push((await createPerson({ name: item.name, organizationName: typedOrgName || orgName, emails: [], phone: "", altPhone: "", remark: "" })).person.id);
     }
     return { organizationId, personIds };
@@ -311,12 +311,12 @@ export default function TaskFormDialog({ task, leadId, leadName, defaultAssignee
           <Row icon={<Link2 size={20} />} label="Linked to">
             <div className="activity-links-fields">
               <SuggestInput
-                aria-label="Organization" value={orgName} onChange={changeOrgName}
+                aria-label="Company" value={orgName} onChange={changeOrgName}
                 suggestions={orgRows && orgRows.q === typedOrg ? orgRows.rows.map((row) => ({ key: String(row.id), label: row.name, detail: [row.city, row.people ? `${row.people} ${row.people === 1 ? "contact" : "contacts"}` : null].filter(Boolean).join(" · ") || undefined, icon: <Building2 size={14} /> })) : []}
                 onPick={(suggestion) => { setOrgName(suggestion.label); setOrg({ id: Number(suggestion.key), isNew: false }); setChosen([]); setPersonName(""); }}
                 loading={typedOrg.length >= 2 && orgRows?.q !== typedOrg}
                 icon={<Building2 size={16} />} create={orgCreate} isNew={org.isNew} onClear={clearOrg}
-                maxLength={200} placeholder="Organization"
+                maxLength={200} placeholder="Company"
               />
               {chosen.length > 0 && (
                 <ul className="activity-people" aria-label="People">
@@ -334,7 +334,7 @@ export default function TaskFormDialog({ task, leadId, leadName, defaultAssignee
                 onPick={(suggestion) => addPerson({ id: Number(suggestion.key), name: suggestion.label })}
                 minChars={0} disabled={!orgChosen}
                 icon={<UserRound size={16} />} create={orgChosen ? personCreate : null}
-                maxLength={160} placeholder={!orgChosen ? "People (choose the organization first)" : chosen.length ? "Add another person" : "People"}
+                maxLength={160} placeholder={!orgChosen ? "People (choose the company first)" : chosen.length ? "Add another person" : "People"}
               />
               {deal ? (
                 <div className="activity-link-field is-set"><CircleDollarSign size={16} /> <span>{deal.name}</span>{!leadId && <button type="button" className="suggest-clear" aria-label="Remove the deal" title="Remove" onClick={() => setDeal(null)}><X size={15} /></button>}</div>

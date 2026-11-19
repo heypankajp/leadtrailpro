@@ -218,19 +218,19 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
 
   return (
     <Dialog title={lead ? `Edit ${lead.clientName}` : "Add deal"} eyebrow={lead ? "DEAL DETAILS" : undefined} onClose={onClose} size="wide">
-      {/* Pipedrive's add-deal layout: the deal on the left, the person and the organization on the right. */}
+      {/* The add-deal layout: the deal on the left, the person and the organization on the right. */}
       <form className="lead-form deal-form" onSubmit={submit}>
         <div className="deal-form-col">
-          <Field label="Organization" required wide hint={lookup ? (newOrganization ? "A new organization: it is created with the deal." : "Start typing the company's name: pick one of the organizations that match, or add it as a new one.") : undefined}>
+          <Field label="Company" required wide hint={lookup ? (newOrganization ? "A new company: it is created with the deal." : "Start typing the company's name: pick one of the companies that match, or add it as a new one.") : undefined}>
             {lookup
               ? <SuggestInput
                   value={form.clientName} onChange={(value) => { setForm((current) => ({ ...current, clientName: value })); setDuplicate(null); setConfirm(null); setNewOrganization(false); }}
                   suggestions={orgSuggestions} onPick={(suggestion) => { setForm((current) => ({ ...current, clientName: suggestion.label })); setDuplicate(null); setConfirm(null); setNewOrganization(false); }}
                   loading={!orgRows || orgRows.q !== typedOrganization}
                   icon={<Building2 size={16} />}
-                  create={organizationIsNew ? { label: `Add '${typedOrganization}' as new organization`, onCreate: () => { setNewOrganization(true); setConfirm(null); } } : null}
+                  create={organizationIsNew ? { label: `Add '${typedOrganization}' as new company`, onCreate: () => { setNewOrganization(true); setConfirm(null); } } : null}
                   isNew={newOrganization} onClear={() => { setForm((current) => ({ ...current, clientName: "" })); setNewOrganization(false); setNewContact(false); setConfirm(null); }}
-                  required maxLength={200} placeholder="Organization" autoFocus
+                  required maxLength={200} placeholder="Company" autoFocus
                 />
               : <input value={form.clientName} onChange={(event) => { set("clientName")(event); setDuplicate(null); setConfirm(null); }} required maxLength={200} placeholder="Company name" autoFocus />}
           </Field>
@@ -245,7 +245,7 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
               </div>
             </div>
           )}
-          <Field label="Contact" wide hint={!contactLookup ? undefined : matchedOrganization ? (matchedOrganization.people.length ? `Click or type to pick one of ${matchedOrganization.organization.name}'s contacts, or type a new name.` : `${matchedOrganization.organization.name} has no contacts yet: type a name to add one.`) : organizationChosen ? "A new organization has no contacts yet: type a name. The organization is created first and the contact is added inside it." : "Choose the organization first: contacts are looked up inside it."}>
+          <Field label="Contact" wide hint={!contactLookup ? undefined : matchedOrganization ? (matchedOrganization.people.length ? `Click or type to pick one of ${matchedOrganization.organization.name}'s contacts, or type a new name.` : `${matchedOrganization.organization.name} has no contacts yet: type a name to add one.`) : organizationChosen ? "A new company has no contacts yet: type a name. The company is created first and the contact is added inside it." : "Choose the company first: contacts are looked up inside it."}>
             {contactLookup
               ? <SuggestInput
                   value={form.clientExecutive} onChange={(value) => { setForm((current) => ({ ...current, clientExecutive: value })); setConfirm(null); setNewContact(false); }}
@@ -258,7 +258,7 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
                   icon={<UserRound size={16} />}
                   create={contactIsNew ? { label: `Add '${form.clientExecutive.trim()}' as new contact`, onCreate: () => { setNewContact(true); setConfirm(null); } } : null}
                   isNew={newContact} onClear={() => { setForm((current) => ({ ...current, clientExecutive: "" })); setNewContact(false); setConfirm(null); }}
-                  maxLength={160} placeholder={!organizationChosen ? "Choose the organization first" : "Contact person"}
+                  maxLength={160} placeholder={!organizationChosen ? "Choose the company first" : "Contact person"}
                 />
               : <input value={form.clientExecutive} onChange={(event) => { set("clientExecutive")(event); setConfirm(null); }} maxLength={160} placeholder="Contact person" />}
           </Field>
@@ -295,7 +295,7 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
         </div>
         <div className="deal-form-col deal-form-side">
           <h3 className="deal-form-heading">CONTACT</h3>
-          <Field label="Email(s)" wide hint={contactLookup ? "Separate several addresses with commas. Typing an address also finds the organization's contact who has it." : "Separate several addresses with commas."}>
+          <Field label="Email(s)" wide hint={contactLookup ? "Separate several addresses with commas. Typing an address also finds the company's contact who has it." : "Separate several addresses with commas."}>
             {contactLookup
               ? <SuggestInput
                   value={form.clientEmails} onChange={(value) => setForm((current) => ({ ...current, clientEmails: value }))}
@@ -308,7 +308,7 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
           <Field label="Contact number"><input type="tel" value={form.contactPhone} onChange={set("contactPhone")} maxLength={40} placeholder="+1 (555) 123-4567" /></Field>
           <Field label="Extension or alternate number"><input type="tel" value={form.contactAltPhone} onChange={set("contactAltPhone")} maxLength={40} /></Field>
           <Field label="Contact remark" wide><input value={form.contactRemark} onChange={set("contactRemark")} maxLength={500} placeholder="Best time to call, preferences..." /></Field>
-          <h3 className="deal-form-heading">ORGANIZATION</h3>
+          <h3 className="deal-form-heading">COMPANY</h3>
           <Field label="Client industry"><input value={form.industry} onChange={set("industry")} maxLength={120} placeholder="e.g. Healthcare" /></Field>
           <Field label="Company size">{select("companySizeId", values.company_size)}</Field>
           <Field label="City" wide>{select("cityId", values.city)}</Field>
@@ -334,7 +334,7 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
             <div>
               <p>Saving this deal also creates:</p>
               <ul className="open-deals-list">
-                {confirm.organization && <li>{confirm.contact ? "First, the new organization" : "New organization"}: <strong>{confirm.organization}</strong></li>}
+                {confirm.organization && <li>{confirm.contact ? "First, the new company" : "New company"}: <strong>{confirm.organization}</strong></li>}
                 {confirm.contact && <li>{confirm.organization ? "Then, inside it, the new contact" : "New contact"}: <strong>{confirm.contact}</strong>{!confirm.organization && matchedOrganization ? ` at ${matchedOrganization.organization.name}` : ""}</li>}
               </ul>
               <div className="duplicate-actions">

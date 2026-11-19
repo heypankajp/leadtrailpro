@@ -25,7 +25,7 @@ describe("Deals", () => {
   uiTest("adds a deal from the action center", async () => {
     await page.clickButton("Add a deal", { global: true });
     await page.dialogTitle("Add deal");
-    await page.fill("Organization", lead.name);
+    await page.fill("Company", lead.name);
     await page.fill("Contact", lead.executive);
     await page.fill("Contact number", lead.phone);
     await page.fill("Email(s)", lead.email);
@@ -215,27 +215,27 @@ describe("Deals", () => {
   });
 
   // SPEC §10.13, §10.14: the deal's person and organization are contacts of their own; their pages list the deal.
-  uiTest("Contacts lists the deal's contact and organization; their pages open the deal and Back returns", async () => {
+  uiTest("Contacts lists the deal's contact and company; their pages open the deal and Back returns", async () => {
     await page.nav("Contacts");
     await page.wait(By.css('div[aria-label="Contacts list"]'));
     await (await page.wait(By.css('input[aria-label="Search contacts"]'))).sendKeys("Priya Patel-Singh");
     const person = '//table[contains(@class,"contacts-table")]//tr[.//strong[normalize-space()="Priya Patel-Singh"]]';
-    assert.ok((await (await page.wait(By.xpath(person))).getText()).includes(lead.name), "the person's row names the organization");
+    assert.ok((await (await page.wait(By.xpath(person))).getText()).includes(lead.name), "the person's row names the company");
     await page.click(By.xpath(`${person}//button[contains(@class,"client-cell")]`), { global: true });
     await page.dialogTitle("Priya Patel-Singh");
     await page.eyebrow("CONTACT");
     await page.closeDialog();
-    await page.click(By.xpath('.//div[@aria-label="Contacts list"]/button[normalize-space()="Organizations"]'), { global: true });
-    await (await page.wait(By.css('input[aria-label="Search organizations"]'))).sendKeys(lead.name);
+    await page.click(By.xpath('.//div[@aria-label="Contacts list"]/button[normalize-space()="Companies"]'), { global: true });
+    await (await page.wait(By.css('input[aria-label="Search companies"]'))).sendKeys(lead.name);
     const organization = `//table[contains(@class,"contacts-table")]//tr[.//strong[normalize-space()=${xq(lead.name)}]]`;
     assert.match(await (await page.wait(By.xpath(organization))).getText(), /1 deal · open/);
     await page.click(By.xpath(`${organization}//button[contains(@class,"client-cell")]`), { global: true });
     await page.dialogTitle(lead.name);
-    await page.eyebrow("ORGANIZATION");
+    await page.eyebrow("COMPANY");
     await page.click(By.css(".contact-page .contact-deal-row"), { global: true });
     await page.eyebrow("DEAL");
     await page.closeDialog();
-    await page.eyebrow("ORGANIZATION");
+    await page.eyebrow("COMPANY");
     await page.closeDialog();
     await page.wait(By.xpath(organization));
   });

@@ -77,7 +77,7 @@ export default function LeadEmails({ leadId, addresses, attachments }: { leadId:
           {status.allMailboxes && <small className="field-hint">You see messages from every connected mailbox.</small>}
         </div>
       )}
-      {status?.configured && addresses.length === 0 && <p className="no-attachments">Add an email address to the deal&apos;s contact (or another contact of the organization) to see messages.</p>}
+      {status?.configured && addresses.length === 0 && <p className="no-attachments">Add an email address to the deal&apos;s contact (or another contact of the company) to see messages.</p>}
       {status?.configured && addresses.length > 0 && !connected && !status.allMailboxes && <p className="no-attachments">Connect your Gmail to see and answer emails from your own mailbox. Emails that colleagues&apos; connected mailboxes exchanged with this client are listed below.</p>}
       {canLoad && loading && <Loading text="Loading emails..." />}
       <ErrorText message={emailsError} />
@@ -85,7 +85,7 @@ export default function LeadEmails({ leadId, addresses, attachments }: { leadId:
         <>
           {result.failures > 0 && <div className="form-note note-warning"><Mail size={14} /> Some mailboxes could not be read. Those users may need to reconnect Gmail.</div>}
           {threads.length === 0
-            ? <EmptyState icon={<Mail size={22} />} title="No recent emails found" text="Messages with any contact of the organization, as sender, To or Cc, appear here." />
+            ? <EmptyState icon={<Mail size={22} />} title="No recent emails found" text="Messages with any contact of the company, as sender, To or Cc, appear here." />
             : (
               <div className="email-list">
                 {threads.map((thread) => (

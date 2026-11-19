@@ -14,7 +14,7 @@ import { dealCountLabel, indexLetter, indexLetters, type ContactPage, type Organ
 export type ContactsTab = "people" | "organizations" | "timeline";
 
 /**
- * Contacts, after Pipedrive's: contacts and organizations as two lists (SPEC §10.13, §10.14; "Contact" since §10.19). A contact can be added
+ * Contacts: contacts and organizations as two lists (SPEC §10.13, §10.14; "Contact" since §10.19). A contact can be added
  * here before any deal exists; its name opens its page, where deals are added to it.
  */
 export default function ContactsPage({ tab }: { tab: ContactsTab }) {
@@ -55,8 +55,8 @@ export default function ContactsPage({ tab }: { tab: ContactsTab }) {
     if (index > 0 && indexLetter(rows[index - 1].name) === letter) return null;
     return <tr className="contacts-letter-row" id={`contacts-letter-${letter === "#" ? "other" : letter}`}><td colSpan={7}>{letter}</td></tr>;
   };
-  const noun = tab === "people" ? "contacts" : "organizations";
-  const one = tab === "people" ? "contact" : "organization";
+  const noun = tab === "people" ? "contacts" : "companies";
+  const one = tab === "people" ? "contact" : "company";
   const deals = (row: { deals: number; openDeals: number; dealId: number | null; name: string }) => (
     row.dealId === null
       ? <span className="muted-cell">{dealCountLabel(row.deals, row.openDeals)}</span>
@@ -69,10 +69,10 @@ export default function ContactsPage({ tab }: { tab: ContactsTab }) {
         <h1 className="sr-only">Contacts</h1>
         <div className="scope-toggle" role="group" aria-label="Contacts list">
           <button className={tab === "people" ? "is-active" : ""} aria-pressed={tab === "people"} onClick={() => navigate("contacts", "people")}><UserRound size={14} /> Contacts</button>
-          <button className={tab === "organizations" ? "is-active" : ""} aria-pressed={tab === "organizations"} onClick={() => navigate("contacts", "organizations")}><Building2 size={14} /> Organizations</button>
+          <button className={tab === "organizations" ? "is-active" : ""} aria-pressed={tab === "organizations"} onClick={() => navigate("contacts", "companies")}><Building2 size={14} /> Companies</button>
           <button className={tab === "timeline" ? "is-active" : ""} aria-pressed={tab === "timeline"} onClick={() => navigate("contacts", "timeline")}><CalendarRange size={14} /> Timeline</button>
         </div>
-        {can("create_leads") && tab !== "timeline" && <button className="button button-primary deal-add" onClick={() => setAdding(true)}><Plus size={16} /> {tab === "people" ? "Contact" : "Organization"}</button>}
+        {can("create_leads") && tab !== "timeline" && <button className="button button-primary deal-add" onClick={() => setAdding(true)}><Plus size={16} /> {tab === "people" ? "Contact" : "Company"}</button>}
         <span className="deals-head-spacer" />
         <span className="board-total" role="status">{data ? `${data.total} ${data.total === 1 ? one : noun}` : ""}</span>
       </div>
@@ -83,7 +83,7 @@ export default function ContactsPage({ tab }: { tab: ContactsTab }) {
           <div className="lead-toolbar">
             <div className="search-field lead-search">
               <Search size={16} />
-              <input aria-label={`Search ${noun}`} placeholder={tab === "people" ? "Search name, organization, email, phone..." : "Search organization, industry, city..."} value={q} onChange={(event) => search(event.target.value)} />
+              <input aria-label={`Search ${noun}`} placeholder={tab === "people" ? "Search name, company, email, phone..." : "Search company, industry, city..."} value={q} onChange={(event) => search(event.target.value)} />
               {q && <button className="clear-search" aria-label="Clear search" onClick={() => search("")}><X size={13} /></button>}
             </div>
           </div>
@@ -94,7 +94,7 @@ export default function ContactsPage({ tab }: { tab: ContactsTab }) {
               <table className="lead-table contacts-table">
                 <thead>
                   {tab === "people"
-                    ? <tr><th>NAME</th><th>ORGANIZATION</th><th>EMAIL</th><th>PHONE</th><th>DEALS</th><th>OWNER</th><th>LAST ACTIVITY</th></tr>
+                    ? <tr><th>NAME</th><th>COMPANY</th><th>EMAIL</th><th>PHONE</th><th>DEALS</th><th>OWNER</th><th>LAST ACTIVITY</th></tr>
                     : <tr><th>NAME</th><th>INDUSTRY</th><th>CITY</th><th>CONTACTS</th><th>DEALS</th><th>OWNER</th><th>LAST ACTIVITY</th></tr>}
                 </thead>
                 <tbody>

@@ -132,7 +132,7 @@ describe("mailbox scan (processMailbox)", () => {
   });
 });
 
-describe("emails of the whole organization (PD-19)", () => {
+describe("emails of the whole company (PD-19)", () => {
   test("a message with any contact of the company matches every deal of it, and each owner is notified once", () => {
     // Two deals of Acme, both owned by 11, and a third owned by 13; the addresses include every contact of the organization.
     const company = [

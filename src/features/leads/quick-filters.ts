@@ -1,4 +1,4 @@
-// Ready-made filters and data cleanup (PD-30, SPEC §10.20), after Pipedrive's Filter menu. Pure: the labels and keys are
+// Ready-made filters and data cleanup (PD-30, SPEC §10.20). Pure: the labels and keys are
 // shared by the board, the list and the unit tests; the SQL lives in quick-filter-sql.ts on the server.
 
 export const quickFilterKeys = [

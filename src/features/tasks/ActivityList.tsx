@@ -23,7 +23,7 @@ export function ActivityTypeChips({ value, onChange }: { value: TaskActivityType
 }
 
 /**
- * Activity List (request of November 18, 2026), after Pipedrive's Activities list: the activities in a table with their
+ * Activity List (request of November 18, 2026): the activities in a table with their
  * deal, priority, contact person, email, phone and organization; filtered by type (All, Call, Email, Visit, Task) and by
  * period (To-do, Overdue, Today, Tomorrow, This week, Next week, or a period picked on the calendar).
  */
@@ -67,7 +67,7 @@ export default function ActivityList({ tasks, showAssignee, onToggle, onOpen }: 
         <div className="table-scroll">
           <table className="lead-table activity-table">
             <thead>
-              <tr><th>DONE</th><th>SUBJECT</th><th>DEAL</th><th>PRIORITY</th><th>DUE</th><th>CONTACT PERSON</th><th>EMAIL</th><th>PHONE</th><th>ORGANIZATION</th>{showAssignee && <th>ASSIGNED TO</th>}</tr>
+              <tr><th>DONE</th><th>SUBJECT</th><th>DEAL</th><th>PRIORITY</th><th>DUE</th><th>CONTACT PERSON</th><th>EMAIL</th><th>PHONE</th><th>COMPANY</th>{showAssignee && <th>ASSIGNED TO</th>}</tr>
             </thead>
             <tbody>
               {shown.map((task) => {

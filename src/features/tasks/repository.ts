@@ -136,14 +136,14 @@ async function savePeople(db: Queryable, taskId: number, personIds: number[]): P
 async function checkedLinks(db: Queryable, organizationId: number | null, personId: number | null): Promise<{ organizationId: number | null; personId: number | null }> {
   if (organizationId !== null) {
     const { rows } = await db.query("SELECT 1 FROM organizations WHERE id = ?", [organizationId]);
-    if (!rows.length) throw new HttpError(400, "The organization does not exist.");
+    if (!rows.length) throw new HttpError(400, "The company does not exist.");
   }
   if (personId === null) return { organizationId, personId };
   const { rows } = await db.query(`SELECT organization_id AS "organizationId" FROM persons WHERE id = ?`, [personId]);
   const person = (rows as { organizationId: number | null }[])[0];
   if (!person) throw new HttpError(400, "The contact does not exist.");
   const own = person.organizationId === null ? null : Number(person.organizationId);
-  if (organizationId !== null && own !== organizationId) throw new HttpError(400, "The contact is not a contact of that organization.");
+  if (organizationId !== null && own !== organizationId) throw new HttpError(400, "The contact is not a contact of that company.");
   return { organizationId: organizationId ?? own, personId };
 }
 

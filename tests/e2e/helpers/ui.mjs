@@ -364,7 +364,7 @@ export class Page {
 /** Opens the add-deal dialog from the quick-add button in the top bar, fills the form, and saves. Callers wait for the toast that follows. */
 export async function addLead(page, { name, executive = "", firstContactDate = "" }) {
   await page.openAddDeal();
-  await page.fill("Organization", name);
+  await page.fill("Company", name);
   if (executive) await page.fill("Contact", executive);
   if (firstContactDate) await page.fill("First contact date", firstContactDate);
   await page.saveDeal();

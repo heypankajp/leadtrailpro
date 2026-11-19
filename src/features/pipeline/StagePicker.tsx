@@ -5,7 +5,7 @@ import { useApp } from "@/features/shell/AppContext";
 import { stagesOfPipeline } from "./model";
 
 /**
- * The Pipeline stage of the add-deal form as green arrows, after Pipedrive's (review of November 18, 2026): one arrow per
+ * The Pipeline stage of the add-deal form as green arrows (review of November 18, 2026): one arrow per
  * stage of the deal's pipeline, filled up to the stage picked; a click picks that stage. With several pipelines a picker
  * chooses the pipeline first. `value` is the stage id as a string ("" = no stage, only possible for an old deal).
  */

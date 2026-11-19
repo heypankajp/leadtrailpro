@@ -15,7 +15,7 @@ const hourLabel = (hour: number) => `${hour % 12 === 0 ? 12 : hour % 12} ${hour 
 const ordinal = (day: number) => `${day}${day % 10 === 1 && day !== 11 ? "st" : day % 10 === 2 && day !== 12 ? "nd" : day % 10 === 3 && day !== 13 ? "rd" : "th"}`;
 
 /**
- * The day beside Schedule an activity (request of November 18, 2026), after Pipedrive's: "Wednesday, November 18th" with
+ * The day beside Schedule an activity (request of November 18, 2026): "Wednesday, November 18th" with
  * the previous and next day, the activity being scheduled as a blue banner, and the assignee's day as an hour grid with
  * the activity's time slot in it and a red line at the current time.
  */

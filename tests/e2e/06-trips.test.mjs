@@ -22,7 +22,7 @@ describe("Sales trip planner", () => {
   uiTest("plans a trip and recognises a company that is already a deal", async () => {
     // A lead whose website domain matches a stub company, so the Action column can find it.
     await page.openAddDeal();
-    await page.fill("Organization", `${company} ${runId}`);
+    await page.fill("Company", `${company} ${runId}`);
     await page.fill("Company website", "https://www.northgatepackaging.example/");
     await page.saveDeal();
     await page.toast("added to the pipeline");

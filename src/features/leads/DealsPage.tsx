@@ -12,7 +12,7 @@ const statusModes = ["cold", "warm", "hot", "client"] as const;
 type Tab = "board" | "status" | "list" | "queued" | "archive";
 
 /**
- * The Pipeline page (the menu says "Pipeline" since PD-26; its records are deals), after Pipedrive's: one heading, a view
+ * The Pipeline page (the menu says "Pipeline" since PD-26; its records are deals): one heading, a view
  * switch (board by stage, board by status, list, archive, and the approval queue for people who review it) and the
  * "+ Deal" button. The address carries the view: #/deals (board), #/deals/status (PD-24), #/deals/list, #/deals/archive,
  * #/deals/queued, and #/deals/cold|warm|hot|client for the list of one status.

@@ -35,7 +35,7 @@ export function OrganizationFormDialog({ organization, onClose, onSaved }: { org
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!organization && exists) { setError(`${exists.name} is already an organization: pick it in the list to open it.`); return; }
+    if (!organization && exists) { setError(`${exists.name} is already a company: pick it in the list to open it.`); return; }
     setSaving(true);
     setError("");
     const input = { name: form.name, industry: form.industry, companySizeId: form.companySizeId ? Number(form.companySizeId) : null, cityId: form.cityId ? Number(form.cityId) : null, address: form.address, website: form.website };
@@ -43,15 +43,15 @@ export function OrganizationFormDialog({ organization, onClose, onSaved }: { org
       const result = organization ? await updateOrganization(organization.id, input) : await createOrganization(input);
       onSaved(result.organization);
     } catch (caught) {
-      setError(errorMessage(caught, "Could not save the organization."));
+      setError(errorMessage(caught, "Could not save the company."));
       setSaving(false);
     }
   };
 
   return (
-    <Dialog title={organization ? `Edit ${organization.name}` : "Add organization"} eyebrow={organization ? "ORGANIZATION" : undefined} onClose={onClose}>
+    <Dialog title={organization ? `Edit ${organization.name}` : "Add company"} eyebrow={organization ? "COMPANY" : undefined} onClose={onClose}>
       <form className="lead-form" onSubmit={submit}>
-        <Field label="Name" required wide hint={organization ? undefined : isNew ? "A new organization." : "Start typing: the organizations that exist are listed. Pick one to open it, or add the name as a new organization."}>
+        <Field label="Name" required wide hint={organization ? undefined : isNew ? "A new company." : "Start typing: the companies that exist are listed. Pick one to open it, or add the name as a new company."}>
           {organization
             ? <input value={form.name} onChange={set("name")} required maxLength={200} placeholder="Company name" autoFocus />
             : <SuggestInput
@@ -60,9 +60,9 @@ export function OrganizationFormDialog({ organization, onClose, onSaved }: { org
                 onPick={(suggestion) => { onClose(); openContact("organization", Number(suggestion.key)); }}
                 loading={typed.length >= 2 && matches?.q !== typed}
                 icon={<Building2 size={16} />}
-                create={typed.length >= 2 && matches?.q === typed && !exists ? { label: `Add '${typed}' as new organization`, onCreate: () => setIsNew(true) } : null}
+                create={typed.length >= 2 && matches?.q === typed && !exists ? { label: `Add '${typed}' as new company`, onCreate: () => setIsNew(true) } : null}
                 isNew={isNew} onClear={() => { setForm((current) => ({ ...current, name: "" })); setIsNew(false); }}
-                required maxLength={200} placeholder="Organization" autoFocus
+                required maxLength={200} placeholder="Company" autoFocus
               />}
         </Field>
         <Field label="Industry"><input value={form.industry} onChange={set("industry")} maxLength={120} placeholder="e.g. Healthcare" /></Field>
@@ -74,11 +74,11 @@ export function OrganizationFormDialog({ organization, onClose, onSaved }: { org
         </Field>
         <Field label="Address" wide><input value={form.address} onChange={set("address")} maxLength={500} placeholder="Street and location" /></Field>
         <Field label="Website" wide><input type="url" value={form.website} onChange={set("website")} pattern="https?://.+" title="Enter a URL beginning with http:// or https://" placeholder="https://company.com" /></Field>
-        {organization && <p className="dialog-description field-wide">These details are shown on every deal of this organization.</p>}
+        {organization && <p className="dialog-description field-wide">These details are shown on every deal of this company.</p>}
         <div className="field-wide"><ErrorText message={error} /></div>
         <div className="modal-actions">
           <button type="button" className="button button-outline" onClick={onClose}>Cancel</button>
-          <button type="submit" className="button button-primary" disabled={saving}>{organization ? <Save size={15} /> : <Plus size={15} />} {saving ? "Saving..." : organization ? "Save changes" : "Save organization"}</button>
+          <button type="submit" className="button button-primary" disabled={saving}>{organization ? <Save size={15} /> : <Plus size={15} />} {saving ? "Saving..." : organization ? "Save changes" : "Save company"}</button>
         </div>
       </form>
     </Dialog>
@@ -158,19 +158,19 @@ export function PersonFormDialog({ person, organizationName, movable = false, on
   return (
     <Dialog title={person ? `Edit ${person.name}` : "Add contact"} eyebrow={person ? "CONTACT" : undefined} onClose={onClose}>
       <form className="lead-form" onSubmit={submit}>
-        <Field label="Organization" required wide hint={fixedOrganization ? (person ? "They have deals with this organization, so they stay there. Someone who changed employer is added as a new contact at the new organization." : undefined) : "Start typing the company's name: the organizations that match appear in a list. Pick one, or keep typing a new name (you are asked before it is created)."}>
+        <Field label="Company" required wide hint={fixedOrganization ? (person ? "They have deals with this company, so they stay there. Someone who changed employer is added as a new contact at the new company." : undefined) : "Start typing the company's name: the companies that match appear in a list. Pick one, or keep typing a new name (you are asked before it is created)."}>
           {fixedOrganization
             ? <input value={form.organizationName} maxLength={200} disabled required />
             : <SuggestInput
                 value={form.organizationName} onChange={(value) => { setForm((current) => ({ ...current, organizationName: value })); setConfirmNew(null); setNewOrganization(false); }}
                 suggestions={typed.length >= 2 ? suggestions.map((row) => ({ key: String(row.id), label: row.name, icon: <Building2 size={14} /> })) : []} onPick={(suggestion) => { setForm((current) => ({ ...current, organizationName: suggestion.label })); setConfirmNew(null); setNewOrganization(false); }}
                 icon={<Building2 size={16} />}
-                create={typed.length >= 2 && !suggestions.some((row) => contactKey(row.name) === contactKey(typed)) ? { label: `Add '${typed}' as new organization`, onCreate: () => { setNewOrganization(true); setConfirmNew(null); } } : null}
+                create={typed.length >= 2 && !suggestions.some((row) => contactKey(row.name) === contactKey(typed)) ? { label: `Add '${typed}' as new company`, onCreate: () => { setNewOrganization(true); setConfirmNew(null); } } : null}
                 isNew={newOrganization} onClear={() => { setForm((current) => ({ ...current, organizationName: "" })); setNewOrganization(false); }}
-                maxLength={200} placeholder="Organization" required
+                maxLength={200} placeholder="Company" required
               />}
         </Field>
-        <Field label="Name" required wide hint={person ? undefined : newPerson ? "A new person, added inside the organization." : organizationGiven ? "Start typing: the organization's contacts are listed. Pick one to open it, or add the name as a new person." : "Choose the organization first: the person is added inside it."}>
+        <Field label="Name" required wide hint={person ? undefined : newPerson ? "A new person, added inside the company." : organizationGiven ? "Start typing: the company's contacts are listed. Pick one to open it, or add the name as a new person." : "Choose the company first: the person is added inside it."}>
           {person
             ? <input value={form.name} onChange={set("name")} required maxLength={160} placeholder="Contact person" autoFocus />
             : <SuggestInput
@@ -181,7 +181,7 @@ export function PersonFormDialog({ person, organizationName, movable = false, on
                 icon={<UserRound size={16} />}
                 create={organizationGiven && typedName.length >= 2 && !sameName ? { label: `Add '${typedName}' as new person`, onCreate: () => setNewPerson(true) } : null}
                 isNew={newPerson} onClear={() => { setForm((current) => ({ ...current, name: "" })); setNewPerson(false); }}
-                required maxLength={160} placeholder={organizationGiven ? "Person" : "Choose the organization first"}
+                required maxLength={160} placeholder={organizationGiven ? "Person" : "Choose the company first"}
               />}
         </Field>
         <Field label="Email(s)" wide hint="Separate several addresses with commas."><input value={form.emails} onChange={set("emails")} placeholder="name@company.com" /></Field>
@@ -193,8 +193,8 @@ export function PersonFormDialog({ person, organizationName, movable = false, on
           <div className="form-note confirm-new-note field-wide" role="alert">
             <Building2 size={14} />
             <div>
-              <p><strong>{confirmNew}</strong> is not an organization yet. Create it and file the contact there?</p>
-              <div className="duplicate-actions"><button type="button" className="button button-primary button-small" disabled={saving} onClick={() => void save(true)}>Create organization and save</button></div>
+              <p><strong>{confirmNew}</strong> is not a company yet. Create it and file the contact there?</p>
+              <div className="duplicate-actions"><button type="button" className="button button-primary button-small" disabled={saving} onClick={() => void save(true)}>Create company and save</button></div>
             </div>
           </div>
         )}

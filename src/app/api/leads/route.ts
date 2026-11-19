@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     // createLead refuses it with a link to that deal, before anyone is asked to create a new organization.
     const duplicate = unconfirmed && fresh.organization ? await findDuplicateLead(input) : null;
     if (unconfirmed && !(duplicate && (duplicate.exact || body?.allowSimilar !== true))) {
-      const named = [fresh.organization && `the organization ${fresh.organization}`, fresh.contact && `the contact ${fresh.contact}`].filter(Boolean).join(" and ");
+      const named = [fresh.organization && `the company ${fresh.organization}`, fresh.contact && `the contact ${fresh.contact}`].filter(Boolean).join(" and ");
       throw new HttpError(409, `Saving this deal creates ${named}. Confirm to continue.`, { code: "confirm_create", ...fresh });
     }
     const lead = await createLead(input, user, asOptionalId(body?.ownerId), { allowSimilar: body?.allowSimilar === true, opportunityId: asOptionalId(body?.opportunityId), organizationId, personId });

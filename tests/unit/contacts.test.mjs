@@ -18,28 +18,28 @@ describe("Contacts (SPEC §10.13, §10.14)", () => {
     assert.equal(dealCountLabel(1, 0), "1 deal · 0 open");
   });
 
-  test("names are compared without case and outer spaces: the same key is one organization, or one person inside it", () => {
+  test("names are compared without case and outer spaces: the same key is one company, or one person inside it", () => {
     assert.equal(contactKey("  Northern Fitness "), "northern fitness");
     assert.equal(contactKey("NORTHERN fitness"), contactKey("Northern Fitness"));
     assert.notEqual(contactKey("Northern Fitness Inc"), contactKey("Northern Fitness"));
   });
 
-  test("an organization needs a name; the website must be a web address; list references are ids or nothing", () => {
+  test("a company needs a name; the website must be a web address; list references are ids or nothing", () => {
     const ok = parseOrganizationInput({ name: "  Northern Fitness ", website: "https://northernfitness.example", address: "1 Main St", cityId: "12", industry: "Fitness", companySizeId: "" });
     assert.deepEqual(ok.errors, []);
     assert.deepEqual(ok.input, { name: "Northern Fitness", website: "https://northernfitness.example", address: "1 Main St", cityId: 12, industry: "Fitness", companySizeId: null });
-    assert.match(parseOrganizationInput({ name: "" }).errors.join(" "), /Enter the organization's name/);
+    assert.match(parseOrganizationInput({ name: "" }).errors.join(" "), /Enter the company's name/);
     assert.match(parseOrganizationInput({ name: "A", website: "northernfitness.example" }).errors.join(" "), /must begin with http/);
     assert.deepEqual(parseOrganizationInput(null).input.cityId, null);
   });
 
-  test("a contact needs a name and an organization (PD-17); emails come as a list or as typed text, lower-cased and without repeats", () => {
+  test("a contact needs a name and a company (PD-17); emails come as a list or as typed text, lower-cased and without repeats", () => {
     const typed = parsePersonInput({ name: " Adam Brooks ", organizationName: " Northern Fitness ", emails: "Adam@Northern.example, adam@northern.example; elvis@northern.example", phone: "645-697-5476" });
     assert.deepEqual(typed.errors, []);
     assert.deepEqual(typed.input, { name: "Adam Brooks", organizationName: "Northern Fitness", emails: ["adam@northern.example", "elvis@northern.example"], phone: "645-697-5476", altPhone: "", remark: "", createOrganization: false });
     assert.deepEqual(parsePersonInput({ name: "Adam", organizationName: "Acme", emails: ["a@b.example"] }).input.emails, ["a@b.example"]);
     assert.equal(parsePersonInput({ name: "Adam", organizationName: "Acme", createOrganization: true }).input.createOrganization, true);
-    assert.match(parsePersonInput({ name: "Adam" }).errors.join(" "), /Choose the contact's organization/);
+    assert.match(parsePersonInput({ name: "Adam" }).errors.join(" "), /Choose the contact's company/);
     assert.match(parsePersonInput({ name: "", organizationName: "Acme" }).errors.join(" "), /Enter the contact's name/);
     assert.match(parsePersonInput({ name: "Adam", organizationName: "Acme", emails: "not-an-email" }).errors.join(" "), /Not an email address: not-an-email/);
   });

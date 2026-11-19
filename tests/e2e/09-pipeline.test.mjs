@@ -119,7 +119,7 @@ describe("Pipeline board (PIPE-*)", () => {
   uiTest("a deal value shows on the card and in the stage total", async () => {
     const valued = `Cedar Foods ${runId}`;
     await page.openAddDeal();
-    await page.fill("Organization", valued);
+    await page.fill("Company", valued);
     await page.fill("Value (CA$)", "25,000");
     await page.fill("Expected close date", "2026-12-15");
     await page.saveDeal();
@@ -283,7 +283,7 @@ describe("Pipeline board (PIPE-*)", () => {
     const due = `Maple Crate ${runId}`;
     const other = `Willow Print ${runId}`;
     await page.openAddDeal();
-    await page.fill("Organization", due);
+    await page.fill("Company", due);
     await page.fill("Follow-up date", isoDate(0));
     await page.saveDeal();
     await page.toast(`${due} added to the pipeline`);

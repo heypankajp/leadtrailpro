@@ -45,7 +45,7 @@ describe("Leads inbox", () => {
     const row = await page.wait(cardRow(company));
     await row.findElement(By.xpath('.//button[contains(normalize-space(.), "Convert to deal")]')).click();
     await page.dialogTitle("Add deal");
-    assert.equal(await (await page.control("Organization")).getAttribute("value"), company);
+    assert.equal(await (await page.control("Company")).getAttribute("value"), company);
     assert.match(await (await page.control("Position(s)")).getAttribute("value"), /Baker/);
     await page.saveDeal();
     await page.toast("is now a deal owned by");
@@ -54,14 +54,14 @@ describe("Leads inbox", () => {
     assert.match(await assigned.getText(), /Deal:/);
   });
 
-  uiTest("Add deal: a near-match name meets the duplicate guard, and the exact organization shows its open deals (PD-15)", async () => {
+  uiTest("Add deal: a near-match name meets the duplicate guard, and the exact company shows its open deals (PD-15)", async () => {
     await page.nav("Action Center");
     await page.openAddDeal();
-    await page.fill("Organization", "Lakeshore Bakery Co");
+    await page.fill("Company", "Lakeshore Bakery Co");
     await page.saveDeal();
     const notice = await page.wait(By.css(".duplicate-note"));
     assert.match(await notice.getText(), /already exists as a Cold deal/);
-    await page.fill("Organization", company);
+    await page.fill("Company", company);
     const open = await page.wait(By.css(".open-deals-note"));
     assert.match(await open.getText(), /already has an open deal/);
     await page.click(By.xpath(`//div[contains(@class,"open-deals-note")]//button[normalize-space()=${JSON.stringify(company)}]`));
@@ -140,7 +140,7 @@ describe("Leads inbox cards from the sales tracker", () => {
     assert.match(text, /Jamie Ortiz/);
     await row.findElement(By.xpath('.//button[contains(normalize-space(.), "Convert to deal")]')).click();
     await page.dialogTitle("Add deal");
-    assert.equal(await (await page.control("Organization")).getAttribute("value"), company);
+    assert.equal(await (await page.control("Company")).getAttribute("value"), company);
     assert.equal(await (await page.control("Contact")).getAttribute("value"), "Jamie Ortiz");
     assert.equal(await (await page.control("First contact date")).getAttribute("value"), "2026-10-01");
     assert.equal(await page.selectedText(await page.control("Status")), "Warm");

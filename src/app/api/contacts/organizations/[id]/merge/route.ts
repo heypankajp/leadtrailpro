@@ -12,9 +12,9 @@ export async function POST(request: Request, context: RouteContext) {
     const user = await requireUser();
     const id = Number((await context.params).id);
     const otherId = asOptionalId((await readJsonBody(request))?.otherId);
-    if (!Number.isSafeInteger(id) || id < 1 || !otherId) return jsonError(400, "Choose the organization to merge.");
+    if (!Number.isSafeInteger(id) || id < 1 || !otherId) return jsonError(400, "Choose the company to merge.");
     return NextResponse.json({ organization: await mergeOrganizations(id, otherId, user) });
   } catch (error) {
-    return handleRouteError(error, "Merge organizations");
+    return handleRouteError(error, "Merge companies");
   }
 }

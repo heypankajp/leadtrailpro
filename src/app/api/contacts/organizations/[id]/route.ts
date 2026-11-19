@@ -13,10 +13,10 @@ export async function GET(_request: Request, context: RouteContext) {
     const user = await requireUser();
     requirePrivilege(user, "view_leads", "You do not have permission to view contacts.");
     const id = await idOf(context);
-    if (!id) return jsonError(400, "Invalid organization ID.");
+    if (!id) return jsonError(400, "Invalid company ID.");
     return NextResponse.json(await getOrganizationDetail(id, user));
   } catch (error) {
-    return handleRouteError(error, "Load organization");
+    return handleRouteError(error, "Load company");
   }
 }
 
@@ -25,12 +25,12 @@ export async function PATCH(request: Request, context: RouteContext) {
     requireSameOrigin(request);
     const user = await requireUser();
     const id = await idOf(context);
-    if (!id) return jsonError(400, "Invalid organization ID.");
+    if (!id) return jsonError(400, "Invalid company ID.");
     const { input, errors } = parseOrganizationInput(await readJsonBody(request));
     if (errors.length) return jsonError(400, errors.join(" "));
     return NextResponse.json({ organization: await updateOrganization(id, input, user) });
   } catch (error) {
-    return handleRouteError(error, "Update organization");
+    return handleRouteError(error, "Update company");
   }
 }
 
@@ -40,10 +40,10 @@ export async function DELETE(request: Request, context: RouteContext) {
     requireSameOrigin(request);
     const user = await requireUser();
     const id = await idOf(context);
-    if (!id) return jsonError(400, "Invalid organization ID.");
+    if (!id) return jsonError(400, "Invalid company ID.");
     await deleteOrganization(id, user);
     return NextResponse.json({ ok: true });
   } catch (error) {
-    return handleRouteError(error, "Remove organization");
+    return handleRouteError(error, "Remove company");
   }
 }

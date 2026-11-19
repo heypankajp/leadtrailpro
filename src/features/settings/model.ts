@@ -58,7 +58,7 @@ export type PipelineSettings = {
   followUps: Record<string, StageFollowUp>;
   /** Ask for the next step after a logged call, email, or visit, a BD action, or a stage move. */
   promptNextStep: boolean;
-  /** Create the stage's suggested task for the owner without asking when a lead reaches the stage (Pipedrive's "deal moved → schedule a call"). */
+  /** Create the stage's suggested task for the owner without asking when a lead reaches the stage. */
   autoFollowUp: boolean;
 };
 export const maxFollowUpBusinessDays = 60;

@@ -64,7 +64,7 @@ export default function SalesTripsPage() {
             </div>
             <div className="search-field lead-search">
               <Search size={16} />
-              <input aria-label="Search sales trips" placeholder="Search trip, organization, contact, city..." value={filters.q} onChange={(event) => update({ q: event.target.value })} />
+              <input aria-label="Search sales trips" placeholder="Search trip, company, contact, city..." value={filters.q} onChange={(event) => update({ q: event.target.value })} />
               {filters.q && <button className="clear-search" aria-label="Clear search" onClick={() => update({ q: "" })}><X size={13} /></button>}
             </div>
             {scope === "everyone" && <label className="select-filter">

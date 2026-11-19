@@ -21,7 +21,7 @@ const timeLabel = (date: Date) => date.toLocaleTimeString("en-US", { hour: "nume
 type Draft = { start: Date; type: TaskActivityType; title: string; top: number; left: number };
 
 /**
- * Activity Calendar (request of November 18, 2026), after Pipedrive's: a week, Sunday to Saturday, with an hour grid; each
+ * Activity Calendar (request of November 18, 2026): a week, Sunday to Saturday, with an hour grid; each
  * activity sits at its time (30 minutes when it has no end; overlapping ones side by side). Activities due at midnight
  * with no end are all-day and sit in the row under the days. A click on an empty slot opens a small box to add an activity
  * there (type, subject, 30 minutes) with Add, or Details... for the full form; a click on an activity opens it.

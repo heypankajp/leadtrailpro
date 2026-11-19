@@ -39,7 +39,7 @@ import { fetchReference } from "./client";
 
 type NavItem = { id: string; label: string; icon: LucideIcon; privilege?: UserPrivilege; count?: "queued" | "tasks" | "leads" | "todo"; preview?: boolean; hideForRecruiter?: boolean };
 
-// The first group follows Pipedrive's menu (Pipeline, Leads, Contacts, Activities, Insights); our own tools come after it.
+// The first group is the sales menu (Pipeline, Leads, Contacts, Activities, Insights); the tools come after it.
 // PD-26: the entry that opens the deals is called "Pipeline"; the records stay "deals".
 const navigation: { title: string; items: NavItem[] }[] = [
   {
@@ -87,11 +87,13 @@ const pageTitles: Record<string, string> = {
   import: "Tracker Import", api: "API Access",
 };
 
-// Addresses from before the Pipedrive naming (bookmarks, old emails) keep working.
+// Addresses from before the Deals and Leads naming (bookmarks, old emails) keep working.
 const routeAliases: Record<string, { view: string; param?: string }> = {
   pipeline: { view: "deals", param: "board" }, "all-leads": { view: "deals", param: "list" }, cold: { view: "deals", param: "cold" }, warm: { view: "deals", param: "warm" },
   hot: { view: "deals", param: "hot" }, client: { view: "clients" }, queued: { view: "deals", param: "queued" }, archive: { view: "deals", param: "archive" },
   opportunities: { view: "leads" }, tasks: { view: "activities" }, reports: { view: "insights" }, lead: { view: "deal" },
+  // Since November 19, 2026 an organization is called a company: its page is #/company/<id>; inside the app the view keeps its name.
+  company: { view: "organization" },
 };
 const canonicalRoute = (route: Route): Route => {
   const alias = routeAliases[route.view];
@@ -194,7 +196,7 @@ export default function AppShell({ user, setUser, signOut, passwordSignIn }: { u
   const openContact = useCallback((kind: "organization" | "person", id: number) => {
     dealNavigation.openedInApp = true;
     if (dealNavigation.scrollBefore === null) dealNavigation.scrollBefore = window.scrollY;
-    navigate(kind, id);
+    navigate(kind === "organization" ? "company" : kind, id);
   }, [navigate]);
   const openNewLeadFor = useCallback((start: { prefill: Partial<LeadInput>; organizationId?: number | null; personId?: number | null }) => setNewDeal(start), []);
   const openNewLead = useCallback(() => setNewDeal({}), []);
@@ -250,7 +252,7 @@ export default function AppShell({ user, setUser, signOut, passwordSignIn }: { u
     if (view === "todo") return <LeadListPage view="todo" />;
     if (view === "sales-trips") return can("view_leads") ? (base.param && /^\d+$/.test(base.param) ? <SalesTripPage key={base.param} tripId={Number(base.param)} /> : <SalesTripsPage />) : <NoAccess />;
     if (view === "leads") return can("view_leads") ? <OpportunitiesPage /> : <NoAccess />;
-    if (view === "contacts") return can("view_leads") ? <ContactsPage key={base.param ?? "people"} tab={base.param === "organizations" || base.param === "timeline" ? base.param : "people"} /> : <NoAccess />;
+    if (view === "contacts") return can("view_leads") ? <ContactsPage key={base.param === "companies" ? "organizations" : base.param ?? "people"} tab={base.param === "organizations" || base.param === "companies" ? "organizations" : base.param === "timeline" ? "timeline" : "people"} /> : <NoAccess />;
     if (view === "activities") return <TasksPage />;
     if (view === "clients") return can("view_leads") ? <LeadListPage key={base.query.toString()} view="client" /> : <NoAccess />;
     if (view === "insights") return can("view_reports") ? <ReportsPage /> : <NoAccess />;

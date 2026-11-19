@@ -11,7 +11,7 @@ export async function GET(request: Request) {
     requirePrivilege(user, "view_leads", "You do not have permission to view contacts.");
     return NextResponse.json(await listOrganizations(parseContactQuery(new URL(request.url).searchParams)));
   } catch (error) {
-    return handleRouteError(error, "List organizations");
+    return handleRouteError(error, "List companies");
   }
 }
 
@@ -24,6 +24,6 @@ export async function POST(request: Request) {
     if (errors.length) return jsonError(400, errors.join(" "));
     return NextResponse.json({ organization: await createOrganization(input, user) }, { status: 201 });
   } catch (error) {
-    return handleRouteError(error, "Add organization");
+    return handleRouteError(error, "Add company");
   }
 }

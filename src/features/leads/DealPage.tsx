@@ -50,7 +50,7 @@ const activityIcon = (type: LeadActivity["type"]) => {
 };
 
 /**
- * The deal page (#/deal/<id>), laid out after Pipedrive's: the title, status, owner and actions across the top, the
+ * The deal page (#/deal/<id>): the title, status, owner and actions across the top, the
  * pipeline stages under them, the deal's details in collapsible panels on the left (summary, person, organization,
  * overview), and on the right the composer (note, call, email, visit, follow-up), the focus list (what is planned)
  * and the history (timeline, collaboration, emails, files, audit).
@@ -155,7 +155,7 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
     <article className="task-card" key={task.id}>
       <button className={`task-checkbox ${task.status === "done" ? "is-done" : ""}`} aria-label={task.status === "done" ? `Reopen ${task.title}` : `Complete ${task.title}`} disabled={!can("manage_tasks")} onClick={() => void toggleTask(task)}><Check size={13} /></button>
       <div className="task-card-content">
-        {/* PD-29: Pipedrive's focus item: type, title, then priority, overdue, when, who and the contact. */}
+        {/* PD-29: the focus item: type, title, then priority, overdue, when, who and the contact. */}
         <strong className={task.status === "done" ? "is-done" : ""}><span className="task-type" title={task.activityType}>{activityIcons[task.activityType]}</span> {task.title}</strong>
         <div className="task-badges">
           <span className={`priority priority-${task.priority}`}>{task.priority} priority</span>
@@ -365,7 +365,7 @@ export function SideRow({ label, wide, children }: { label: string; wide?: boole
 
 const missing = (text = "Not provided") => <span className="detail-missing">{text}</span>;
 
-/** The deal's details, grouped the way Pipedrive groups them; the selects save at once. */
+/** The deal's details, in groups; the selects save at once. */
 function SidePanels({ detail, canEdit, overdue, onQuickUpdate, onTodo }: {
   detail: LeadDetail; canEdit: boolean; overdue: boolean;
   onQuickUpdate: (changes: QuickChanges, message: string, prompt?: string) => Promise<void>;
@@ -428,7 +428,7 @@ function SidePanels({ detail, canEdit, overdue, onQuickUpdate, onTodo }: {
         <SideRow label="Client last email">{lead.lastClientEmailAt ? <strong className={replyWaiting(lead) ? "overdue" : ""}>{formatDateTime(lead.lastClientEmailAt)}{replyWaiting(lead) ? " · awaiting your reply" : ""}</strong> : <span className="detail-muted">None seen in a connected mailbox</span>}</SideRow>
       </SidePanel>
 
-      <SidePanel title="Organization" icon={<Building2 size={14} />}>
+      <SidePanel title="Company" icon={<Building2 size={14} />}>
         <SideRow label="Name">{lead.organizationId
           ? <button type="button" className="link-button contact-name" onClick={() => openContact("organization", lead.organizationId!)}>{lead.clientName}</button>
           : <strong>{lead.clientName}</strong>}</SideRow>
@@ -561,7 +561,7 @@ function Composer({ detail, canEdit, onLogged, onScheduled }: {
           <div className="modal-actions"><button type="button" className="button button-outline" onClick={() => setMode(null)}>Cancel</button><button type="submit" className="button button-primary" disabled={busy}>{busy ? "Saving..." : type === "note" ? "Save note" : `Save ${type}`}</button></div>
         </form>
       )}
-      {/* PD-29: Pipedrive's Schedule an activity, in place of the old date-and-note follow-up form. */}
+      {/* PD-29: Schedule an activity, in place of the old date-and-note follow-up form. */}
       {mode === "follow-up" && <ScheduleActivityForm deal={lead} canSetFollowUp={canEdit} onCancel={() => setMode(null)} onSaved={async (message) => { setMode(null); await onScheduled(message); }} />}
     </section>
   );
@@ -574,7 +574,7 @@ const timelineFilters: { id: TimelineFilter; label: string; match: (type: LeadAc
   { id: "changes", label: "Changes", match: (type) => !["note", "call", "email", "visit", "task"].includes(type) },
 ];
 
-/** The deal's timeline, newest first, with Pipedrive's quick filters above it. */
+/** The deal's timeline, newest first, with quick filters above it. */
 function TimelineList({ activities }: { activities: LeadActivity[] }) {
   const [filter, setFilter] = useState<TimelineFilter>("all");
   const active = timelineFilters.find((item) => item.id === filter) ?? timelineFilters[0];

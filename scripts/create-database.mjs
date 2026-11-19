@@ -910,7 +910,7 @@ const migrations = [
   },
   {
     version: 22,
-    name: "Pipedrive naming (SPEC §10.13): the records called leads are now called deals, so the two seeded values that carry the old word are renamed, unless an administrator already renamed them",
+    name: "Deals and Leads naming (SPEC §10.13): the records called leads are now called deals, so the two seeded values that carry the old word are renamed, unless an administrator already renamed them",
     async run(client) {
       // Status "Lost Lead" becomes "Lost"; the inbox reason "Existing lead" becomes "Existing deal". Codes stay as they are.
       const renames = [["status", "lost", "Lost Lead", "Lost"], ["opportunity_reason", "existing_lead", "Existing lead", "Existing deal"]];

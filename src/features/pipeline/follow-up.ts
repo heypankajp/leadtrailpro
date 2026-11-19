@@ -9,7 +9,7 @@ import { defaultNextStep } from "./model";
 
 /**
  * PIPE-09 with Settings → Pipeline "create automatically" on: when a lead reaches a stage that suggests a next step, the task is
- * created for the owner without asking (Pipedrive's "deal moved → schedule a call"), due at 09:00 business time the given number
+ * created for the owner without asking, due at 09:00 business time the given number
  * of working days later, and the lead's follow-up date moves to that day unless a later one is set. Called by the routes after
  * the stage changed, outside the move's transaction, so a failure here never undoes the move. Returns the task, or null when the
  * switch is off or the stage has no suggestion.
