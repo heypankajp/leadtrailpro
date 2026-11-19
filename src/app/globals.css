@@ -1903,3 +1903,6 @@ button.pipeline-move { padding: 0; cursor: pointer; }
 /* Sales Trips: which kind of trip a row is (planned for To Do deals, or made in the Sales Trip Planner). */
 .trip-kind { display: flex; align-items: center; gap: 4px; max-width: 360px; margin-top: 3px; overflow: hidden; color: #8b91a5; font-size: 10.5px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .trip-kind-planner { color: #4352c9; }
+/* List of Values → Pipeline Stage: the red delete icon next to Deactivate ("Delete Stage" on hover). */
+.icon-button.icon-danger { margin-left: 6px; color: #c0392b; }
+.icon-button.icon-danger:hover { border-color: #f1c3bd; color: #962a1f; background: #fdf1ef; }

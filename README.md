@@ -29,6 +29,7 @@ LeadTrailPro (renamed from SalesTrackPro on October 30, 2026) is a sales workspa
 > - The **Filter** menu has **Followup** (a calendar for a day or a period of follow-up dates) after Open deals, and **By quarter**: the current quarter and the three before it, then Quiet Deals for older ones. "Deals older than 3 months" and "Quiet deals" are gone.
 > - The To Do page opens on Everyone, so a colleague's deal put on To be visited shows there.
 > - **Sales Trips** (migration 31): select deals under To Do → To be visited and choose **Add to sales trip** (title and date); they leave To be visited. The Sales Trips page lists every trip, the Sales Trip Planner's included, with My Trips / Everyone, a user filter, a **By Period** calendar and a search on title, organization, contact, city and address. Deleting a trip asks whether its deals go back to To Do, stay in the Pipeline only, or are archived.
+> - **List of Values → Pipeline Stage** can delete a stage. One that still holds deals is not deleted until they are moved: by hand (the Pipeline list opens on that stage) or all at once to a stage you pick.
 > - **Lead Disqualified Reason** (the Disqualified reasons, renamed in List of Values) takes new values like any other list, and its values can be switched off.
 > - The planner's list is **Recent Planned Trips**: the latest trips, ten to a page, as many as List of values → Recent Planned Trips (How Many) says (30).
 >

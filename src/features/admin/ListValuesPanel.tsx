@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState, type FormEvent } from "react";
-import { ArrowDown, ArrowUp, Check, Pencil, Plus, RefreshCw, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { errorMessage } from "@/lib/api";
 import { useAsyncData } from "@/lib/useAsyncData";
 import { entryStageCode, fixedListKeys, listKeyLabels, listKeys, statusCodes, type ListKey, type ListValue, type ListValuesByKey } from "@/features/list-values/model";
@@ -10,9 +10,10 @@ import { useApp } from "@/features/shell/AppContext";
 import { Dialog, ErrorText, Loading } from "@/features/shell/components";
 import { createListValue, fetchListValues, reorderListValues, updateListValue, createPipeline, updatePipeline } from "./client";
 import { stagesOfPipeline } from "@/features/pipeline/model";
+import DeleteStageDialog from "./DeleteStageDialog";
 
 export default function ListValuesPanel() {
-  const { notify, refreshReference, reference } = useApp();
+  const { notify, refreshReference, reference, can } = useApp();
   // PD-09: the stage list is shown one pipeline at a time.
   const pipelines = reference.pipelines;
   const [pipelineId, setPipelineId] = useState<number | null>(null);
@@ -24,6 +25,8 @@ export default function ListValuesPanel() {
   const [newValue, setNewValue] = useState("");
   const [editing, setEditing] = useState<{ id: number; value: string } | null>(null);
   const [recomputeOpen, setRecomputeOpen] = useState(false);
+  // A stage being deleted (request of November 18, 2026): its deals are moved first.
+  const [deletingStage, setDeletingStage] = useState<ListValue | null>(null);
   const [recomputing, setRecomputing] = useState(false);
 
   const after = async (message: string) => {
@@ -187,7 +190,7 @@ export default function ListValuesPanel() {
                         </td>
                       )}
                       <td><span className={`badge ${value.active ? "badge-on" : "badge-off"}`}>{value.active ? "Active" : "Inactive"}</span></td>
-                      <td><span className="row-actions"><button className="icon-button" aria-label={`Rename ${value.value}`} title="Rename" onClick={() => setEditing({ id: value.id, value: value.value })}><Pencil size={14} /></button>{!locked(value) && <button className="text-button" onClick={() => void toggle(value)}>{value.active ? "Deactivate" : "Activate"}</button>}</span></td>
+                      <td><span className="row-actions"><button className="icon-button" aria-label={`Rename ${value.value}`} title="Rename" onClick={() => setEditing({ id: value.id, value: value.value })}><Pencil size={14} /></button>{!locked(value) && <button className="text-button" onClick={() => void toggle(value)}>{value.active ? "Deactivate" : "Activate"}</button>}{listKey === "stage" && value.code !== entryStageCode && can("manage_stages") && <button className="icon-button icon-danger" aria-label={`Delete ${value.value}`} title="Delete Stage" onClick={() => setDeletingStage(value)}><Trash2 size={14} /></button>}</span></td>
                     </tr>
                   ))}
                   {!current.length && <tr><td colSpan={listKey === "bd_action" ? 6 : 5} className="empty-state">No values yet.</td></tr>}
@@ -197,6 +200,14 @@ export default function ListValuesPanel() {
           )}
         </section>
       </div>
+      {deletingStage && (
+        <DeleteStageDialog
+          stage={deletingStage}
+          others={current.filter((item) => item.active && item.id !== deletingStage.id)}
+          onClose={() => setDeletingStage(null)}
+          onDeleted={(message) => { setDeletingStage(null); void after(message); }}
+        />
+      )}
       {recomputeOpen && (
         <Dialog title="Recompute stages from BD actions" eyebrow="PIPELINE" size="narrow" onClose={() => setRecomputeOpen(false)}>
           <p className="dialog-description">Every deal is placed again in the stage of its BD action through the mapping above; a deal with no BD action goes to New Deal. Moves made by hand on the board are replaced. No timeline entries are written.</p>

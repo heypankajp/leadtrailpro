@@ -25,4 +25,6 @@ export const recomputeStages = () => api<{ count: number }>("/api/pipeline/recom
 export const addStage = (name: string, pipelineId: number | null) => api<{ stage: ListValue }>("/api/pipeline/stages", { method: "POST", json: { name, pipelineId } });
 export const renameStage = (id: number, name: string) => api<{ stage: ListValue }>(`/api/pipeline/stages/${id}`, { method: "PATCH", json: { name } });
 export const moveStage = (id: number, direction: "left" | "right") => api<{ ok: true }>(`/api/pipeline/stages/${id}`, { method: "PATCH", json: { direction } });
+/** The deals in a stage, before deleting it (List of Values). */
+export const fetchStageDeals = (id: number) => api<{ stage: { id: number; value: string }; deals: { active: number; queued: number; archived: number; total: number } }>(`/api/pipeline/stages/${id}`);
 export const deleteStage = (id: number, moveTo: number | null) => api<{ moved: number }>(`/api/pipeline/stages/${id}${moveTo ? `?moveTo=${moveTo}` : ""}`, { method: "DELETE" });

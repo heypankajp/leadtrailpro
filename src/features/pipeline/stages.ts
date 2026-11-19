@@ -1,4 +1,4 @@
-import { toSqlDateTime, withTransaction } from "@/lib/db";
+import { getDatabasePool, toSqlDateTime, withTransaction } from "@/lib/db";
 import { HttpError } from "@/lib/http";
 import { recordAudit } from "@/features/audit/repository";
 import { listStages } from "@/features/leads/repository";
@@ -43,6 +43,21 @@ export async function moveStage(id: number, direction: "left" | "right", actor: 
   const stages = await listStages(undefined, stage.pipelineId ?? "default");
   const ordered = moveStageOrder(stages.map((item) => item.id), id, direction);
   await reorderListValues("stage", ordered, actor.id);
+}
+
+/** The deals in a stage, by state (all of them block deleting the stage until they are moved). */
+export type StageDealCounts = { active: number; queued: number; archived: number; total: number };
+
+export async function stageDealCounts(id: number): Promise<{ stage: { id: number; value: string }; deals: StageDealCounts }> {
+  const stage = await stageOrThrow(id);
+  const { rows } = await getDatabasePool().query(
+    `SELECT COUNT(*) FILTER (WHERE record_state = 'active')::int AS active, COUNT(*) FILTER (WHERE record_state = 'queued')::int AS queued,
+       COUNT(*) FILTER (WHERE record_state = 'archived')::int AS archived, COUNT(*)::int AS total
+     FROM leads WHERE stage_id = ?`,
+    [id],
+  );
+  const row = (rows as StageDealCounts[])[0];
+  return { stage: { id: stage.id, value: stage.value }, deals: { active: Number(row.active), queued: Number(row.queued), archived: Number(row.archived), total: Number(row.total) } };
 }
 
 /**

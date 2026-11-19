@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { asOptionalId, asString, handleRouteError, jsonError, readJsonBody, requireSameOrigin } from "@/lib/http";
-import { deleteStage, moveStage, renameStage } from "@/features/pipeline/stages";
+import { deleteStage, moveStage, renameStage, stageDealCounts } from "@/features/pipeline/stages";
 import { requirePrivilege, requireUser } from "@/features/users/session";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -8,6 +8,19 @@ type RouteContext = { params: Promise<{ id: string }> };
 async function stageId(context: RouteContext): Promise<number | null> {
   const id = Number((await context.params).id);
   return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
+/** How many deals are in the stage (active, queued, archived): asked before deleting it from List of Values. */
+export async function GET(_request: Request, context: RouteContext) {
+  try {
+    const user = await requireUser();
+    requirePrivilege(user, "manage_stages", "You do not have permission to edit the pipeline's stages.");
+    const id = await stageId(context);
+    if (!id) return jsonError(400, "Invalid stage ID.");
+    return NextResponse.json(await stageDealCounts(id));
+  } catch (error) {
+    return handleRouteError(error, "Count stage deals");
+  }
 }
 
 /** PD-21: `{ name }` renames the stage, `{ direction: "left" | "right" }` moves it one place within its pipeline. */
