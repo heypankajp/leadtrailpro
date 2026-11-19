@@ -25,7 +25,7 @@ const select = `
 const toAttachment = (row: Row): LeadAttachment => ({
   id: Number(row.id),
   leadId: Number(row.leadId),
-  category: row.category === "profile" ? "profile" : "document",
+  category: row.category === "profile" || row.category === "contract" ? row.category : "document",
   label: row.label,
   fileName: row.fileName,
   mimeType: row.mimeType,
@@ -61,7 +61,7 @@ export async function uploadAttachment(input: UploadInput, actor: UserAccount): 
   if (!mimeType) throw new HttpError(400, "Only PDF, Word, Excel, PowerPoint, image, and text files can be attached.");
   if (input.file.size === 0) throw new HttpError(400, "The file is empty.");
   if (input.file.size > maxAttachmentBytes) throw new HttpError(400, "Files must be 15 MB or smaller.");
-  const label = input.label.trim().slice(0, 120) || (input.category === "profile" ? "Profile" : "Document");
+  const label = input.label.trim().slice(0, 120) || (input.category === "profile" ? "Profile" : input.category === "contract" ? "Contract" : "Document");
   const bytes = new Uint8Array(await input.file.arrayBuffer());
   const storageKey = await saveAttachmentFile(input.leadId, fileName, bytes);
   return withTransaction(async (connection) => {
@@ -80,7 +80,7 @@ export async function uploadAttachment(input: UploadInput, actor: UserAccount): 
     const id = insertId(result);
     await addActivity(connection, {
       leadId: input.leadId, userId: actor.id, type: "file",
-      summary: `${input.category === "profile" ? "Profile shared" : "Document attached"}: ${label} — ${fileName}${version > 1 ? ` (v${version})` : ""}`,
+      summary: `${input.category === "profile" ? "Profile shared" : input.category === "contract" ? "Contract uploaded" : "Document attached"}: ${label} — ${fileName}${version > 1 ? ` (v${version})` : ""}`,
       meta: { attachmentId: id, category: input.category, version }, occurredAt: now,
     });
     await recordAudit(connection, {
@@ -88,7 +88,7 @@ export async function uploadAttachment(input: UploadInput, actor: UserAccount): 
       after: { leadId: input.leadId, category: input.category, label, fileName, sizeBytes: input.file.size, version }, details: `${actor.name} uploaded ${fileName} to deal ${input.leadId}`,
     }, now);
     const lead = await getLead(input.leadId, connection);
-    if (lead) await notifyUsers(connection, { userIds: [lead.ownerId], actorId: actor.id, type: "file_uploaded", title: `${input.category === "profile" ? "Profile shared" : "Document added"} on ${lead.clientName}`, body: `${actor.name} uploaded ${fileName} (${label}).`, leadId: lead.id });
+    if (lead) await notifyUsers(connection, { userIds: [lead.ownerId], actorId: actor.id, type: "file_uploaded", title: `${input.category === "profile" ? "Profile shared" : input.category === "contract" ? "Contract uploaded" : "Document added"} on ${lead.clientName}`, body: `${actor.name} uploaded ${fileName} (${label}).`, leadId: lead.id });
     const { storageKey: _storageKey, ...attachment } = (await getAttachmentWithStorage(id, connection))!;
     void _storageKey;
     return attachment;

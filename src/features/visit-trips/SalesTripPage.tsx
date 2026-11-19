@@ -71,7 +71,7 @@ export default function SalesTripPage({ tripId }: { tripId: number }) {
                       <td><span className="trip-contact">{deal.clientExecutive || "No contact yet"}{deal.contactPhone && <small><Phone size={11} /> {deal.contactPhone}</small>}</span></td>
                       <td><span className="muted-cell">{[deal.address, deal.city].filter(Boolean).join(", ") || "—"}</span></td>
                       <td><StatusPill status={deal.statusLabel} code={deal.statusCode} /></td>
-                      <td><span className="muted-cell stage-cell">{deal.stage ?? "—"}</span></td>
+                      <td><span className="muted-cell stage-cell">{deal.statusCode === "client" ? "—" : deal.stage ?? "—"}</span></td>
                       <td><span className="muted-cell">{deal.ownerName}</span></td>
                       {canEdit && <td><button className="icon-button" aria-label={`Take ${deal.clientName} off the trip`} title="Take off the trip (back to its To Do list)" onClick={() => void remove(deal.id, deal.clientName)}><X size={14} /></button></td>}
                     </tr>

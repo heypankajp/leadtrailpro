@@ -42,7 +42,7 @@ export default function LeadTable({ leads, selected, today, view, canSelect, can
             {canSelect && <th><input aria-label="Select all deals" type="checkbox" checked={allSelected} onChange={(event) => onToggleAll(event.target.checked)} /></th>}
             <th>CLIENT</th>
             <th>STATUS</th>
-            <th>STAGE</th>
+            <th>{view === "client" ? "CLOSED DATE" : "STAGE"}</th>
             <th>LAST ACTIVITY</th>
             <th>{view === "archive" ? "REASON" : "FOLLOW-UP"}</th>
             {view === "archive" && <th>NOTES</th>}
@@ -69,7 +69,7 @@ export default function LeadTable({ leads, selected, today, view, canSelect, can
                   {lead.lastClientEmailAt && <small className={replyWaiting(lead) ? "reply-badge reply-waiting" : "reply-badge"}><MailOpen size={11} /> Client wrote {relativeTime(lead.lastClientEmailAt)}{replyWaiting(lead) ? " · awaiting reply" : ""}</small>}
                 </td>
                 <td><StatusPill status={lead.statusLabel} code={lead.statusCode} /></td>
-                <td><span className="muted-cell stage-cell">{lead.stage ?? "—"}</span></td>
+                <td><span className="muted-cell stage-cell">{view === "client" ? formatDate(lead.expectedCloseDate, "—") : lead.statusCode === "client" ? "—" : lead.stage ?? "—"}</span></td>
                 <td><span className="action-cell">{relativeTime(lead.lastActivityAt)}</span></td>
                 <td>
                   {/* Review of November 18, 2026: the archive shows the Archival reason and the notes typed with it. */}

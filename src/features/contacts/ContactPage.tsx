@@ -59,7 +59,7 @@ function Shell({ kind, name, subtitle, ownerName, actions, side, deals, activiti
                 <button key={deal.id} className="contact-deal-row" onClick={() => openLead(deal.id)}>
                   <span className="contact-deal-title"><strong>{deal.clientName}</strong><small>{[kind === "organization" ? deal.clientExecutive : "", deal.positions].filter(Boolean).join(" · ") || "No contact or positions yet"}</small></span>
                   <StatusPill status={deal.status} code={deal.statusCode} />
-                  <span className="contact-deal-meta">{deal.recordState === "archived" ? "Archived" : deal.recordState === "queued" ? "Queued for approval" : deal.stage ?? "No stage"}</span>
+                  <span className="contact-deal-meta">{deal.recordState === "archived" ? "Archived" : deal.recordState === "queued" ? "Queued for approval" : deal.statusCode === "client" ? "Client" : deal.stage ?? "No stage"}</span>
                   <span className="contact-deal-meta">{deal.ownerName}</span>
                   <span className="contact-deal-meta">{relativeTime(deal.lastActivityAt)}</span>
                 </button>

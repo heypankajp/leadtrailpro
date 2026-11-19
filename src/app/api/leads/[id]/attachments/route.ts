@@ -24,7 +24,7 @@ export async function GET(_request: Request, context: RouteContext) {
   }
 }
 
-/** Multipart upload: fields `file`, `category` (document | profile), and `label`. */
+/** Multipart upload: fields `file`, `category` (document | profile | contract), and `label`. */
 export async function POST(request: Request, context: RouteContext) {
   try {
     requireSameOrigin(request);
@@ -37,7 +37,8 @@ export async function POST(request: Request, context: RouteContext) {
     const form = await request.formData().catch(() => null);
     const file = form?.get("file");
     if (!form || !(file instanceof File)) return jsonError(400, "Choose a file to upload.");
-    const category = form.get("category") === "profile" ? "profile" : "document";
+    const requested = form.get("category");
+    const category = requested === "profile" || requested === "contract" ? requested : "document";
     const label = typeof form.get("label") === "string" ? String(form.get("label")) : "";
     const attachment = await uploadAttachment({ leadId: id, category, label, file }, user);
     return NextResponse.json({ attachment }, { status: 201 });

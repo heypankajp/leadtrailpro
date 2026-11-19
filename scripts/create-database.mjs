@@ -1290,6 +1290,18 @@ const migrations = [
       await client.query("CREATE INDEX IF NOT EXISTS idx_opportunity_persons_person ON opportunity_persons (person_id)");
     },
   },
+  {
+    version: 41,
+    name: "A client's Closed Date (request of November 19, 2026): expected_close_date of existing clients, the day they became clients",
+    async run(client) {
+      // The day of the last change to Client on the timeline, else the contract-signed date, else the last update.
+      await client.query(`
+        UPDATE leads l SET expected_close_date = COALESCE(
+          (SELECT MAX(a.occurred_at)::date FROM lead_activities a WHERE a.lead_id = l.id AND a.activity_type = 'status_change' AND a.value_code = 'client'),
+          l.contract_signed_date, l.updated_at::date)
+        WHERE l.expected_close_date IS NULL AND l.status_id IN (SELECT id FROM list_values WHERE list_key = 'status' AND code = 'client')`);
+    },
+  },
 ];
 
 if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port > 65535 || !/^[a-z_][a-z0-9_]*$/.test(databaseName)) {

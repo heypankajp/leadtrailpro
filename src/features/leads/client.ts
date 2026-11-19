@@ -51,7 +51,7 @@ export type FollowUpTaskInput = { title: string; description?: string; dueAt: st
 export const logActivity = (id: number, entry: { type: LoggableActivityType; summary: string; body: string; occurredAt: string | null; followUpTask?: FollowUpTaskInput }) =>
   api<{ activity: LeadActivity; task: Task | null; lead: LeadSummary }>(`/api/leads/${id}/activities`, { method: "POST", json: entry });
 
-export async function uploadAttachment(leadId: number, file: File, category: "document" | "profile", label: string): Promise<LeadAttachment> {
+export async function uploadAttachment(leadId: number, file: File, category: "document" | "profile" | "contract", label: string): Promise<LeadAttachment> {
   const form = new FormData();
   form.set("file", file);
   form.set("category", category);

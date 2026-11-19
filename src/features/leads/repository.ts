@@ -572,6 +572,8 @@ export async function createLead(input: LeadInput, actor: UserAccount, ownerId: 
     const queued = isHistoricalFirstContact(input.firstContactDate) && !hasPrivilege(actor, "review_queued") && !fromTracker;
     // PIPE-02: a chosen stage, else the stage of the BD action, else New Deal.
     const stageId = input.stageId ?? (await stageForAction(connection, input.bdActionId))?.id ?? null;
+    // A client added outright (+ Client) gets today as its Closed Date unless one is given (request of November 19, 2026).
+    const newClient = (await getListValue(input.statusId, connection))?.code === "client";
     const now = new Date();
     const nowSql = toSqlDateTime(now);
     const result = await connection.query(
@@ -585,7 +587,7 @@ export async function createLead(input: LeadInput, actor: UserAccount, ownerId: 
         JSON.stringify(input.clientEmails), input.industry, input.positions || null,
         input.firstContactDate, input.followUpDate, input.contractSignedDate,
         queued ? "queued" : "active", queued ? "Historical first-contact date awaiting Admin approval" : null, nowSql, nowSql, nowSql,
-        input.dealValue ?? null, input.expectedCloseDate ?? null,
+        input.dealValue ?? null, input.expectedCloseDate ?? (newClient ? todayYmd() : null),
       ],
     );
     const id = insertId(result);
@@ -639,6 +641,11 @@ export async function updateLead(id: number, changes: Partial<LeadInput>, actor:
       const statusChanged = statusId !== existing.statusId;
       const candidate = changes.statusReasonId !== undefined ? changes.statusReasonId : statusChanged ? null : existing.statusReasonId;
       changes = { ...changes, statusReasonId: await enforceStatusReason(connection, statusId, candidate) };
+      // A deal converted to a client (request of November 19, 2026): its Closed Date (expected_close_date) is the day of the
+      // conversion unless one is given; the person may change it later. A client put back in the pipeline keeps the date.
+      if (statusChanged && existing.statusCode !== "client" && changes.expectedCloseDate === undefined && (await getListValue(statusId, connection))?.code === "client") {
+        changes = { ...changes, expectedCloseDate: todayYmd() };
+      }
     }
     const columnMap: Record<keyof LeadInput, string> = {
       clientName: "client_name", companyUrl: "company_url", address: "address", comments: "comments", clientExecutive: "client_executive",

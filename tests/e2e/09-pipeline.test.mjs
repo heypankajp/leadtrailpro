@@ -268,6 +268,18 @@ describe("Pipeline board (PIPE-*)", () => {
     await page.nav("Clients");
     await page.heading("Clients");
     await page.waitLeadRow(client);
+    // A client is shown as a client (request of November 19, 2026): no stage bar, a Closed Date, and Move back to pipeline asks the stage.
+    await page.click(By.xpath(`//table[contains(@class,"lead-table")]//tr[.//strong[normalize-space()=${xq(client)}]]//button[contains(@class,"client-cell")]`), { global: true });
+    await page.eyebrow("CLIENT");
+    assert.equal((await driver.findElements(By.css(".stage-bar"))).length, 0);
+    await page.waitText(By.css("div.deal-page"), "Closed Date");
+    await page.clickButton("Move back to pipeline", { global: true });
+    await page.dialogTitle(`Move ${client} back to the pipeline`);
+    await page.setValue(await page.control("Pipeline stage"), "Qualified");
+    await page.clickButton("Move back to pipeline");
+    await page.toast(`${client} is back in the pipeline`);
+    await page.eyebrow("DEAL");
+    await page.wait(By.css('.stage-bar button[aria-current="step"][aria-label="Qualified (current stage)"]'));
   });
 
   uiTest("the Filter menu lists the quarters from today, and Quiet Deals leaves out a deal first contacted today (PD-37)", async () => {

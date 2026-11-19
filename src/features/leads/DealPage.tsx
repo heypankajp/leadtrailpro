@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useCallback, useEffect, type FormEvent, type ReactNode } from "react";
 import {
-  Archive, ArrowLeft, Building2, CalendarCheck2, Check, ChevronDown, CircleDollarSign, Download, ExternalLink, FileText, History, Info, Mail, MapPin, MessageSquare, Paperclip, Pencil, Phone, Plus, RotateCcw, Trash2, UserRound, Users,
+  Archive, ArrowLeft, Building2, CalendarCheck2, Check, ChevronDown, CircleDollarSign, Download, ExternalLink, FileSignature, FileText, History, Info, Mail, MapPin, MessageSquare, Paperclip, Pencil, Phone, Plus, RotateCcw, Trash2, Undo2, UserRound, Users,
 } from "lucide-react";
 import mammoth from "mammoth";
 import { errorMessage } from "@/lib/api";
@@ -16,6 +16,7 @@ import { reasonListFor, type ListKey, type ListValue } from "@/features/list-val
 import CollaborationTab from "@/features/messages/CollaborationTab";
 import NextStepDialog from "@/features/pipeline/NextStepDialog";
 import StageBar from "@/features/pipeline/StageBar";
+import { offBoardStatusCodes, stageChoices } from "@/features/pipeline/model";
 import RichText from "@/features/shell/RichText";
 import RichTextArea from "@/features/shell/RichTextArea";
 import { useApp } from "@/features/shell/AppContext";
@@ -31,7 +32,7 @@ import { activityIcons } from "@/features/tasks/ScheduleActivity";
 import LeadFormDialog from "./LeadFormDialog";
 import { activityLabels, formatDealValue, type LeadActivity, type LeadSummary, type LoggableActivityType } from "./model";
 
-type HistoryTab = "timeline" | "collaboration" | "emails" | "files" | "profiles" | "history";
+type HistoryTab = "timeline" | "collaboration" | "emails" | "files" | "contracts" | "profiles" | "history";
 type TimelineFilter = "all" | "notes" | "activities" | "changes";
 
 const activityIcon = (type: LeadActivity["type"]) => {
@@ -66,6 +67,7 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
     | { kind: "transfer-pick" } | { kind: "transfer-reason"; user: UserSummary } | { kind: "archive" } | { kind: "restore" } | { kind: "review"; approve: boolean } | { kind: "task"; task?: Task }
     | { kind: "status-reason"; statusId: number; statusName: string; listKey: ListKey }
     | { kind: "convert-client"; statusId: number }
+    | { kind: "move-back" }
     | null
   >(null);
 
@@ -89,6 +91,8 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
   const owners = reference.users.filter((item) => item.role !== "recruiter");
   const documents = detail.attachments.filter((file) => file.category === "document");
   const profiles = detail.attachments.filter((file) => file.category === "profile");
+  // The contract of a deal or client (request of November 19, 2026): a tab of its own and Upload contract in the header.
+  const contracts = detail.attachments.filter((file) => file.category === "contract");
 
   // LEAD-06: Lost Lead and Disqualified ask for a reason before the status changes; other statuses apply at once.
   const changeStatus = async (statusId: number) => {
@@ -105,6 +109,8 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
     }
   };
   const reasonKey = reasonListFor(lead.statusCode);
+  // A client is shown as a client (request of November 19, 2026): no stage bar, a read-only status, its Closed Date.
+  const isClient = lead.statusCode === "client";
 
   const quickUpdate = async (changes: Parameters<typeof updateLead>[1], message: string, prompt?: string) => {
     try {
@@ -118,6 +124,11 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
 
   const headerActions = (
     <>
+      {can("upload_files") && lead.recordState !== "archived" && (
+        <button className="button button-outline button-small" onClick={() => { setTab("contracts"); window.setTimeout(() => document.getElementById("deal-history")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); }}>
+          <FileSignature size={14} /> Upload contract
+        </button>
+      )}
       {canEdit && lead.recordState !== "archived" && <button className="button button-outline button-small" onClick={() => setEditing(true)}><Pencil size={14} /> Edit</button>}
       {canTransfer && lead.recordState === "active" && <button className="button button-outline button-small" onClick={() => setDialog({ kind: "transfer-pick" })}><UserRound size={14} /> Transfer</button>}
       {can("review_queued") && lead.recordState === "queued" && (
@@ -166,7 +177,7 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
           {back}
           <Avatar name={lead.clientName} seed={lead.id} />
           <div className="deal-heading">
-            <span className="eyebrow">{lead.recordState === "queued" ? "QUEUED FOR APPROVAL" : lead.recordState === "archived" ? "ARCHIVED DEAL" : "DEAL"}</span>
+            <span className="eyebrow">{lead.recordState === "queued" ? "QUEUED FOR APPROVAL" : lead.recordState === "archived" ? (isClient ? "ARCHIVED CLIENT" : "ARCHIVED DEAL") : isClient ? "CLIENT" : "DEAL"}</span>
             <h1 className="lead-title">
               {lead.companyUrl
                 ? <a className="company-link-icon" href={lead.companyUrl} target="_blank" rel="noopener noreferrer" aria-label={`Open ${lead.clientName} website`} title="Open company website"><ExternalLink size={14} /></a>
@@ -176,7 +187,14 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
             <p>{lead.leadType}{lead.industry ? ` · ${lead.industry}` : ""}{lead.city ? ` · ${lead.city}` : ""}</p>
           </div>
           <div className="status-row">
-            {canEdit && lead.recordState !== "archived" ? (
+            {/* A client is the pipeline's end (request of November 19, 2026): its status is not changed here; "Move back to
+                pipeline" puts back one converted by mistake, asking for the stage. */}
+            {isClient ? (
+              <>
+                <StatusPill status={lead.statusLabel} code={lead.statusCode} />
+                {canEdit && lead.recordState === "active" && <button type="button" className="button button-outline button-small" onClick={() => setDialog({ kind: "move-back" })}><Undo2 size={14} /> Move back to pipeline</button>}
+              </>
+            ) : canEdit && lead.recordState !== "archived" ? (
               <label className={`status-pill status-${lead.statusCode} status-select-pill`}>
                 <i />
                 <select aria-label="Update deal status" value={lead.statusId} onChange={(event) => void changeStatus(Number(event.target.value))}>
@@ -194,7 +212,7 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
           <div className="detail-owner"><small>OWNER</small><strong>{lead.ownerName}</strong></div>
           <div className="detail-header-actions">{headerActions}</div>
         </header>
-        {lead.recordState !== "archived" && (
+        {lead.recordState !== "archived" && !isClient && (
           <StageBar lead={lead} canMove={canEdit} onMoved={(message, task, moved) => { void refresh(message); if (!task) offerNextStep("You moved the deal to a new stage.", moved); }} />
         )}
         {(lead.archiveReason || lead.stateReason) && <div className="form-note state-note"><History size={14} /> {[lead.archiveReason, lead.stateReason].filter(Boolean).join(": ")}</div>}
@@ -235,13 +253,14 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
               )}
             </section>
 
-            <section className="deal-block" aria-label="History">
+            <section className="deal-block" aria-label="History" id="deal-history">
               <div className="deal-block-head"><h2>History</h2></div>
               <Tabs
                 tabs={[
                   { id: "timeline", label: "Timeline", count: detail.activities.length },
                   { id: "collaboration", label: "Collaboration", count: detail.messageCount },
                   { id: "files", label: "Documents", count: documents.length },
+                  { id: "contracts", label: "Contracts", count: contracts.length },
                   { id: "profiles", label: "Profiles shared", count: profiles.length },
                   ...(detail.audit.length ? [{ id: "history" as const, label: "Audit", count: detail.audit.length }] : []),
                 ]}
@@ -250,8 +269,8 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
               />
               {tab === "timeline" && <TimelineList activities={detail.activities} />}
               {tab === "collaboration" && <CollaborationTab leadId={lead.id} attachments={detail.attachments} canPost={can("collaborate") && lead.recordState !== "archived"} onChanged={() => { reload(); bumpData(); }} />}
-              {(tab === "files" || tab === "profiles") && (
-                <FilesTab key={tab} category={tab === "files" ? "document" : "profile"} files={tab === "files" ? documents : profiles} leadId={lead.id} onChanged={(message) => refresh(message)} />
+              {(tab === "files" || tab === "profiles" || tab === "contracts") && (
+                <FilesTab key={tab} category={tab === "files" ? "document" : tab === "contracts" ? "contract" : "profile"} files={tab === "files" ? documents : tab === "contracts" ? contracts : profiles} leadId={lead.id} onChanged={(message) => refresh(message)} />
               )}
               {tab === "history" && (
                 <div className="audit-list">
@@ -291,6 +310,17 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
       {dialog?.kind === "review" && (
         <PromptDialog title={dialog.approve ? `Approve ${lead.clientName}` : `Reject ${lead.clientName}`} eyebrow="QUEUED DEAL" label={dialog.approve ? "Comment (optional)" : "Reason"} required={!dialog.approve} danger={!dialog.approve} confirmLabel={dialog.approve ? "Approve" : "Reject"} onClose={() => setDialog(null)} onConfirm={async (comment) => { await reviewLead(lead.id, dialog.approve, comment); setDialog(null); await refresh(dialog.approve ? "Deal approved" : "Deal rejected"); }} />
       )}
+      {dialog?.kind === "move-back" && (
+        <MoveBackDialog
+          lead={lead}
+          onClose={() => setDialog(null)}
+          onConfirm={async (statusId, stageId) => {
+            await updateLead(lead.id, { statusId, stageId, statusReasonId: null });
+            setDialog(null);
+            await refresh(`${lead.clientName} is back in the pipeline`);
+          }}
+        />
+      )}
       {dialog?.kind === "convert-client" && (
         <ConvertToClientDialog
           dealName={lead.clientName}
@@ -318,6 +348,50 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
 }
 
 /** Asks for the Status Reason that Lost Lead and Disqualified require (LEAD-06); also used by the board by status (PD-24). */
+/**
+ * Puts back a client converted by mistake (request of November 19, 2026): the pipeline stage it goes to and its status
+ * (Cold, Warm or Hot), both asked. Its Closed Date is kept.
+ */
+function MoveBackDialog({ lead, onConfirm, onClose }: { lead: LeadSummary; onConfirm: (statusId: number, stageId: number) => Promise<void>; onClose: () => void }) {
+  const { reference } = useApp();
+  const stages = stageChoices(reference.listValues.stage, reference.pipelines).filter((item) => item.active);
+  const statuses = reference.listValues.status.filter((item) => item.active && !offBoardStatusCodes.includes(item.code));
+  const [stageId, setStageId] = useState(String(stages.find((item) => item.id === lead.stageId)?.id ?? ""));
+  const [statusId, setStatusId] = useState(String(statuses.find((item) => item.code === "hot")?.id ?? statuses[0]?.id ?? ""));
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!stageId) { setError("Choose the pipeline stage."); return; }
+    setBusy(true);
+    setError("");
+    try { await onConfirm(Number(statusId), Number(stageId)); } catch (caught) { setError(errorMessage(caught, "Could not move the client back.")); setBusy(false); }
+  };
+  return (
+    <Dialog title={`Move ${lead.clientName} back to the pipeline`} eyebrow="CLIENT" size="narrow" onClose={onClose}>
+      <form className="lead-form" onSubmit={submit}>
+        <p className="dialog-description field-wide">Converted to a client by mistake? It goes back to the pipeline at the stage you choose.</p>
+        <Field label="Pipeline stage" required wide>
+          <select value={stageId} onChange={(event) => setStageId(event.target.value)} required autoFocus>
+            <option value="">Choose a stage...</option>
+            {stages.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
+          </select>
+        </Field>
+        <Field label="Status" required wide>
+          <select value={statusId} onChange={(event) => setStatusId(event.target.value)} required>
+            {statuses.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
+          </select>
+        </Field>
+        <div className="field-wide"><ErrorText message={error} /></div>
+        <div className="modal-actions">
+          <button type="button" className="button button-outline" onClick={onClose}>Cancel</button>
+          <button type="submit" className="button button-primary" disabled={busy}><Undo2 size={14} /> {busy ? "Moving..." : "Move back to pipeline"}</button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
 export function StatusReasonDialog({ leadName, statusName, options, onConfirm, onClose }: { leadName: string; statusName: string; options: ListValue[]; onConfirm: (statusReasonId: number) => Promise<void>; onClose: () => void }) {
   const [reasonId, setReasonId] = useState("");
   const [error, setError] = useState("");
@@ -378,7 +452,9 @@ function SidePanels({ detail, overdue }: { detail: LeadDetail; overdue: boolean 
         <SideRow label="Next follow-up"><strong className={overdue ? "overdue" : lead.followUpDate === reference.today ? "due-today" : ""}>{formatDate(lead.followUpDate)}{overdue ? " · overdue" : ""}</strong></SideRow>
         {/* PD-11: both are optional and only take room once one of them is filled. */}
         {(lead.dealValue !== null && lead.dealValue !== undefined) && <SideRow label="Value"><strong>{formatDealValue(lead.dealValue)}</strong></SideRow>}
-        {lead.expectedCloseDate && <SideRow label="Expected close"><strong>{formatDate(lead.expectedCloseDate)}</strong></SideRow>}
+        {lead.statusCode === "client"
+          ? <SideRow label="Closed Date"><strong>{formatDate(lead.expectedCloseDate, "Not set")}</strong></SideRow>
+          : lead.expectedCloseDate && <SideRow label="Expected close"><strong>{formatDate(lead.expectedCloseDate)}</strong></SideRow>}
         <SideRow label="Deal source"><strong>{lead.leadType}</strong></SideRow>
         <SideRow label="Deal category"><strong>{lead.leadCategory ?? "Not set"}</strong></SideRow>
       </SidePanel>
@@ -573,9 +649,9 @@ function TimelineList({ activities }: { activities: LeadActivity[] }) {
   );
 }
 
-function FilesTab({ category, files, leadId, onChanged }: { category: "document" | "profile"; files: LeadAttachment[]; leadId: number; onChanged: (message: string) => Promise<void> }) {
+function FilesTab({ category, files, leadId, onChanged }: { category: "document" | "profile" | "contract"; files: LeadAttachment[]; leadId: number; onChanged: (message: string) => Promise<void> }) {
   const { can, notify } = useApp();
-  const [label, setLabel] = useState(category === "profile" ? "Candidate profile" : "JD");
+  const [label, setLabel] = useState(category === "profile" ? "Candidate profile" : category === "contract" ? "Contract" : "JD");
   const [customLabel, setCustomLabel] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -607,7 +683,7 @@ function FilesTab({ category, files, leadId, onChanged }: { category: "document"
       setFile(null);
       setCustomLabel("");
       setInputKey((key) => key + 1);
-      await onChanged(category === "profile" ? "Profile shared" : "Document attached");
+      await onChanged(category === "profile" ? "Profile shared" : category === "contract" ? "Contract uploaded" : "Document attached");
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -648,9 +724,9 @@ function FilesTab({ category, files, leadId, onChanged }: { category: "document"
     <section className="lead-attachments">
       {can("upload_files") && (
         <form className="attachment-form" onSubmit={upload}>
-          <Field label={category === "profile" ? "Profile name" : "Document type"}>
-            {category === "profile"
-              ? <input value={label} onChange={(event) => setLabel(event.target.value)} maxLength={120} placeholder="Candidate name or role" />
+          <Field label={category === "profile" ? "Profile name" : category === "contract" ? "Contract name" : "Document type"}>
+            {category === "profile" || category === "contract"
+              ? <input value={label} onChange={(event) => setLabel(event.target.value)} maxLength={120} placeholder={category === "contract" ? "e.g. Service agreement 2026" : "Candidate name or role"} />
               : <select value={label} onChange={(event) => setLabel(event.target.value)}>{documentLabels.map((option) => <option key={option}>{option}</option>)}</select>}
           </Field>
           {category === "document" && label === "Other" && <Field label="Specify name"><input value={customLabel} onChange={(event) => setCustomLabel(event.target.value)} maxLength={120} required placeholder="Enter document name" /></Field>}
@@ -658,7 +734,7 @@ function FilesTab({ category, files, leadId, onChanged }: { category: "document"
             <input key={inputKey} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp,.txt" onChange={(event) => setFile(event.target.files?.[0] ?? null)} required />
           </Field>
           <ErrorText message={error} />
-          <div className="attachment-submit"><button className="button button-outline" type="submit" disabled={busy}><Paperclip size={14} /> {busy ? "Uploading..." : category === "profile" ? "Share profile" : "Add document"}</button></div>
+          <div className="attachment-submit"><button className="button button-outline" type="submit" disabled={busy}><Paperclip size={14} /> {busy ? "Uploading..." : category === "profile" ? "Share profile" : category === "contract" ? "Upload contract" : "Add document"}</button></div>
         </form>
       )}
       <div className="attachment-list">
@@ -674,7 +750,7 @@ function FilesTab({ category, files, leadId, onChanged }: { category: "document"
             {can("delete_files") && !attachment.deletedAt && <button className="icon-button" aria-label={`Remove ${attachment.fileName}`} onClick={() => void remove(attachment)}><Trash2 size={14} /></button>}
           </div>
         ))}
-        {!files.length && <p className="no-attachments">{category === "profile" ? "No candidate profiles shared yet." : "No documents yet."}</p>}
+        {!files.length && <p className="no-attachments">{category === "profile" ? "No candidate profiles shared yet." : category === "contract" ? "No contract uploaded yet." : "No documents yet."}</p>}
       </div>
     </section>
   );

@@ -370,7 +370,7 @@ export default function AppShell({ user, setUser, signOut, passwordSignIn }: { u
             onSaved={(lead) => {
               setNewDeal(null);
               bumpData();
-              notify(lead.recordState === "queued" ? `${lead.clientName} saved and queued for Admin approval` : `${lead.clientName} added to the pipeline`);
+              notify(lead.recordState === "queued" ? `${lead.clientName} saved and queued for Admin approval` : lead.statusCode === "client" ? `${lead.clientName} added to Clients` : `${lead.clientName} added to the pipeline`);
               if (lead.recordState === "queued" && can("review_queued")) navigate("deals", "queued");
               else openLead(lead.id);
             }}

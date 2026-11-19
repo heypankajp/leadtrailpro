@@ -1,4 +1,5 @@
-export const attachmentCategories = ["document", "profile"] as const;
+/** "contract": the signed contract of a deal or client (request of November 19, 2026). */
+export const attachmentCategories = ["document", "profile", "contract"] as const;
 export type AttachmentCategory = (typeof attachmentCategories)[number];
 
 export type LeadAttachment = {

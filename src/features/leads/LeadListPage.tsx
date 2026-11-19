@@ -56,7 +56,8 @@ const emptyFilters: Filters = {
 
 /** A deal list. On the Deals page (`embedded`) the heading, the view switch and the "+ Deal" button come from DealsPage. */
 export default function LeadListPage({ view, embedded = false }: { view: LeadListView; embedded?: boolean }) {
-  const { reference, can, route, navigate, openLead, openNewLead, notify, dataVersion, bumpData } = useApp();
+  const { reference, can, route, navigate, openLead, openNewLead, openNewLeadFor, notify, dataVersion, bumpData } = useApp();
+  const clientStatusId = reference.listValues.status.find((item) => item.code === "client")?.id ?? null;
   // The shell keys this page by view and URL query, so initial filters come straight from the route.
   const [filters, setFilters] = useState<Filters>(() => {
     const sort = route.query.get("sort");
@@ -186,7 +187,9 @@ export default function LeadListPage({ view, embedded = false }: { view: LeadLis
             <h1>{title.title}</h1>
             <p>{title.blurb}</p>
           </div>
-          {can("create_leads") && view !== "archive" && view !== "queued" && <button className="button button-primary" onClick={openNewLead}><Plus size={17} /> Deal</button>}
+          {/* The Clients page adds a client (request of November 19, 2026): no pipeline stage, Status Client, Closed Date today. */}
+          {can("create_leads") && view === "client" && clientStatusId && <button className="button button-primary" onClick={() => openNewLeadFor({ prefill: { statusId: clientStatusId, expectedCloseDate: reference.today } })}><Plus size={17} /> Client</button>}
+          {can("create_leads") && view !== "archive" && view !== "queued" && view !== "client" && <button className="button button-primary" onClick={openNewLead}><Plus size={17} /> Deal</button>}
         </div>
       )}
 
@@ -309,7 +312,7 @@ export default function LeadListPage({ view, embedded = false }: { view: LeadLis
           )}
           {data && (
             <div className="table-footer">
-              <span>Showing <strong>{data.leads.length}</strong> of <strong>{data.total}</strong> deals{loading ? " · refreshing" : ""}</span>
+              <span>Showing <strong>{data.leads.length}</strong> of <strong>{data.total}</strong> {view === "client" ? "clients" : "deals"}{loading ? " · refreshing" : ""}</span>
               <Pagination page={data.page} pageSize={data.pageSize} total={data.total} onPage={setPage} />
             </div>
           )}

@@ -11,7 +11,7 @@ import StagePicker from "@/features/pipeline/StagePicker";
 import { fetchOrganization, fetchOrganizations, fetchPerson } from "@/features/contacts/client";
 import { OrganizationFormDialog, PersonFormDialog } from "@/features/contacts/ContactFormDialogs";
 import { contactKey, type OrganizationDetail, type OrganizationRow } from "@/features/contacts/model";
-import { createLead, updateLead } from "./client";
+import { createLead, updateLead, uploadAttachment } from "./client";
 import { dealCurrency, parseDealValue, type LeadInput, type LeadSummary } from "./model";
 
 type Props = {
@@ -41,7 +41,7 @@ type FormState = {
 
 /** Add or edit a lead with every field from BRD section 6 except files and notes (those live on the lead itself). */
 export default function LeadFormDialog({ lead, prefill, opportunityId, contact, importedHistory, onClose, onSaved }: Props) {
-  const { reference, can, user, openLead } = useApp();
+  const { reference, can, user, openLead, notify } = useApp();
   const values = reference.listValues;
   const defaultStatus = values.status.find((item) => item.code === "cold") ?? values.status[0];
   // PIPE-02: a new lead starts in the entry stage unless the form says otherwise.
@@ -60,7 +60,7 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
     leadTypeId: prefill?.leadTypeId ? String(prefill.leadTypeId) : values.lead_type[0] ? String(values.lead_type[0].id) : "", statusId: prefill?.statusId ? String(prefill.statusId) : defaultStatus ? String(defaultStatus.id) : "",
     statusReasonId: "", leadCategoryId: "",
     companySizeId: prefill?.companySizeId ? String(prefill.companySizeId) : "", cityId: prefill?.cityId ? String(prefill.cityId) : "", firstContactDate: prefill?.firstContactDate || reference.today, followUpDate: prefill?.followUpDate ?? "", contractSignedDate: prefill?.contractSignedDate ?? "", ownerId: String(user.id), stageId: prefill?.stageId ? String(prefill.stageId) : entryStage ? String(entryStage.id) : "",
-    dealValue: "", expectedCloseDate: "",
+    dealValue: "", expectedCloseDate: prefill?.expectedCloseDate ?? "",
   });
   const [duplicate, setDuplicate] = useState<DuplicateNotice | null>(null);
   const [confirm, setConfirm] = useState<ConfirmNotice | null>(null);
@@ -74,6 +74,14 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
   const [addingPerson, setAddingPerson] = useState<string | null>(null);
   // The Client status picked, waiting for "Do you want to convert this deal to client?".
   const [clientStatusId, setClientStatusId] = useState<string | null>(null);
+  // Editing a client (request of November 19, 2026): Client details, no stage, Deal source and Status read-only, Closed Date.
+  const editingClient = lead?.statusCode === "client";
+  // + Client on the Clients page (request of November 19, 2026): a client added outright. No pipeline stage; Status is Client;
+  // the Closed Date starts on today.
+  const addingClient = !lead && Boolean(prefill?.statusId) && values.status.find((item) => item.id === prefill?.statusId)?.code === "client";
+  const clientMode = editingClient || addingClient;
+  // Add client: the signed contract, uploaded once the client is saved (request of November 19, 2026).
+  const [contractFile, setContractFile] = useState<File | null>(null);
   // "Save anyway" on a similar company is kept when the new organization is then confirmed.
   const allowSimilarChosen = useRef(false);
   const [error, setError] = useState("");
@@ -218,6 +226,11 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
         organizationId: contact?.organizationId ?? matchedOrganization?.organization.id ?? null, personId: contact?.personId ?? matchedPerson?.id ?? null,
         allowSimilar, createOrganization: confirmed || newOrganization, createContact: confirmed || newContact,
       });
+      if (!lead && contractFile) {
+        // The client exists now; a failed upload does not undo it: the contract can be added from its Contracts tab.
+        try { await uploadAttachment(result.lead.id, contractFile, "contract", "Contract"); }
+        catch (uploadError) { notify(`${result.lead.clientName} was saved, but the contract could not be uploaded: ${errorMessage(uploadError)} Add it from the client's Contracts tab.`, "error"); }
+      }
       onSaved(result.lead);
     } catch (caught) {
       const apiError = caught instanceof ApiError ? caught : null;
@@ -237,7 +250,7 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
   );
 
   return (
-    <Dialog title={lead ? `Edit ${lead.clientName}` : "Add deal"} eyebrow={lead ? "DEAL DETAILS" : undefined} onClose={onClose} size="wide">
+    <Dialog title={lead ? `Edit ${lead.clientName}` : addingClient ? "Add client" : "Add deal"} eyebrow={lead ? (editingClient ? "CLIENT DETAILS" : "DEAL DETAILS") : undefined} onClose={onClose} size="wide">
       {/* The add-deal layout: the deal on the left, the person and the organization on the right. */}
       <form className="lead-form deal-form" onSubmit={submit}>
         <div className="deal-form-col">
@@ -282,7 +295,20 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
                 />
               : <input value={form.clientExecutive} onChange={(event) => { set("clientExecutive")(event); setConfirm(null); }} maxLength={160} placeholder="Contact person" />}
           </Field>
-          <StagePicker value={form.stageId} onChange={(stageId) => setForm((current) => ({ ...current, stageId }))} hint={lead ? undefined : "Where the deal starts on the board: click an arrow."} />
+          {!clientMode && <StagePicker value={form.stageId} onChange={(stageId) => setForm((current) => ({ ...current, stageId }))} hint={lead ? undefined : "Where the deal starts on the board: click an arrow."} />}
+          {/* A client's Deal source and Status are not edited (request of November 19, 2026): "Move back to pipeline" on its page changes the status. */}
+          {editingClient ? (
+            <>
+              <Field label="Deal source"><input value={lead?.leadType ?? ""} disabled /></Field>
+              <Field label="Status"><input value={lead?.statusLabel ?? "Client"} disabled /></Field>
+            </>
+          ) : addingClient ? (
+            <>
+              <Field label="Deal source" required>{select("leadTypeId", values.lead_type, "")}</Field>
+              <Field label="Status"><input value="Client" disabled /></Field>
+            </>
+          ) : (
+          <>
           <Field label="Deal source" required>{select("leadTypeId", values.lead_type, "")}</Field>
           <Field label="Status" required>
             <select value={form.statusId} onChange={(event) => {
@@ -294,7 +320,9 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
               {values.status.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
             </select>
           </Field>
-          {reasonKey && (
+          </>
+          )}
+          {reasonKey && !clientMode && (
             <Field label="Status reason" required wide hint="Shown with the status everywhere as \u201cStatus \u2013 Reason\u201d.">
               <select value={form.statusReasonId} onChange={set("statusReasonId")} required>
                 <option value="">Choose a reason</option>
@@ -307,7 +335,14 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
           </Field>
           <Field label="Follow-up date"><input type="date" value={form.followUpDate} onChange={set("followUpDate")} /></Field>
           <Field label={`Value (${dealCurrency})`} hint="Optional."><input inputMode="decimal" value={form.dealValue} onChange={set("dealValue")} maxLength={16} placeholder="e.g. 25,000" /></Field>
-          <Field label="Expected close date" hint="Optional."><input type="date" value={form.expectedCloseDate} onChange={set("expectedCloseDate")} /></Field>
+          {clientMode
+            ? <Field label="Closed Date" hint="The day it became a client; change it if it closed on another day."><input type="date" value={form.expectedCloseDate} onChange={set("expectedCloseDate")} /></Field>
+            : <Field label="Expected close date" hint="Optional."><input type="date" value={form.expectedCloseDate} onChange={set("expectedCloseDate")} /></Field>}
+          {addingClient && can("upload_files") && (
+            <Field label="Contract" wide hint="Optional: the signed contract (PDF, Word or image, 15 MB max). It is listed under the client's Contracts.">
+              <input type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp" onChange={(event) => setContractFile(event.target.files?.[0] ?? null)} />
+            </Field>
+          )}
           {!lead && can("reassign_leads") && (
             <Field label="Owner" wide hint={opportunityId ? "Who will follow up this company; the deal is created in their name." : "The creator becomes the owner unless you choose someone else."}><select value={form.ownerId} onChange={set("ownerId")}>{owners.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
           )}
@@ -370,7 +405,7 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
         <div className="field-wide"><ErrorText message={error} /></div>
         <div className="modal-actions">
           <button type="button" className="button button-outline" onClick={onClose}>Cancel</button>
-          <button type="submit" className="button button-primary" disabled={saving}>{lead ? <Save size={15} /> : <Plus size={15} />} {saving ? "Saving..." : lead ? "Save changes" : "Save deal"}</button>
+          <button type="submit" className="button button-primary" disabled={saving}>{lead ? <Save size={15} /> : <Plus size={15} />} {saving ? "Saving..." : lead ? "Save changes" : addingClient ? "Save client" : "Save deal"}</button>
         </div>
       </form>
       {addingOrg !== null && (
