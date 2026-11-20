@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { asOptionalId, asString, handleRouteError, jsonError, readJsonBody, requireSameOrigin } from "@/lib/http";
-import { archiveOpportunity, getOpportunity, markNotRelevant, restoreOpportunity, unarchiveOpportunity, updateOpportunityDetails } from "@/features/opportunities/repository";
+import { archiveOpportunity, getOpportunity, setOpportunityTodo, markNotRelevant, restoreOpportunity, unarchiveOpportunity, updateOpportunityDetails } from "@/features/opportunities/repository";
 import { parseLeadEntry } from "@/features/opportunities/model";
 import { requirePrivilege, requireUser } from "@/features/users/session";
 
@@ -38,6 +38,8 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (body.action === "restore") return NextResponse.json({ opportunity: await restoreOpportunity(id, user) });
     // The Archive (request of November 20, 2026): move a lead there by hand, or bring it back to the inbox.
     if (body.action === "archive") return NextResponse.json({ opportunity: await archiveOpportunity(id, user) });
+    // A To Do list (request of November 20, 2026): { action: "todo", listId } or listId null to take the lead off.
+    if (body.action === "todo") return NextResponse.json({ opportunity: await setOpportunityTodo(id, asOptionalId(body.listId), user) });
     if (body.action === "unarchive") return NextResponse.json({ opportunity: await unarchiveOpportunity(id, user) });
     // The lead's fields (request of November 19, 2026).
     if (body.action === "edit") {

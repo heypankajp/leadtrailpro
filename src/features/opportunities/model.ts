@@ -241,6 +241,8 @@ export type Opportunity = {
   decidedByName: string | null; decidedAt: string | null;
   /** In the Archive (request of November 20, 2026): when, how ("manual" by a person, "auto" after the not-relevant days) and by whom. */
   archivedAt: string | null; archiveKind: "manual" | "auto" | null; archivedByName: string | null;
+  /** The To Do list the lead is on (request of November 20, 2026), as a deal can be. */
+  todoListId: number | null; todoList: string | null; todoSince: string | null;
   listings: OpportunityListing[];
   /** The lead the tracker import drafted for a company with no Sales Manager (§10.9); null for a card the job searches made. */
   tracker: TrackerCard | null;

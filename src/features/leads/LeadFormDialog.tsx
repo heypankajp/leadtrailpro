@@ -10,6 +10,7 @@ import { useApp } from "@/features/shell/AppContext";
 import { Dialog, ErrorText, Field, ConvertToClientDialog } from "@/features/shell/components";
 import SuggestInput from "@/features/shell/SuggestInput";
 import StagePicker from "@/features/pipeline/StagePicker";
+import { offBoardStatusCodes, stageChoices } from "@/features/pipeline/model";
 import { fetchOrganization, fetchOrganizations, fetchPerson } from "@/features/contacts/client";
 import { OrganizationFormDialog, PersonFormDialog } from "@/features/contacts/ContactFormDialogs";
 import { contactKey, type OrganizationDetail, type OrganizationRow } from "@/features/contacts/model";
@@ -30,6 +31,8 @@ type Props = {
   onSaved: (lead: LeadSummary) => void;
 };
 
+/** The lead Add Deal found for the same company (request of November 20, 2026): converted to this deal at the stage and status chosen. */
+type ExistingLeadNotice = { id: number; companyName: string; where: string; message: string; stageId: string; statusId: string };
 type DuplicateNotice = { leadId: number; clientName: string; ownerName: string; statusLabel: string; recordState: string; canOverride: boolean; message: string };
 /** PD-15: what saving would create, waiting for the user's confirmation. */
 type ConfirmNotice = { organization: string | null; contact: string | null };
@@ -65,6 +68,7 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
     dealValue: "", expectedCloseDate: prefill?.expectedCloseDate ?? "",
   });
   const [duplicate, setDuplicate] = useState<DuplicateNotice | null>(null);
+  const [existingLead, setExistingLead] = useState<ExistingLeadNotice | null>(null);
   const [confirm, setConfirm] = useState<ConfirmNotice | null>(null);
   // "+ Add 'Acme' as new organization / contact" picked from the list (request of November 18, 2026): the new record is
   // confirmed already, shown with a blue NEW badge; typing another name drops it.
@@ -205,7 +209,7 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
 
   const submit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); void save(false); };
 
-  const save = async (allowSimilar: boolean, confirmed = false) => {
+  const save = async (allowSimilar: boolean, confirmed = false, fromLead: ExistingLeadNotice | null = null) => {
     allowSimilarChosen.current = allowSimilar;
     // PD-11: the value is optional; what is typed must be an amount.
     const typedValue = parseDealValue(form.dealValue);
@@ -214,18 +218,19 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
     setError("");
     setDuplicate(null);
     setConfirm(null);
+    setExistingLead(null);
     const input: LeadInput = {
       clientName: form.clientName, companyUrl: form.companyUrl, address: form.address, comments: form.comments, clientExecutive: form.clientExecutive, contactPhone: form.contactPhone,
       contactAltPhone: form.contactAltPhone, contactRemark: form.contactRemark, clientEmails: form.clientEmails.split(/[,;\s]+/).filter(Boolean), industry: form.industry, positions: form.positions,
-      leadTypeId: Number(form.leadTypeId), statusId: Number(form.statusId), statusReasonId: reasonKey ? idOrNull(form.statusReasonId) : null,
+      leadTypeId: Number(form.leadTypeId), statusId: Number(fromLead?.statusId || form.statusId), statusReasonId: reasonKey && !fromLead ? idOrNull(form.statusReasonId) : null,
       leadCategoryId: idOrNull(form.leadCategoryId), companySizeId: idOrNull(form.companySizeId), cityId: idOrNull(form.cityId),
       firstContactDate: form.firstContactDate, followUpDate: form.followUpDate || null, contractSignedDate: form.contractSignedDate || null,
-      stageId: idOrNull(form.stageId),
+      stageId: idOrNull(fromLead?.stageId || form.stageId),
       dealValue: typedValue.value, expectedCloseDate: form.expectedCloseDate || null,
     };
     try {
       const result = lead ? await updateLead(lead.id, input) : await createLead({
-        ...input, ownerId: can("reassign_leads") ? Number(form.ownerId) : null, opportunityId: opportunityId ?? null,
+        ...input, ownerId: can("reassign_leads") ? Number(form.ownerId) : null, opportunityId: fromLead?.id ?? opportunityId ?? null, takeExistingLead: Boolean(fromLead),
         organizationId: contact?.organizationId ?? matchedOrganization?.organization.id ?? null, personId: contact?.personId ?? matchedPerson?.id ?? null,
         allowSimilar, createOrganization: confirmed || newOrganization, createContact: confirmed || newContact,
       });
@@ -238,7 +243,10 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
     } catch (caught) {
       const apiError = caught instanceof ApiError ? caught : null;
       const found = apiError?.status === 409 && apiError.data.duplicate ? (apiError.data.duplicate as Omit<DuplicateNotice, "canOverride" | "message">) : null;
-      if (apiError?.status === 409 && apiError.data.code === "confirm_create") setConfirm({ organization: (apiError.data.organization as string | null) ?? null, contact: (apiError.data.contact as string | null) ?? null });
+      if (apiError?.status === 409 && apiError.data.code === "lead_exists") {
+        const found = apiError.data.lead as { id: number; companyName: string; where: string };
+        setExistingLead({ id: Number(found.id), companyName: found.companyName, where: found.where, message: apiError.message, stageId: form.stageId, statusId: form.statusId });
+      } else if (apiError?.status === 409 && apiError.data.code === "confirm_create") setConfirm({ organization: (apiError.data.organization as string | null) ?? null, contact: (apiError.data.contact as string | null) ?? null });
       else if (apiError && found) setDuplicate({ ...found, canOverride: apiError.data.canOverride === true, message: apiError.message });
       else setError(errorMessage(caught, "Could not save the deal."));
       setSaving(false);
@@ -385,6 +393,32 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
               <div className="duplicate-actions">
                 <button type="button" className="button button-outline button-small" onClick={() => { openLead(duplicate.leadId); onClose(); }}>Open {duplicate.clientName}</button>
                 {duplicate.canOverride && <button type="button" className="button button-outline button-small" onClick={() => void save(true)} disabled={saving}>Save Anyway</button>}
+              </div>
+            </div>
+          </div>
+        )}
+        {existingLead && (
+          <div className="form-note duplicate-note existing-lead-note" role="alert">
+            <AlertTriangle size={14} />
+            <div>
+              <p>{existingLead.message}</p>
+              <div className="existing-lead-fields">
+                <label>
+                  <span className="field-label">Pipeline Stage</span>
+                  <select value={existingLead.stageId} onChange={(event) => setExistingLead({ ...existingLead, stageId: event.target.value })} aria-label="Stage for the deal">
+                    {stageChoices(values.stage, reference.pipelines).filter((item) => item.active).map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
+                  </select>
+                </label>
+                <label>
+                  <span className="field-label">Status</span>
+                  <select value={existingLead.statusId} onChange={(event) => setExistingLead({ ...existingLead, statusId: event.target.value })} aria-label="Status for the deal">
+                    {values.status.filter((item) => item.active && !offBoardStatusCodes.includes(item.code)).map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
+                  </select>
+                </label>
+              </div>
+              <div className="duplicate-actions">
+                <button type="button" className="button button-primary button-small" disabled={saving || !existingLead.stageId || !existingLead.statusId} onClick={() => void save(allowSimilarChosen.current, true, existingLead)}>Convert the Lead to This Deal</button>
+                <button type="button" className="button button-outline button-small" onClick={() => setExistingLead(null)}>Back</button>
               </div>
             </div>
           </div>

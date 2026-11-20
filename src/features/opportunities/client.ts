@@ -1,11 +1,15 @@
 import { api, toQuery } from "@/lib/api";
 import type { LeadEntryInput, Opportunity, OpportunityOrigin, OpportunityPage, OpportunityRun, OpportunitySearch, OpportunitySearchInput, OpportunityStatus } from "./model";
 
-export const fetchOpportunities = (query: { status: OpportunityStatus; page?: number; pageSize?: number; search?: string; origin?: OpportunityOrigin; scope?: "mine" | "everyone"; archived?: "1" }) => api<OpportunityPage>(`/api/opportunities${toQuery(query)}`);
+export const fetchOpportunities = (query: { status: OpportunityStatus; page?: number; pageSize?: number; search?: string; origin?: OpportunityOrigin; scope?: "mine" | "everyone"; archived?: "1"; todoListId?: number; todo?: "1" }) => api<OpportunityPage>(`/api/opportunities${toQuery(query)}`);
 export const fetchOpportunity = (id: number) => api<{ opportunity: Opportunity }>(`/api/opportunities/${id}`);
 export const markOpportunityNotRelevant = (id: number, reasonId: number, note: string) => api<{ opportunity: Opportunity }>(`/api/opportunities/${id}`, { method: "PATCH", json: { action: "not_relevant", reasonId, note } });
 export const createOpportunity = (input: LeadEntryInput) => api<{ opportunity: Opportunity }>("/api/opportunities", { method: "POST", json: input });
 export const editOpportunity = (id: number, input: LeadEntryInput) => api<{ opportunity: Opportunity }>(`/api/opportunities/${id}`, { method: "PATCH", json: { action: "edit", ...input } });
+export type LeadCompanyDetails = { website: string; address: string; city: string; phone: string; industry: string; sources: string[] };
+export const lookupLeadCompanyDetails = (id: number) => api<{ details: LeadCompanyDetails }>(`/api/opportunities/${id}/company`);
+export const setOpportunityTodo = (id: number, listId: number | null) => api<{ opportunity: Opportunity }>(`/api/opportunities/${id}`, { method: "PATCH", json: { action: "todo", listId } });
+export const fetchLeadTodoCounts = () => api<{ counts: { lists: { listId: number; mine: number; everyone: number }[]; mine: number; everyone: number } }>("/api/opportunities/todo").then((result) => result.counts);
 export const archiveOpportunity = (id: number) => api<{ opportunity: Opportunity }>(`/api/opportunities/${id}`, { method: "PATCH", json: { action: "archive" } });
 export const unarchiveOpportunity = (id: number) => api<{ opportunity: Opportunity }>(`/api/opportunities/${id}`, { method: "PATCH", json: { action: "unarchive" } });
 export const restoreOpportunity = (id: number) => api<{ opportunity: Opportunity }>(`/api/opportunities/${id}`, { method: "PATCH", json: { action: "restore" } });

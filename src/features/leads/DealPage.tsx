@@ -180,10 +180,10 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
           <div className="deal-heading">
             <span className="eyebrow">{lead.recordState === "queued" ? "QUEUED FOR APPROVAL" : lead.recordState === "archived" ? (isClient ? "ARCHIVED CLIENT" : "ARCHIVED DEAL") : isClient ? "CLIENT" : "DEAL"}</span>
             <h1 className="lead-title">
+              {/* Request of November 20, 2026: with a company website, the deal name opens it in a new tab. */}
               {lead.companyUrl
-                ? <a className="company-link-icon" href={lead.companyUrl} target="_blank" rel="noopener noreferrer" aria-label={`Open ${lead.clientName} website`} title="Open company website"><ExternalLink size={14} /></a>
-                : null}
-              {lead.clientName}
+                ? <a className="lead-title-link" href={lead.companyUrl} target="_blank" rel="noopener noreferrer" title={`Open ${lead.companyUrl}`}>{lead.clientName}<ExternalLink size={15} aria-hidden="true" /></a>
+                : lead.clientName}
             </h1>
             <p>{lead.leadType}{lead.industry ? ` · ${lead.industry}` : ""}{lead.city ? ` · ${lead.city}` : ""}</p>
           </div>

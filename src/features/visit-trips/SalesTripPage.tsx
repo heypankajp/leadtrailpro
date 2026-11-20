@@ -1,13 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, Building2, CalendarDays, ChevronDown, FileDown, MapPin, MoreHorizontal, Printer, Pencil, Phone, Plus, Trash2, UserRound, X } from "lucide-react";
+import { ArrowLeft, Building2, CalendarDays, ChevronDown, ExternalLink, FileDown, Mail, MapPin, MoreHorizontal, Printer, Pencil, Phone, Plus, Trash2, UserRound, X } from "lucide-react";
 import { errorMessage } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { useAsyncData } from "@/lib/useAsyncData";
 import { useApp } from "@/features/shell/AppContext";
-import { Avatar, EmptyState, ErrorText, Loading, StatusPill } from "@/features/shell/components";
-import { fetchVisitTrip, removeVisitTripDeal, type VisitTripDetail } from "./client";
+import { Avatar, EmptyState, ErrorText, Loading } from "@/features/shell/components";
+import { fetchVisitTrip, removeVisitTripDeal, removeVisitTripLead, type VisitTripDetail } from "./client";
 import { AddDealsDialog, DeleteTripDialog, TripFormDialog } from "./TripDialogs";
 
 /** One sales trip: its date and salesperson, and the deals to visit in order, each opening its deal page. */
@@ -21,16 +21,19 @@ export default function SalesTripPage({ tripId }: { tripId: number }) {
   if (!data) return <><button className="button button-outline button-small" onClick={() => navigate("sales-trips")}><ArrowLeft size={14} /> Sales Trips</button><ErrorText message={error || "Sales trip not found."} /></>;
   const { trip, deals } = data;
   const canEdit = data.permissions.edit && can("plan_trips");
+  // Deals and leads in one visiting order (request of November 20, 2026).
+  const stops = tripStops(data);
   // The trip summary (request of November 20, 2026): how many companies are planned and in which cities, most visits first.
-  const companies = new Set(deals.map((deal) => deal.clientName.trim().toLowerCase())).size;
-  const cityCounts = [...deals.reduce((map, deal) => { const city = deal.city?.trim() || "No city"; map.set(city, (map.get(city) ?? 0) + 1); return map; }, new Map<string, number>())]
+  const companies = new Set(stops.map((stop) => stop.name.trim().toLowerCase())).size;
+  const cityCounts = [...stops.reduce((map, stop) => { const city = stop.city || "No city"; map.set(city, (map.get(city) ?? 0) + 1); return map; }, new Map<string, number>())]
     .sort((a, b) => b[1] - a[1] || (a[0] === "No city" ? 1 : b[0] === "No city" ? -1 : a[0].localeCompare(b[0])));
 
-  const remove = async (leadId: number, name: string) => {
+  const remove = async (stop: TripStop) => {
     try {
-      await removeVisitTripDeal(trip.id, leadId);
+      if (stop.kind === "lead") await removeVisitTripLead(trip.id, stop.id);
+      else await removeVisitTripDeal(trip.id, stop.id);
       bumpData();
-      notify(`${name} taken off ${trip.title}, back on the To Do list it came from`);
+      notify(stop.kind === "lead" ? `${stop.name} taken off ${trip.title}` : `${stop.name} taken off ${trip.title}, back on the To Do list it came from`);
     } catch (caught) {
       notify(errorMessage(caught), "error");
     }
@@ -42,17 +45,17 @@ export default function SalesTripPage({ tripId }: { tripId: number }) {
       <header className="sales-trip-print-head">
         <div className="sales-trip-print-brand">LeadTrailPro · Sales trip</div>
         <h1>{trip.title}</h1>
-        <p>{formatDate(trip.tripDate)} · {trip.ownerName}{deals.length ? ` · ${companies} ${companies === 1 ? "company" : "companies"} planned` : ""}{cityCounts.length ? ` · ${cityCounts.map(([city, count]) => (count > 1 ? `${city} (${count})` : city)).join(", ")}` : ""}</p>
+        <p>{formatDate(trip.tripDate)} · {trip.ownerName}{stops.length ? ` · ${companies} ${companies === 1 ? "company" : "companies"} planned` : ""}{cityCounts.length ? ` · ${cityCounts.map(([city, count]) => (count > 1 ? `${city} (${count})` : city)).join(", ")}` : ""}</p>
       </header>
       <div className="page-heading trip-heading">
         <div>
           <button className="link-button trip-back" onClick={() => navigate("sales-trips")}><ArrowLeft size={14} /> Sales Trips</button>
-          <div className="eyebrow">SALES TRIP <span className="eyebrow-dot">·</span> {deals.length} {deals.length === 1 ? "DEAL" : "DEALS"}</div>
+          <div className="eyebrow">SALES TRIP <span className="eyebrow-dot">·</span> {stops.length} {stops.length === 1 ? "STOP" : "STOPS"}</div>
           <h1>{trip.title}</h1>
           <p className="trip-meta"><span><CalendarDays size={14} /> {formatDate(trip.tripDate)}</span><span><UserRound size={14} /> {trip.ownerName}</span></p>
         </div>
-        <section className={`trip-summary ${deals.length ? "" : "is-empty"}`} aria-label="Trip summary">
-          {deals.length === 0 ? (
+        <section className={`trip-summary ${stops.length ? "" : "is-empty"}`} aria-label="Trip summary">
+          {stops.length === 0 ? (
             // An empty trip (request of November 20, 2026): a placeholder instead of "0 companies planned".
             <span className="trip-summary-empty">Summary of Sales Trip will be shown here</span>
           ) : (
@@ -85,29 +88,46 @@ export default function SalesTripPage({ tripId }: { tripId: number }) {
 
       <section className="panel leads-panel">
         <div className="lead-list-wrap">
-          {deals.length === 0 ? (
+          {stops.length === 0 ? (
             <EmptyState icon={<MapPin size={22} />} title="No deals on this trip yet" text={canEdit ? "Add deals from the To be visited list." : "Deals added to the trip appear here."} />
           ) : (
             <div className="table-scroll">
               <table className="lead-table trip-table">
-                <thead><tr><th>#</th><th>COMPANY</th><th>CONTACT</th><th>ADDRESS</th><th>STATUS</th><th>STAGE</th><th>OWNER</th><th className="trip-print-col">VISIT NOTES</th>{canEdit && <th className="trip-remove-col"><span className="sr-only">Remove</span></th>}</tr></thead>
+                <thead><tr><th>#</th><th>COMPANY</th><th>PERSON</th><th>ADDRESS</th><th>POSITIONS</th><th>STAGE</th><th>OWNER</th><th className="trip-print-col">VISIT NOTES</th>{canEdit && <th className="trip-remove-col"><span className="sr-only">Remove</span></th>}</tr></thead>
                 <tbody>
-                  {deals.map((deal, index) => (
-                    <tr key={deal.id}>
+                  {stops.map((stop, index) => (
+                    <tr key={stop.key} className={stop.kind === "lead" ? "trip-lead-row" : ""}>
                       <td><span className="trip-stop">{index + 1}</span></td>
                       <td>
-                        <button className="client-cell" onClick={() => openLead(deal.id)}>
-                          <Avatar name={deal.clientName} seed={deal.id} />
-                          <span><strong>{deal.clientName}</strong><small>{deal.industry || "—"}</small></span>
-                        </button>
+                        {stop.kind === "deal" ? (
+                          <button className="client-cell" onClick={() => openLead(stop.id)}>
+                            <Avatar name={stop.name} seed={stop.id} />
+                            <span><strong>{stop.name}</strong><small>{stop.sub || "—"}</small></span>
+                          </button>
+                        ) : (
+                          <span className="client-cell trip-lead-cell">
+                            <Avatar name={stop.name} seed={stop.id + 100000} />
+                            <span>
+                              <strong>{stop.website ? <a className="opp-name-link" href={stop.website} target="_blank" rel="noopener noreferrer" title={`Open ${stop.website}`}>{stop.name}{"\u00a0"}<ExternalLink size={12} aria-hidden="true" /></a> : stop.name}</strong>
+                              <small>{stop.sub}</small>
+                            </span>
+                          </span>
+                        )}
                       </td>
-                      <td><span className="trip-contact">{deal.clientExecutive || "No contact yet"}{deal.contactPhone && <small><Phone size={11} /> {deal.contactPhone}</small>}</span></td>
-                      <td><span className="muted-cell">{[deal.address, deal.city].filter(Boolean).join(", ") || "—"}</span></td>
-                      <td><StatusPill status={deal.statusLabel} code={deal.statusCode} /></td>
-                      <td><span className="muted-cell stage-cell">{deal.statusCode === "client" ? "—" : deal.stage ?? "—"}</span></td>
-                      <td><span className="muted-cell">{deal.ownerName}</span></td>
+                      <td>
+                        <span className="trip-contact">
+                          {stop.person?.name || <span className="muted-cell">No contact yet</span>}
+                          {stop.person?.phone && <small><Phone size={11} /> {stop.person.phone}</small>}
+                          {stop.person && stop.person.emails.length > 0 && <small><Mail size={11} /> {stop.person.emails.map((email) => <a key={email} href={`mailto:${email}`}>{email}</a>)}</small>}
+                        </span>
+                      </td>
+                      <td><span className="muted-cell">{stop.address || "—"}</span></td>
+                      <td>{stop.positions.length ? <ul className="trip-positions">{stop.positions.map((position) => <li key={position}>{position}</li>)}</ul> : <span className="muted-cell">—</span>}</td>
+                      {/* The stage of a deal, or Lead for a lead (request of November 20, 2026). */}
+                      <td>{stop.kind === "lead" ? <span className="trip-stage-lead">{stop.stage}</span> : <span className="muted-cell stage-cell">{stop.stage}</span>}</td>
+                      <td><span className="muted-cell">{stop.owner}</span></td>
                       <td className="trip-print-col" />
-                      {canEdit && <td className="trip-remove-col"><button className="icon-button" aria-label={`Take ${deal.clientName} off the trip`} title="Take off the trip (back to its To Do list)" onClick={() => void remove(deal.id, deal.clientName)}><X size={14} /></button></td>}
+                      {canEdit && <td className="trip-remove-col"><button className="icon-button" aria-label={`Take ${stop.name} off the trip`} title={stop.kind === "lead" ? "Take off the trip" : "Take off the trip (back to its To Do list)"} onClick={() => void remove(stop)}><X size={14} /></button></td>}
                     </tr>
                   ))}
                 </tbody>
@@ -118,11 +138,49 @@ export default function SalesTripPage({ tripId }: { tripId: number }) {
       </section>
 
       {dialog === "edit" && <TripFormDialog trip={trip} onClose={() => setDialog(null)} onSaved={() => { setDialog(null); bumpData(); notify("Sales trip updated"); }} />}
-      {dialog === "add" && <AddDealsDialog trip={trip} onTrip={deals.map((deal) => deal.id)} onClose={() => setDialog(null)} onDone={(message) => { setDialog(null); bumpData(); notify(message); }} />}
+      {dialog === "add" && <AddDealsDialog trip={trip} onTrip={deals.map((deal) => deal.id)} onTripLeads={data.leads.map((lead) => lead.id)} onClose={() => setDialog(null)} onDone={(message) => { setDialog(null); bumpData(); notify(message); }} />}
       {dialog === "delete" && <DeleteTripDialog trip={trip} onClose={() => setDialog(null)} onDeleted={(message) => { setDialog(null); bumpData(); notify(message); navigate("sales-trips"); }} />}
     </div>
   );
 }
+
+/** One stop on a trip: a deal or a lead, with what the table, the summary and the print show. */
+type TripStop = {
+  key: string; kind: "deal" | "lead"; id: number; name: string; sub: string; website: string; person: { name: string; phone: string; emails: string[] } | null;
+  address: string; city: string; positions: string[]; stage: string; owner: string;
+};
+
+/** The trip's deals and leads in their visiting order. A lead's town is the first part of its location ("Milton, ON"). */
+function tripStops(data: VisitTripDetail): TripStop[] {
+  const deals = new Map(data.deals.map((deal) => [deal.id, deal]));
+  const leads = new Map(data.leads.map((lead) => [lead.id, lead]));
+  const stops: TripStop[] = [];
+  for (const item of data.order) {
+    if (item.kind === "deal") {
+      const deal = deals.get(item.id);
+      if (!deal) continue;
+      stops.push({
+        key: `deal-${deal.id}`, kind: "deal", id: deal.id, name: deal.clientName, sub: deal.industry, website: deal.companyUrl,
+        person: deal.clientExecutive || deal.contactPhone || deal.clientEmails.length ? { name: deal.clientExecutive, phone: [deal.contactPhone, deal.contactAltPhone].filter(Boolean).join(" · "), emails: deal.clientEmails } : null,
+        address: [deal.address, deal.city].filter(Boolean).join(", "), city: deal.city?.trim() || (deal.address.includes(",") ? deal.address.split(",").slice(-2)[0].trim() : ""), positions: positionsOf(deal.positions),
+        stage: deal.statusCode === "client" ? "Client" : deal.stage ?? "—", owner: deal.ownerName,
+      });
+    } else {
+      const lead = leads.get(item.id);
+      if (!lead) continue;
+      stops.push({
+        key: `lead-${lead.id}`, kind: "lead", id: lead.id, name: lead.companyName, website: lead.website,
+        sub: `Lead${lead.archived ? " · Archived" : lead.status === "not_relevant" ? " · Not Relevant" : ""}`,
+        person: lead.person, address: lead.location, city: lead.location.split(",")[0]?.trim() ?? "", positions: lead.positions,
+        stage: lead.archived ? "Lead · Archived" : lead.status === "not_relevant" ? "Lead · Not Relevant" : "Lead", owner: lead.addedByName ?? "—",
+      });
+    }
+  }
+  return stops;
+}
+
+/** The positions a deal lists, one per line or separated by commas or semicolons, without repeats. */
+const positionsOf = (text: string): string[] => [...new Set(text.split(/[\n;,]+/).map((item) => item.trim()).filter(Boolean))];
 
 /** The trip's Actions menu (request of November 20, 2026), coloured as the Leads menu: print blue, PDF teal, edit blue, delete red. */
 function TripActions({ items }: { items: { tone: "edit" | "restore" | "dismiss"; label: string; icon: ReactNode; run: () => void }[] }) {

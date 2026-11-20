@@ -1714,7 +1714,8 @@ h1 { margin: 9px 0 5px; color: #242941; font-size: 25px; font-weight: 690; lette
 
 /* Comments of November 16, 2026 (SPEC §10.19). PD-20: the board runs from the menu to the right edge of the window and
    takes the window's height; each column scrolls on its own and the board's own scrollbar stays at the bottom, in view. */
-.main-content:has(> div:not([hidden]) .pipeline-board) { max-width: none; }
+/* The Pipeline page takes the full width in every view (board, status board, list, archive, queue, favourites), also with no deal. */
+.main-content:has(> div:not([hidden]) .pipeline-board), .main-content:has(> div:not([hidden]) .pipeline-panel), .main-content:has(> div:not([hidden]) .deals-head) { max-width: none; }
 .pipeline-board { height: calc(100vh - 236px); min-height: 380px; overflow-x: auto; overflow-y: hidden; align-items: stretch; padding-bottom: 10px; }
 .pipeline-column { flex: 1 0 212px; min-width: 212px; min-height: 0; }
 .pipeline-column-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
@@ -2331,3 +2332,82 @@ button.activity-row-icon.is-button:hover, button.activity-row-icon.is-button:foc
 @media (min-width: 1100px) { .trip-heading > .trip-actions { flex-wrap: nowrap; } .trip-heading > .trip-actions .button { white-space: nowrap; } }
 .trip-icon-button { width: 38px; padding: 0; }
 .trip-delete-button:hover { border-color: #f3cdc7; color: #b8402f; background: #fdeeec; }
+/* Sales trip table (request of November 20, 2026): the person to see and the positions they hire for. */
+.trip-contact small a { color: #4a59c9; text-decoration: none; overflow-wrap: anywhere; }
+.trip-contact small a + a::before { content: ", "; color: #5a6177; }
+.trip-positions { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; color: #3d4359; font-size: 12px; }
+.trip-positions li::before { content: "• "; color: #8a90a6; }
+@media print { .sales-trip-page .trip-contact small a { color: #000; } .sales-trip-page .trip-positions { color: #000; } }
+/* Add Deal found the company as a lead (request of November 20, 2026): its stage and status, then Convert. */
+.existing-lead-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 8px 0 4px; }
+.existing-lead-fields label { display: grid; gap: 4px; }
+.existing-lead-fields select { min-height: 34px; padding: 0 8px; border: 1px solid #e3e6ef; border-radius: 6px; background: #fff; font-size: 12px; }
+@media (max-width: 600px) { .existing-lead-fields { grid-template-columns: 1fr; } }
+/* The deal name opens the company website when there is one (request of November 20, 2026). */
+.lead-title-link { display: inline-flex; align-items: center; gap: 7px; color: inherit; text-decoration: none; }
+.lead-title-link svg { color: #8a90a6; flex: none; }
+.lead-title-link:hover, .lead-title-link:focus-visible { color: #4a59c9; text-decoration: underline; text-underline-offset: 4px; }
+.lead-title-link:hover svg { color: #4a59c9; }
+/* Convert to Deal: the company's details found for the lead (request of November 20, 2026). */
+.convert-company { display: grid; gap: 8px; margin: 0; padding: 12px; border: 1px solid #e6e8f0; border-radius: 8px; background: #fafbfd; }
+.convert-company legend { padding: 0 6px; color: #4d5268; font-size: 12px; font-weight: 650; }
+.convert-company .field-hint { margin: 0; }
+.convert-company-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.convert-company-grid label { display: grid; gap: 4px; }
+.convert-company-grid input { width: 100%; min-height: 34px; padding: 0 10px; border: 1px solid #e3e6ef; border-radius: 6px; background: #fff; color: #353b52; font-size: 12px; }
+.convert-company-wide { grid-column: 1 / -1; }
+@media (max-width: 600px) { .convert-company-grid { grid-template-columns: 1fr; } }
+/* A lead's name opens its website (request of November 20, 2026). */
+.opp-name-link { color: inherit; text-decoration: none; }
+.opp-name-link:hover, .opp-name-link:focus-visible { color: #4a59c9; text-decoration: underline; text-underline-offset: 3px; }
+.opp-name-link svg { margin-left: 4px; color: #8a90a6; vertical-align: -1px; }
+.opp-name-link svg { margin-left: 0; display: inline; }
+/* Leads on a sales trip (request of November 20, 2026). */
+.trip-lead-cell { cursor: default; }
+.trip-stage-lead { display: inline-block; padding: 3px 9px; border-radius: 999px; background: #f3eefe; color: #6a4bc2; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+@media print { .sales-trip-page .trip-stage-lead { padding: 0; background: none; color: #000; } }
+/* A lead on a To Do list (request of November 20, 2026). */
+.opp-todo { display: inline-flex; align-items: center; gap: 4px; margin-top: 3px; padding: 2px 8px; border-radius: 999px; background: #e8f4f6; color: #127a86; font-size: 11px; font-weight: 600; }
+/* The To Do page's Deals / Leads switch and its leads (request of November 20, 2026). */
+.todo-kind button { display: inline-flex; align-items: center; gap: 6px; }
+.todo-lead-name { display: grid; gap: 2px; }
+.todo-lead-name small { color: #6a4bc2; font-size: 11px; font-weight: 600; }
+.todo-lead-actions { display: inline-flex; gap: 6px; white-space: nowrap; }
+/* Add to a trip: Deals or Leads (request of November 20, 2026). */
+.trip-add-kind { display: inline-flex; gap: 8px; }
+.trip-add-kind label { display: inline-flex; align-items: center; gap: 7px; padding: 7px 14px; border: 1px solid #e3e6ef; border-radius: 8px; background: #fff; color: #4d5268; font-size: 13px; font-weight: 600; cursor: pointer; }
+.trip-add-kind label.is-active { border-color: #8f9be8; background: #eef0ff; color: #3f4cb8; }
+.trip-add-kind input { margin: 0; accent-color: #586be3; }
+/* List of Values → Auto Reminder (request of November 20, 2026). */
+.stage-reminder-days { display: inline-flex; align-items: center; gap: 8px; }
+.stage-reminder-days input { width: 80px; min-height: 32px; padding: 0 8px; border: 1px solid #e3e6ef; border-radius: 6px; font-size: 12.5px; }
+.stage-reminder-table td small.muted-cell { display: block; margin-top: 2px; }
+.status-chip { display: inline-block; padding: 3px 9px; border-radius: 999px; background: #f1f2f6; color: #62697b; font-size: 11.5px; font-weight: 600; }
+.status-chip.is-active { background: #e9f7ef; color: #1d7a4e; }
+.stage-reminder-sample { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; margin: 0 0 14px; }
+.stage-reminder-sample label { display: grid; gap: 4px; }
+.stage-reminder-sample input { width: 280px; max-width: 100%; min-height: 32px; padding: 0 10px; border: 1px solid #e3e6ef; border-radius: 6px; font-size: 12.5px; }
+/* Deal Emails: All / Sent / Received (request of November 20, 2026). */
+.email-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 4px 0 12px; }
+.email-filter .scope-toggle button { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; font-size: 12px; }
+.email-filter-count { min-width: 18px; padding: 0 6px; border-radius: 9px; background: #eef0f5; color: #62697c; font-size: 11px; line-height: 17px; text-align: center; }
+.email-filter .scope-toggle button.is-active .email-filter-count { background: #dfe3ff; color: #4250c4; }
+/* Action Center: Lead or Deal (request of November 20, 2026). */
+.dashboard-kind select { height: 40px; min-width: 120px; padding: 0 36px 0 14px; border: 1px solid #5d6de0; border-radius: 9px; background: #5d6de0 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 13px center; color: #fff; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; appearance: none; -webkit-appearance: none; box-shadow: 0 6px 14px rgba(93, 109, 224, .22); }
+.dashboard-kind select:focus-visible { outline: 2px solid #aab3f2; outline-offset: 2px; }
+.dashboard-kind option { color: #262b42; background: #fff; }
+.lead-origin-chip { flex: 0 0 auto; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.lead-origin-chip.origin-manual { background: #eef0ff; color: #4a59c9; }
+.lead-origin-chip.origin-found { background: #e9f7ef; color: #1d7a4e; }
+.lead-sources { display: grid; gap: 10px; margin: 6px 0 14px; }
+.lead-source-row { display: grid; grid-template-columns: minmax(90px, 160px) 1fr 36px; align-items: center; gap: 10px; font-size: 13px; color: #4d5268; }
+.lead-source-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lead-source-row strong { text-align: right; color: #262b42; }
+.lead-source-bar { height: 8px; border-radius: 5px; background: #eef0f7; overflow: hidden; }
+.lead-source-bar i { display: block; height: 100%; border-radius: 5px; background: #5f70df; }
+.lead-reminders-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 900px) { .lead-reminders-grid { grid-template-columns: 1fr; } }
+/* Recent Leads: All / Manual / Generated (request of November 20, 2026). */
+.recent-leads-filter { align-self: flex-start; margin: 4px 0 8px; }
+.panel .scope-toggle.recent-leads-filter button { padding: 5px 12px; font-size: 12px; }
+.lead-source-row.is-empty span, .lead-source-row.is-empty strong { color: #a3a8b8; }

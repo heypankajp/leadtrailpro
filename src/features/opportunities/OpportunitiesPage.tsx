@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { Archive, ArrowRightCircle, Briefcase, MoreHorizontal, Gauge, Building2, ChevronDown, ChevronRight, ExternalLink, Pencil, Play, Plus, RotateCcw, Search, Trash2, UserRound, X } from "lucide-react";
+import { Archive, ArrowRightCircle, Briefcase, ListChecks, MoreHorizontal, Gauge, Building2, ChevronDown, ChevronRight, ExternalLink, Pencil, Play, Plus, RotateCcw, Search, Trash2, UserRound, X } from "lucide-react";
 import { ApiError, errorMessage } from "@/lib/api";
 import { formatDate, formatDateTime, relativeTime } from "@/lib/format";
 import { useAsyncData } from "@/lib/useAsyncData";
@@ -16,7 +16,7 @@ import { leadGenToolSourceId, type ListValuesByKey } from "@/features/list-value
 import { useApp } from "@/features/shell/AppContext";
 import SuggestInput from "@/features/shell/SuggestInput";
 import { Dialog, EmptyState, ErrorText, Field, Loading, Pagination, Tabs, type TabOption } from "@/features/shell/components";
-import { archiveOpportunity, createOpportunity, createSearch, deleteSearch, editOpportunity, fetchOpportunities, fetchRuns, fetchSearches, markOpportunityNotRelevant, reopenOpportunity, restoreOpportunity, runSearchesNow, updateSearch } from "./client";
+import { archiveOpportunity, createOpportunity, createSearch, lookupLeadCompanyDetails, setOpportunityTodo, deleteSearch, editOpportunity, fetchOpportunities, fetchRuns, fetchSearches, markOpportunityNotRelevant, reopenOpportunity, restoreOpportunity, runSearchesNow, updateSearch } from "./client";
 import { jobTypeOptions, maxMaxListings, maxPostedWithinDays, maxSearchTitles, minMaxListings, minPostedWithinDays, type Opportunity, type OpportunitySearch, type OpportunitySearchInput, type OpportunityStatus, type LeadEntryInput, type OpportunityOrigin } from "./model";
 
 type Tab = OpportunityStatus | "searches";
@@ -60,18 +60,29 @@ const capitalize = (value: string) => (value ? value.charAt(0).toUpperCase() + v
  * searches found, with Searches & runs, Execute (run the searches now) and Budget (the jobs usage).
  */
 export default function OpportunitiesPage({ origin }: { origin: OpportunityOrigin }) {
-  const { can, notify, openLead, dataVersion, bumpData, reference } = useApp();
+  const { can, notify, openLead, dataVersion, bumpData, reference, route } = useApp();
   const found = origin === "found";
   const [tab, setTab] = useState<Tab>("new");
   const [page, setPage] = useState(1);
-  const [filter, setFilter] = useState("");
+  // The lead Action Center opens a lead here by its name, and the lists with My Work or Whole Team (request of November 20, 2026).
+  const [filter, setFilter] = useState(() => route.query.get("q") ?? "");
   // My Leads / Everyone on Leads, By Me / Everyone on Lead Generation (request of November 19, 2026).
-  const [scope, setScope] = useState<"mine" | "everyone">("everyone");
+  const [scope, setScope] = useState<"mine" | "everyone">(() => (route.query.get("scope") === "mine" ? "mine" : "everyone"));
   const status: OpportunityStatus = tab === "searches" ? "new" : tab;
   const fetcher = useCallback(() => fetchOpportunities({ status, page, pageSize, search: filter.trim(), origin, scope }), [status, page, filter, origin, scope]);
   const { data, error, reload } = useAsyncData(fetcher, dataVersion);
   // Leads: Move to Pipeline asks the stage and the status, like Move back to pipeline (request of November 19, 2026).
   const [moving, setMoving] = useState<Opportunity | null>(null);
+  // To Do lists for leads (request of November 20, 2026).
+  // To Be Visited (request of November 20, 2026): one click puts the lead on the "To be visited" list.
+  const toBeVisitedId = reference.listValues.todo_list.find((list) => list.code === "to_be_visited" && list.active)?.id ?? null;
+  const markToBeVisited = async (item: Opportunity) => {
+    if (!toBeVisitedId) return;
+    try { await setOpportunityTodo(item.id, toBeVisitedId); notify(`${item.companyName} marked To Be Visited`); bumpData(); reload(); } catch (caught) { notify(errorMessage(caught), "error"); }
+  };
+  const takeOffTodo = async (item: Opportunity) => {
+    try { await setOpportunityTodo(item.id, null); notify(`${item.companyName} removed from ${item.todoList ?? "To Do"}`); bumpData(); reload(); } catch (caught) { notify(errorMessage(caught), "error"); }
+  };
   const [dismissing, setDismissing] = useState<Opportunity | null>(null);
   // Add lead (null: closed; "new": a new lead; a card: that lead's fields).
   const [entry, setEntry] = useState<Opportunity | "new" | null>(null);
@@ -151,9 +162,11 @@ export default function OpportunitiesPage({ origin }: { origin: OpportunityOrigi
                   return (
                     <tr key={item.id}>
                       <td>
-                        <strong>{item.companyName}</strong>
-                        <small className="muted-cell">{[...(item.addedByName ? [`Added by ${item.addedByName}`] : []), ...item.sources, ...(item.tracker ? ["Sales tracker"] : [])].join(", ")}{item.website && <> · <a href={item.website} target="_blank" rel="noreferrer">website</a></>}</small>
+                        {/* Request of November 20, 2026: with a website, the lead's name opens it. */}
+                        <strong>{item.website ? <a className="opp-name-link" href={item.website} target="_blank" rel="noopener noreferrer" title={`Open ${item.website}`}>{item.companyName}{" "}<ExternalLink size={12} aria-hidden="true" /></a> : item.companyName}</strong>
+                        <small className="muted-cell">{[...(item.addedByName ? [`Added by ${item.addedByName}`] : []), ...item.sources, ...(item.tracker ? ["Sales tracker"] : [])].join(", ")}</small>
                         {item.leadSource && <small className="opp-source">Lead source: {item.leadSource}</small>}
+                        {item.todoList && <small className="opp-todo"><ListChecks size={11} /> To Do: {item.todoList}</small>}
                         {item.contacts.length > 0 && <small className="opp-contacts"><UserRound size={11} /> {item.contacts.map((contact) => contact.name).join(", ")}</small>}
                       </td>
                       <td>
@@ -209,6 +222,8 @@ export default function OpportunitiesPage({ origin }: { origin: OpportunityOrigi
                             ...((item.status === "new" || item.status === "not_relevant") && can("create_leads") ? [{ tone: "edit" as const, label: "Edit", icon: <Pencil size={14} />, run: () => setEntry(item) }] : []),
                             ...(item.status === "new" && can("create_leads") ? [{ tone: "dismiss" as const, label: "Not Relevant", icon: <X size={14} />, run: () => setDismissing(item) }] : []),
                             ...(item.status === "not_relevant" && can("create_leads") ? [{ tone: "restore" as const, label: "Back to the Inbox", icon: <RotateCcw size={14} />, run: () => void restore(item) }] : []),
+                            ...((item.status === "new" || item.status === "not_relevant") && can("create_leads") && toBeVisitedId && item.todoListId !== toBeVisitedId ? [{ tone: "restore" as const, label: "To Be Visited", icon: <ListChecks size={14} />, run: () => void markToBeVisited(item) }] : []),
+                            ...((item.status === "new" || item.status === "not_relevant") && can("create_leads") && item.todoList ? [{ tone: "edit" as const, label: item.todoListId === toBeVisitedId ? "Remove From To Be Visited" : "Remove From To Do", icon: <X size={14} />, run: () => void takeOffTodo(item) }] : []),
                             ...((item.status === "new" || item.status === "not_relevant") && can("create_leads") ? [{ tone: "archive" as const, label: "Archive", icon: <Archive size={14} />, run: () => void archive(item) }] : []),
                             ...((item.status === "converted" || item.status === "attached") && item.lead ? [{ tone: "edit" as const, label: "Open Deal", icon: <ExternalLink size={14} />, run: () => openLead(item.lead!.id) }] : []),
                           ]}
@@ -462,6 +477,44 @@ export function LeadEntryDialog({ lead, onClose, onSaved }: { lead: Opportunity 
  * Lead source, notes, BD action and Client response in the comments); the dialog asks only the pipeline stage, the status
  * and, for someone who may assign deals, the owner. A near-duplicate deal is shown, with Move anyway when it may be overridden.
  */
+/** Puts a lead on a To Do list (request of November 20, 2026): To be visited first, as for deals. */
+export function LeadTodoDialog({ lead, onClose, onDone }: { lead: { id: number; companyName: string; todoListId: number | null }; onClose: () => void; onDone: (message: string) => void }) {
+  const { reference } = useApp();
+  const lists = reference.listValues.todo_list.filter((item) => item.active);
+  const [listId, setListId] = useState(String(lead.todoListId ?? lists.find((item) => item.code === "to_be_visited")?.id ?? lists[0]?.id ?? ""));
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!listId) { setError("Choose a To Do list."); return; }
+    setBusy(true);
+    setError("");
+    try {
+      const { opportunity } = await setOpportunityTodo(lead.id, Number(listId));
+      onDone(`${opportunity.companyName} moved to To Do: ${opportunity.todoList ?? "the list"}`);
+    } catch (caught) {
+      setError(errorMessage(caught, "Could not move the lead to the To Do list."));
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog title={`Move ${lead.companyName} to a To Do List`} eyebrow="TO DO" size="narrow" onClose={onClose}>
+      <form className="lead-form" onSubmit={submit}>
+        <Field label="To Do List" required wide>
+          <select value={listId} onChange={(event) => setListId(event.target.value)} required autoFocus aria-label="To Do list">
+            {lists.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
+          </select>
+        </Field>
+        <div className="field-wide"><ErrorText message={error} /></div>
+        <div className="modal-actions">
+          <button type="button" className="button button-outline" onClick={onClose}>Cancel</button>
+          <button type="submit" className="button button-primary" disabled={busy}><ListChecks size={14} /> {busy ? "Moving..." : "Move to To Do"}</button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
 /** The Actions menu of a lead's row (request of November 20, 2026): every action on the lead in one drop-down. */
 /** Each action has its colour (request of November 20, 2026): convert green, edit blue, not relevant red, back to the inbox teal, archive amber. */
 type ActionTone = "convert" | "edit" | "dismiss" | "restore" | "archive";
@@ -507,7 +560,31 @@ function MoveToPipelineDialog({ opportunity, onClose, onDone }: { opportunity: O
   const [error, setError] = useState("");
   const [similar, setSimilar] = useState<{ message: string; canOverride: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
-  const website = (prefill.companyUrl ?? "").trim();
+  // The company's details (request of November 20, 2026): looked up on Google Maps and the website for a lead with no company
+  // yet; the person checks them; the deal, and through it the new company and contact, takes them.
+  const lookupWanted = !opportunity.organizationId;
+  const [company, setCompany] = useState({ website: prefill.companyUrl ?? "", address: prefill.address ?? "", phone: prefill.contactPhone ?? "", industry: prefill.industry ?? "" });
+  const [cityName, setCityName] = useState("");
+  const [lookup, setLookup] = useState<"idle" | "busy" | "done" | "none" | "failed">(lookupWanted ? "busy" : "idle");
+  const [foundIn, setFoundIn] = useState<string[]>([]);
+  useEffect(() => {
+    if (!lookupWanted) return;
+    let alive = true;
+    lookupLeadCompanyDetails(opportunity.id)
+      .then(({ details }) => {
+        if (!alive) return;
+        setCompany((current) => ({
+          website: current.website || details.website, address: details.address && (!current.address || current.address === opportunity.location) ? details.address : current.address,
+          phone: current.phone || details.phone, industry: current.industry || details.industry,
+        }));
+        setCityName(details.city);
+        setFoundIn(details.sources);
+        setLookup(details.sources.length ? "done" : "none");
+      })
+      .catch(() => { if (alive) setLookup("failed"); });
+    return () => { alive = false; };
+  }, [lookupWanted, opportunity.id, opportunity.location]);
+  const website = company.website.trim();
   const move = async (allowSimilar: boolean) => {
     if (!stageId) { setError("Choose the pipeline stage."); return; }
     if (!prefill.leadTypeId) { setError("The lead has no Lead source: edit the lead and choose one."); return; }
@@ -517,10 +594,10 @@ function MoveToPipelineDialog({ opportunity, onClose, onDone }: { opportunity: O
     try {
       const { lead } = await createLead({
         clientName: prefill.clientName ?? opportunity.companyName, companyUrl: website && !/^https?:\/\//i.test(website) ? `https://${website}` : website,
-        address: prefill.address ?? "", comments: prefill.comments ?? "", clientExecutive: prefill.clientExecutive ?? "", contactPhone: prefill.contactPhone ?? "",
-        contactAltPhone: prefill.contactAltPhone ?? "", contactRemark: prefill.contactRemark ?? "", clientEmails: prefill.clientEmails ?? [], industry: prefill.industry ?? "",
+        address: company.address.trim(), comments: prefill.comments ?? "", clientExecutive: prefill.clientExecutive ?? "", contactPhone: company.phone.trim(),
+        contactAltPhone: prefill.contactAltPhone ?? "", contactRemark: prefill.contactRemark ?? "", clientEmails: prefill.clientEmails ?? [], industry: company.industry.trim(),
         positions: prefill.positions ?? "", leadTypeId: prefill.leadTypeId, statusId: Number(statusId), statusReasonId: null, leadCategoryId: null, companySizeId: null,
-        cityId: prefill.cityId ?? null, firstContactDate: prefill.firstContactDate || reference.today, followUpDate: prefill.followUpDate ?? null,
+        cityId: prefill.cityId ?? values.city.find((item) => item.active && cityName && item.value.toLowerCase() === cityName.toLowerCase())?.id ?? null, firstContactDate: prefill.firstContactDate || reference.today, followUpDate: prefill.followUpDate ?? null,
         contractSignedDate: prefill.contractSignedDate ?? null, stageId: Number(stageId),
         ownerId: can("reassign_leads") ? Number(ownerId) : null, opportunityId: opportunity.id,
         organizationId: opportunity.organizationId ?? null, personId: opportunity.contacts[0]?.id ?? null,
@@ -549,6 +626,18 @@ function MoveToPipelineDialog({ opportunity, onClose, onDone }: { opportunity: O
             {statuses.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
           </select>
         </Field>
+        {lookupWanted && (
+          <fieldset className="convert-company field-wide">
+            <legend>Company Details</legend>
+            <p className="field-hint">{lookup === "busy" ? "Looking up the company on Google Maps and its website..." : lookup === "done" ? `Found on ${foundIn.join(" and ")}: check them. The new company and contact take them.` : lookup === "failed" ? "The company could not be looked up: fill in what you know." : "Nothing found: fill in what you know. The new company and contact take these details."}</p>
+            <div className="convert-company-grid">
+              <label><span className="field-label">Website</span><input type="url" value={company.website} onChange={(event) => setCompany({ ...company, website: event.target.value })} placeholder="https://company.com" /></label>
+              <label><span className="field-label">Phone</span><input value={company.phone} onChange={(event) => setCompany({ ...company, phone: event.target.value })} maxLength={40} placeholder="Company phone" /></label>
+              <label className="convert-company-wide"><span className="field-label">Address</span><input value={company.address} onChange={(event) => setCompany({ ...company, address: event.target.value })} maxLength={500} placeholder="Street, town" /></label>
+              <label className="convert-company-wide"><span className="field-label">Industry</span><input value={company.industry} onChange={(event) => setCompany({ ...company, industry: event.target.value })} maxLength={120} placeholder="e.g. Food Manufacturing" /></label>
+            </div>
+          </fieldset>
+        )}
         {can("reassign_leads") && (
           <Field label="Owner" wide hint="The deal is created in their name.">
             <select value={ownerId} onChange={(event) => setOwnerId(event.target.value)}>{owners.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>

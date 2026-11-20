@@ -13,6 +13,7 @@ import { notifyUsers } from "@/features/notifications/repository";
 import { getUser, listUsersWithPrivilege } from "@/features/users/repository";
 import { hasPrivilege } from "@/features/users/model";
 import { claimOpportunityForLead, opportunityHasDraft } from "@/features/opportunities/claim";
+import { refuseExistingLead, reopenLeadCard } from "@/features/opportunities/match";
 import { matchLead, normalizeCompanyName, type MatchableLead, type MatchedOn } from "@/features/trips/matching";
 import type { UserAccount } from "@/features/users/model";
 import { activityTypes } from "./model";
@@ -535,7 +536,8 @@ const duplicateWording: Record<MatchedOn | "email", string> = {
 };
 
 /** `organizationId`: the deal is added from that organization's (or one of its people's) page, so its other deals are not duplicates. */
-export type CreateLeadOptions = { allowSimilar?: boolean; opportunityId?: number | null; organizationId?: number | null; personId?: number | null };
+/** `takeExistingLead`: the deal is made from the lead Add Deal found for the same company (it may be not relevant or archived). */
+export type CreateLeadOptions = { allowSimilar?: boolean; opportunityId?: number | null; organizationId?: number | null; personId?: number | null; takeExistingLead?: boolean };
 
 /**
  * A first-contact date older than the working days set in List of Values (Queue Deals Older Than (Working Days), 1 to start;
@@ -574,6 +576,10 @@ export async function createLead(input: LeadInput, actor: UserAccount, ownerId: 
         canOverride: !duplicate.exact,
       });
     }
+    // A lead for the same company (request of November 20, 2026), in the inbox, not relevant or archived: the person converts
+    // that lead instead of adding a second record; Add Deal then sends it back as `opportunityId` with `takeExistingLead`.
+    if (!options.opportunityId) await refuseExistingLead(connection, input);
+    if (options.opportunityId && options.takeExistingLead) await reopenLeadCard(connection, options.opportunityId);
     const statusReasonId = await enforceStatusReason(connection, input.statusId, input.statusReasonId);
     let owner = actor;
     if (ownerId && ownerId !== actor.id) {

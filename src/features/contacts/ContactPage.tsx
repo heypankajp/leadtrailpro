@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { ArrowLeft, Building2, CircleDollarSign, GitMerge, History, Info, Mail, MapPin, MessageSquare, Pencil, Phone, Plus, Trash2, UserRound, UsersRound } from "lucide-react";
+import { ArrowLeft, Building2, CircleDollarSign, ExternalLink, GitMerge, History, Info, Mail, MapPin, MessageSquare, Pencil, Phone, Plus, Trash2, UserRound, UsersRound } from "lucide-react";
 import { errorMessage } from "@/lib/api";
 import { formatDateTime, fromLocalInput, relativeTime, toLocalInput } from "@/lib/format";
 import { useAsyncData } from "@/lib/useAsyncData";
@@ -28,8 +28,8 @@ export default function ContactPage({ kind, id, backLabel, onClose }: Props) {
   return kind === "organization" ? <OrganizationPage id={id} backLabel={backLabel} onClose={onClose} /> : <PersonPage id={id} backLabel={backLabel} onClose={onClose} />;
 }
 
-function Shell({ kind, name, subtitle, ownerName, actions, side, deals, activities, back, addDeal, composer }: {
-  kind: Kind; name: string; subtitle: string; ownerName: string; actions: ReactNode; side: ReactNode; deals: ContactDeal[]; activities: ContactActivity[]; back: ReactNode; addDeal: (() => void) | null; composer: ReactNode;
+function Shell({ kind, name, website, subtitle, ownerName, actions, side, deals, activities, back, addDeal, composer }: {
+  kind: Kind; name: string; website?: string; subtitle: string; ownerName: string; actions: ReactNode; side: ReactNode; deals: ContactDeal[]; activities: ContactActivity[]; back: ReactNode; addDeal: (() => void) | null; composer: ReactNode;
 }) {
   const { openLead } = useApp();
   return (
@@ -39,7 +39,8 @@ function Shell({ kind, name, subtitle, ownerName, actions, side, deals, activiti
         <Avatar name={name} seed={name} />
         <div className="deal-heading">
           <span className="eyebrow">{kind === "organization" ? "COMPANY" : "CONTACT"}</span>
-          <h1>{name}</h1>
+          {/* Request of November 20, 2026: a company with a website opens it from its name, as a deal does. */}
+          <h1 className="lead-title">{website ? <a className="lead-title-link" href={website} target="_blank" rel="noopener noreferrer" title={`Open ${website}`}>{name}<ExternalLink size={15} aria-hidden="true" /></a> : name}</h1>
           <p>{subtitle}</p>
         </div>
         <div className="detail-owner"><small>OWNER</small><strong>{ownerName}</strong></div>
@@ -226,7 +227,7 @@ function OrganizationPage({ id, backLabel, onClose }: Omit<Props, "kind">) {
   return (
     <>
       <Shell
-        kind="organization" name={organization.name} ownerName={organization.ownerName} back={back} deals={deals} activities={activities} addDeal={addDeal}
+        kind="organization" name={organization.name} website={organization.website || undefined} ownerName={organization.ownerName} back={back} deals={deals} activities={activities} addDeal={addDeal}
         composer={<ContactComposer permissions={permissions} save={async (input) => { await logOrganizationActivity(organization.id, input); reload(); bumpData(); notify(input.type === "note" ? "Note saved" : "Activity recorded"); }} />}
         subtitle={[organization.industry, organization.city].filter(Boolean).join(" · ") || "Company"}
         actions={<>

@@ -1341,6 +1341,69 @@ const migrations = [
       await client.query("INSERT INTO list_values (list_key, code, value, sort_order) VALUES ('queue_working_days', 'days', '1', 1) ON CONFLICT DO NOTHING");
     },
   },
+  {
+    version: 45,
+    name: "Leads on a sales trip (request of November 20, 2026): a lead of the Leads inbox is visited like a deal; sort_order is shared with the trip's deals",
+    async run(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS visit_trip_leads (
+          trip_id INTEGER NOT NULL REFERENCES visit_trips(id) ON DELETE CASCADE,
+          opportunity_id INTEGER NOT NULL REFERENCES opportunities(id) ON DELETE CASCADE,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          added_by INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
+          added_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW},
+          PRIMARY KEY (trip_id, opportunity_id)
+        )
+      `);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_visit_trip_leads_opportunity ON visit_trip_leads (opportunity_id)");
+    },
+  },
+  {
+    version: 46,
+    name: "Leads on To Do lists (request of November 20, 2026): a lead is put on a To Do list (To be visited first) like a deal, and a sales trip remembers the list it came from",
+    async run(client) {
+      await client.query("ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS todo_list_id INTEGER NULL REFERENCES list_values(id) ON DELETE SET NULL");
+      await client.query("ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS todo_since TIMESTAMP(0) NULL");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_opportunities_todo ON opportunities (todo_list_id)");
+      await client.query("ALTER TABLE visit_trip_leads ADD COLUMN IF NOT EXISTS from_todo_list_id INTEGER NULL REFERENCES list_values(id) ON DELETE SET NULL");
+    },
+  },
+  {
+    version: 47,
+    name: "Auto reminders per pipeline stage (request of November 20, 2026): after a deal has been in a stage for the days set (3 to start), its owner is reminded once",
+    async run(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS stage_reminders (
+          stage_id INTEGER PRIMARY KEY REFERENCES list_values(id) ON DELETE CASCADE,
+          days INTEGER NOT NULL DEFAULT 3 CHECK (days BETWEEN 1 AND 365),
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          updated_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW}
+        )
+      `);
+      await client.query("INSERT INTO stage_reminders (stage_id, days, is_active) SELECT id, 3, TRUE FROM list_values WHERE list_key = 'stage' ON CONFLICT DO NOTHING");
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS stage_reminder_log (
+          lead_id INTEGER NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+          stage_id INTEGER NOT NULL REFERENCES list_values(id) ON DELETE CASCADE,
+          entered_at TIMESTAMP(0) NOT NULL,
+          sent_at TIMESTAMP(0) NOT NULL DEFAULT ${UTC_NOW},
+          PRIMARY KEY (lead_id, stage_id, entered_at)
+        )
+      `);
+    },
+  },
+  {
+    version: 48,
+    name: "Several reminders per stage (request of November 20, 2026): No. of Reminders, sent at the stage's interval (the second one interval after the first)",
+    async run(client) {
+      await client.query("ALTER TABLE stage_reminders ADD COLUMN IF NOT EXISTS reminder_count INTEGER NOT NULL DEFAULT 1");
+      await client.query("ALTER TABLE stage_reminders DROP CONSTRAINT IF EXISTS stage_reminders_reminder_count_check");
+      await client.query("ALTER TABLE stage_reminders ADD CONSTRAINT stage_reminders_reminder_count_check CHECK (reminder_count BETWEEN 1 AND 10)");
+      await client.query("ALTER TABLE stage_reminder_log ADD COLUMN IF NOT EXISTS reminder_no INTEGER NOT NULL DEFAULT 1");
+      await client.query("ALTER TABLE stage_reminder_log DROP CONSTRAINT IF EXISTS stage_reminder_log_pkey");
+      await client.query("ALTER TABLE stage_reminder_log ADD PRIMARY KEY (lead_id, stage_id, entered_at, reminder_no)");
+    },
+  },
 ];
 
 if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port > 65535 || !/^[a-z_][a-z0-9_]*$/.test(databaseName)) {

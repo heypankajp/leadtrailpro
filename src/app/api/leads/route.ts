@@ -5,6 +5,7 @@ import { getDatabasePool } from "@/lib/db";
 import { parseLeadFilters, parseLeadInput } from "@/features/leads/model";
 import { createLead, findDuplicateLead, listLeads } from "@/features/leads/repository";
 import { requirePrivilege, requireUser } from "@/features/users/session";
+import { refuseExistingLead } from "@/features/opportunities/match";
 
 export async function GET(request: Request) {
   try {
@@ -31,6 +32,8 @@ export async function POST(request: Request) {
     const fresh = await newContactNames(input.clientName, input.clientExecutive, organizationId, personId);
     // A new contact may not take an email address or a phone number another contact has (request of November 18, 2026).
     if (fresh.contact) await assertNoContactClash(getDatabasePool(), input.clientEmails, [input.contactPhone, input.contactAltPhone]);
+    // The company is already a lead (request of November 20, 2026): say so before asking to create the company or the contact.
+    if (!asOptionalId(body?.opportunityId)) await refuseExistingLead(getDatabasePool(), input);
     const unconfirmed = (fresh.organization && body?.createOrganization !== true) || (fresh.contact && body?.createContact !== true);
     // A name close to an existing deal ("Lakeshore Bakery Co" for "Lakeshore Bakery Co.") meets the duplicate guard first:
     // createLead refuses it with a link to that deal, before anyone is asked to create a new organization.
@@ -39,7 +42,7 @@ export async function POST(request: Request) {
       const named = [fresh.organization && `the company ${fresh.organization}`, fresh.contact && `the contact ${fresh.contact}`].filter(Boolean).join(" and ");
       throw new HttpError(409, `Saving this deal creates ${named}. Confirm to continue.`, { code: "confirm_create", ...fresh });
     }
-    const lead = await createLead(input, user, asOptionalId(body?.ownerId), { allowSimilar: body?.allowSimilar === true, opportunityId: asOptionalId(body?.opportunityId), organizationId, personId });
+    const lead = await createLead(input, user, asOptionalId(body?.ownerId), { allowSimilar: body?.allowSimilar === true, opportunityId: asOptionalId(body?.opportunityId), organizationId, personId, takeExistingLead: body?.takeExistingLead === true });
     return NextResponse.json({ lead }, { status: 201 });
   } catch (error) {
     return handleRouteError(error, "Create deal");

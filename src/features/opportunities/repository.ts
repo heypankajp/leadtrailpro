@@ -94,6 +94,7 @@ type OpportunityRow = {
   leadSourceId: number | null; leadSource: string | null; bdActionId: number | null; bdAction: string | null; clientResponseId: number | null; clientResponse: string | null;
   note: string | null; addedByName: string | null;
   archivedAt: string | null; archiveKind: "manual" | "auto" | null; archivedByName: string | null;
+  todoListId: number | null; todoList: string | null; todoSince: string | null;
   organizationId: number | null; contacts: string | { id: number; name: string }[] | null;
 };
 
@@ -109,6 +110,7 @@ const opportunityColumns = `
   o.lead_type_id AS "leadSourceId", lsrc.value AS "leadSource", o.bd_action_id AS "bdActionId", oba.value AS "bdAction",
   o.client_response_id AS "clientResponseId", ocr.value AS "clientResponse", o.note, NULLIF(CONCAT(ab.first_name, ' ', ab.last_name), ' ') AS "addedByName", o.organization_id AS "organizationId",
   o.archived_at AS "archivedAt", o.archive_kind AS "archiveKind", NULLIF(CONCAT(arc.first_name, ' ', arc.last_name), ' ') AS "archivedByName",
+  o.todo_list_id AS "todoListId", tdl.value AS "todoList", o.todo_since AS "todoSince",
   (SELECT COALESCE(json_agg(json_build_object('id', pp.id, 'name', pp.name) ORDER BY ops.position, pp.name), '[]'::json)
      FROM opportunity_persons ops JOIN persons pp ON pp.id = ops.person_id WHERE ops.opportunity_id = o.id) AS contacts`;
 
@@ -128,7 +130,8 @@ const opportunityJoins = `
   LEFT JOIN list_values oba ON oba.id = o.bd_action_id
   LEFT JOIN list_values ocr ON ocr.id = o.client_response_id
   LEFT JOIN users ab ON ab.id = o.added_by
-  LEFT JOIN users arc ON arc.id = o.archived_by`;
+  LEFT JOIN users arc ON arc.id = o.archived_by
+  LEFT JOIN list_values tdl ON tdl.id = o.todo_list_id`;
 
 const sourceLabel = (source: string) => jobSourceLabels[source as JobSourceId] ?? source;
 
@@ -150,6 +153,7 @@ const toOpportunity = (row: OpportunityRow, listings: OpportunityListing[]): Opp
     reason: row.reason, reasonScope: row.reasonScope, reasonNote: row.reasonNote,
     decidedByName: row.decidedByName, decidedAt: fromSqlDateTime(row.decidedAt),
     archivedAt: fromSqlDateTime(row.archivedAt), archiveKind: row.archiveKind, archivedByName: row.archivedByName?.trim() || null,
+    todoListId: row.todoListId === null ? null : Number(row.todoListId), todoList: row.todoList, todoSince: fromSqlDateTime(row.todoSince),
     listings,
     tracker: trackerCard(trackerDraft(row.draft)),
     leadSourceId: row.leadSourceId === null ? null : Number(row.leadSourceId), leadSource: row.leadSource,
@@ -198,20 +202,24 @@ const mineClause = (origin?: OpportunityOrigin) => (origin === "found"
   ? "EXISTS (SELECT 1 FROM opportunity_listings ml JOIN opportunity_searches ms ON ms.id = ml.search_id WHERE ml.opportunity_id = o.id AND ms.created_by = ?)"
   : "o.added_by = ?");
 
-export async function listOpportunities(filter: { status: OpportunityStatus; page: number; pageSize: number; search?: string; origin?: OpportunityOrigin; mineOf?: number | null; archived?: boolean }, db: Queryable = getDatabasePool()): Promise<OpportunityPage> {
+export async function listOpportunities(filter: { status: OpportunityStatus; page: number; pageSize: number; search?: string; origin?: OpportunityOrigin; mineOf?: number | null; archived?: boolean; todoListId?: number | null; todo?: boolean }, db: Queryable = getDatabasePool()): Promise<OpportunityPage> {
   // The Archive lists archived leads whatever their status; every other list leaves them out (request of November 20, 2026).
   const scope = [originClause(filter.origin), filter.archived ? "o.archived_at IS NOT NULL" : "o.archived_at IS NULL"];
   const scopeParams: unknown[] = [];
   if (filter.mineOf) { scope.push(mineClause(filter.origin)); scopeParams.push(filter.mineOf); }
-  const clauses = filter.archived ? [...scope] : ["o.status = ?", ...scope];
-  const params: unknown[] = filter.archived ? [...scopeParams] : [filter.status, ...scopeParams];
+  // The To Do page's leads (request of November 20, 2026): on one list, or on any, in the inbox or not relevant.
+  const onTodo = Boolean(filter.todoListId || filter.todo);
+  if (filter.todoListId) { scope.push("o.todo_list_id = ?"); scopeParams.push(filter.todoListId); }
+  else if (filter.todo) scope.push("o.todo_list_id IS NOT NULL");
+  const clauses = filter.archived ? [...scope] : onTodo ? ["o.status IN ('new', 'not_relevant')", ...scope] : ["o.status = ?", ...scope];
+  const params: unknown[] = filter.archived || onTodo ? [...scopeParams] : [filter.status, ...scopeParams];
   if (filter.search) {
     clauses.push("(LOWER(o.company_name) LIKE ? OR LOWER(o.latest_title) LIKE ? OR LOWER(o.location) LIKE ? OR LOWER(COALESCE(o.draft->'lead'->>'executive', '')) LIKE ? OR LOWER(o.note) LIKE ?)");
     const like = `%${filter.search.toLowerCase()}%`;
     params.push(like, like, like, like, like);
   }
   const where = `WHERE ${clauses.join(" AND ")}`;
-  const order = filter.archived ? "o.archived_at DESC, o.id DESC" : filter.status === "new" ? "o.last_seen_at DESC, o.listings_count DESC, o.id DESC" : "o.decided_at DESC NULLS LAST, o.last_seen_at DESC, o.id DESC";
+  const order = filter.archived ? "o.archived_at DESC, o.id DESC" : onTodo ? "o.todo_since ASC NULLS LAST, o.id" : filter.status === "new" ? "o.last_seen_at DESC, o.listings_count DESC, o.id DESC" : "o.decided_at DESC NULLS LAST, o.last_seen_at DESC, o.id DESC";
   const { rows: countRows } = await db.query(`SELECT o.status, COUNT(*)::int AS count FROM opportunities o WHERE ${scope.join(" AND ")} GROUP BY o.status`, scopeParams);
   const counts: Record<OpportunityStatus, number> = { new: 0, attached: 0, converted: 0, not_relevant: 0 };
   for (const row of countRows as { status: OpportunityStatus; count: number }[]) counts[row.status] = Number(row.count);
@@ -271,15 +279,34 @@ async function refuseSameWebsite(connection: Queryable, website: string, exceptO
   const card = (cards as { id: number; companyName: string; website: string; status: OpportunityStatus }[]).find((row) => sameWebsite(row.website, website));
   if (card) throw new HttpError(409, `${card.companyName} is already a lead with the website ${key} (${card.status === "new" ? "in the inbox" : card.status === "not_relevant" ? "marked not relevant" : "converted to a deal"}).`);
   const { rows: deals } = await connection.query(
-    "SELECT l.client_name AS \"clientName\", l.company_url AS \"companyUrl\", st.code AS \"statusCode\", CONCAT(u.first_name, ' ', u.last_name) AS \"ownerName\" FROM leads l JOIN list_values st ON st.id = l.status_id JOIN users u ON u.id = l.owner_id WHERE l.company_url <> '' AND l.record_state <> 'archived'",
+    "SELECT l.client_name AS \"clientName\", l.company_url AS \"companyUrl\", st.code AS \"statusCode\", st.value AS status, l.record_state AS \"recordState\", CONCAT(u.first_name, ' ', u.last_name) AS \"ownerName\" FROM leads l JOIN list_values st ON st.id = l.status_id JOIN users u ON u.id = l.owner_id WHERE l.company_url <> ''",
   );
-  const deal = (deals as { clientName: string; companyUrl: string; statusCode: string; ownerName: string }[]).find((row) => sameWebsite(row.companyUrl, website));
-  if (deal) throw new HttpError(409, `${deal.clientName} is already a ${deal.statusCode === "client" ? "client" : "deal"} with the website ${key} (owner ${deal.ownerName}).`);
+  const deal = (deals as { clientName: string; companyUrl: string; statusCode: string; status: string; recordState: string; ownerName: string }[]).find((row) => sameWebsite(row.companyUrl, website));
+  if (deal) throw new HttpError(409, `${deal.clientName} already exists as ${dealWhere(deal)} with the website ${key}.`);
+}
+
+/** How a matching deal is named in the refusal: client or deal, its status and owner, and whether it is archived or queued. */
+const dealWhere = (deal: { statusCode: string; status: string; recordState: string; ownerName: string }) =>
+  `${deal.recordState === "archived" ? "an archived " : deal.recordState === "queued" ? "a queued " : "a "}${deal.statusCode === "client" ? "client" : `${deal.status} deal`} (owner ${deal.ownerName})`;
+
+/**
+ * A deal for the same company (request of November 20, 2026), archived and queued ones included: the same name, website, phone or
+ * address, as Add Deal compares them. A lead is not added for a company that is already a deal or a client.
+ */
+async function refuseExistingDeal(connection: Queryable, input: { companyName: string; website: string; location: string }, exceptLeadId: number | null = null): Promise<void> {
+  const match = await findDuplicateLead({ clientName: input.companyName, companyUrl: input.website, contactPhone: "", contactAltPhone: "", address: input.location, clientEmails: [] }, connection, exceptLeadId);
+  if (!match || match.matchedOn === "similar_name_address") return;
+  const found = match.lead;
+  throw new HttpError(409, `${found.clientName} already exists as ${dealWhere({ statusCode: found.statusCode, status: found.status, recordState: found.recordState, ownerName: found.ownerName })}. Open it from the Pipeline${found.recordState === "archived" ? "'s Archive" : ""} instead of adding a lead.`, {
+    code: "deal_exists", deal: { leadId: found.id, clientName: found.clientName, recordState: found.recordState, ownerName: found.ownerName },
+  });
 }
 
 export async function createManualOpportunity(input: LeadEntryInput, actor: UserAccount): Promise<Opportunity> {
   return withTransaction(async (connection) => {
     await checkLeadEntry(connection, input);
+    // A deal or client for the same company comes first: it names the deal, archived ones too (request of November 20, 2026).
+    await refuseExistingDeal(connection, input);
     const key = normalizeCompanyName(input.companyName);
     // A company picked from Contacts that already has a live deal is that deal's: the check below names it.
     if (!key) throw new HttpError(400, "Enter the company's name.");
@@ -287,8 +314,6 @@ export async function createManualOpportunity(input: LeadEntryInput, actor: User
     const same = (existing as { id: number; companyName: string; status: OpportunityStatus }[])[0];
     if (same) throw new HttpError(409, `${same.companyName} is already a lead (${same.status === "new" ? "in the inbox" : same.status === "not_relevant" ? "marked not relevant" : "converted to a deal"}).`);
     await refuseSameWebsite(connection, input.website, null);
-    const duplicate = await findDuplicateLead({ clientName: input.companyName, companyUrl: input.website, contactPhone: "", contactAltPhone: "", address: input.location, clientEmails: [] }, connection);
-    if (duplicate?.exact) throw new HttpError(409, `${duplicate.lead.clientName} is already a deal (owner ${duplicate.lead.ownerName}).`);
     const now = toSqlDateTime(new Date());
     const result = await connection.query(
       `INSERT INTO opportunities (company_key, company_name, website, location, status, revived, listings_count, latest_title, first_seen_at, last_seen_at, lead_type_id, bd_action_id, client_response_id, note, added_by, organization_id)
@@ -314,6 +339,8 @@ export async function updateOpportunityDetails(id: number, input: LeadEntryInput
     if (before.status !== "new" && before.status !== "not_relevant") throw new HttpError(409, `${before.companyName} is already a deal: change it on the deal.`);
     await checkLeadEntry(connection, input);
     if (websiteKey(input.website) !== websiteKey(before.website)) await refuseSameWebsite(connection, input.website, id);
+    // A renamed lead may now name a company that is already a deal (request of November 20, 2026).
+    if (normalizeCompanyName(input.companyName) !== normalizeCompanyName(before.companyName) || websiteKey(input.website) !== websiteKey(before.website)) await refuseExistingDeal(connection, input, before.lead?.id ?? null);
     await connection.query(
       "UPDATE opportunities SET company_name = ?, website = ?, location = ?, lead_type_id = ?, bd_action_id = ?, client_response_id = ?, note = ?, organization_id = ? WHERE id = ?",
       [input.companyName, input.website, input.location, input.leadSourceId, input.bdActionId, input.clientResponseId, input.note, input.organizationId ?? null, id],
@@ -391,6 +418,35 @@ export async function archiveStaleLeads(now = new Date(), db: Queryable = getDat
   const archived = result.rowCount ?? 0;
   if (archived > 0) await recordAudit(db, { actorId: null, action: "opportunity.auto_archived", entityType: "opportunity", after: { archived, days }, details: `${archived} ${archived === 1 ? "lead" : "leads"} not relevant for over ${days} days moved to the Archive` });
   return { archived, days };
+}
+
+/** Puts a lead on a To Do list, moves it to another, or takes it off (request of November 20, 2026): `listId` null to take it off. */
+export async function setOpportunityTodo(id: number, listId: number | null, actor: UserAccount): Promise<Opportunity> {
+  return withTransaction(async (connection) => {
+    const before = await getOpportunity(id, connection);
+    if (!before) throw new HttpError(404, "Lead not found.");
+    if (before.status !== "new" && before.status !== "not_relevant") throw new HttpError(409, `${before.companyName} is already a deal: put the deal on a To Do list.`);
+    if (listId !== null) await assertListValue(connection, "todo_list", listId, { required: true, label: "To Do list" });
+    if (listId === before.todoListId) return before;
+    await connection.query("UPDATE opportunities SET todo_list_id = ?, todo_since = ? WHERE id = ?", [listId, listId === null ? null : toSqlDateTime(new Date()), id]);
+    const after = (await getOpportunity(id, connection))!;
+    await recordAudit(connection, {
+      actorId: actor.id, action: "opportunity.todo", entityType: "opportunity", entityId: id, before: { todoList: before.todoList }, after: { todoList: after.todoList },
+      details: `${actor.name}: ${after.todoList ? `${after.companyName} put on To Do: ${after.todoList}` : `${after.companyName} taken off To Do${before.todoList ? `: ${before.todoList}` : ""}`}`,
+    });
+    return after;
+  });
+}
+
+/** How many leads are on each To Do list (request of November 20, 2026): the caller's own (added by them) and everyone's. */
+export async function leadTodoCounts(viewer: UserAccount, db: Queryable = getDatabasePool()) {
+  const { rows } = await db.query(
+    `SELECT o.todo_list_id AS "listId", COUNT(*)::int AS everyone, COUNT(*) FILTER (WHERE o.added_by = ?)::int AS mine
+     FROM opportunities o WHERE o.todo_list_id IS NOT NULL AND o.archived_at IS NULL AND o.status IN ('new', 'not_relevant') GROUP BY o.todo_list_id`,
+    [viewer.id],
+  );
+  const lists = (rows as { listId: number; everyone: number; mine: number }[]).map((row) => ({ listId: Number(row.listId), mine: Number(row.mine), everyone: Number(row.everyone) }));
+  return { lists, mine: lists.reduce((sum, list) => sum + list.mine, 0), everyone: lists.reduce((sum, list) => sum + list.everyone, 0) };
 }
 
 export async function markNotRelevant(id: number, reasonId: number, note: string, actor: UserAccount): Promise<Opportunity> {

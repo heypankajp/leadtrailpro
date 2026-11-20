@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { relativeTime } from "@/lib/format";
 import { errorMessage } from "@/lib/api";
 import { useAsyncData } from "@/lib/useAsyncData";
 import { ChevronDown, Filter, Kanban, ListChecks, MapPinned, Plus, Search, SlidersHorizontal, UserRound, X } from "lucide-react";
@@ -21,13 +22,16 @@ import { leadSortKeys, type LeadPage, type LeadSortKey, type LeadSummary } from 
 import QuickFilterMenu from "./QuickFilterMenu";
 import StatusFilter from "@/features/shell/StatusFilter";
 import { isQuickFilterKey, type QuickFilterKey } from "./quick-filters";
+import { fetchLeadTodoCounts, fetchOpportunities, setOpportunityTodo } from "@/features/opportunities/client";
+import type { Opportunity } from "@/features/opportunities/model";
+import { LeadTodoDialog } from "@/features/opportunities/OpportunitiesPage";
 
 export const leadListViews = ["leads", "todo", "all-leads", "cold", "warm", "hot", "client", "queued", "archive", "favorites"] as const;
 export type LeadListView = (typeof leadListViews)[number];
 
 const titles: Record<LeadListView, { title: string; eyebrow: string; blurb: string }> = {
   leads: { title: "My Deals", eyebrow: "YOUR PIPELINE", blurb: "Deals you own, most recently active first." },
-  todo: { title: "To Do", eyebrow: "DEALS PUT ASIDE", blurb: "Deals moved to a To Do list to come back to, longest waiting first. Move a deal here from its page or from any deal list, and take it off when it is done." },
+  todo: { title: "To Do", eyebrow: "PUT ASIDE", blurb: "Deals and leads moved to a To Do list to come back to, longest waiting first. Move a deal here from any deal list, and a lead from its Actions menu on Leads or Lead Generation; take it off when it is done." },
   "all-leads": { title: "All Deals", eyebrow: "TEAM PIPELINE", blurb: "Every active deal across the team." },
   cold: { title: "Cold Deals", eyebrow: "BY STATUS", blurb: "Prospects that still need a first conversation." },
   warm: { title: "Warm Deals", eyebrow: "BY STATUS", blurb: "Conversations that are moving." },
@@ -75,6 +79,9 @@ export default function LeadListPage({ view, embedded = false }: { view: LeadLis
   // so "My deals" hid it and the list looked empty.
   const [todoScope, setTodoScope] = useState<TodoScope>("everyone");
   const [todoTab, setTodoTab] = useState<number | null>(null);
+  // The To Do page lists deals or leads (request of November 20, 2026).
+  // The lead Action Center links here with kind=leads (request of November 20, 2026).
+  const [todoKind, setTodoKind] = useState<"deals" | "leads">(() => (route.query.get("kind") === "leads" ? "leads" : "deals"));
   const [debouncedQ, setDebouncedQ] = useState(filters.q);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<number[]>([]);
@@ -146,7 +153,10 @@ export default function LeadListPage({ view, embedded = false }: { view: LeadLis
     jumpTo.current = null;
   }, [data, page, nameSorted]);
   const todoCountsFetcher = useCallback((): Promise<TodoCounts | null> => (view === "todo" ? fetchTodoCounts() : Promise.resolve(null)), [view]);
-  const todoCounts = useAsyncData<TodoCounts | null>(todoCountsFetcher, dataVersion).data ?? null;
+  const dealTodoCounts = useAsyncData<TodoCounts | null>(todoCountsFetcher, dataVersion).data ?? null;
+  const leadTodoCountsFetcher = useCallback((): Promise<TodoCounts | null> => (view === "todo" ? fetchLeadTodoCounts() : Promise.resolve(null)), [view]);
+  const leadTodoCounts = useAsyncData<TodoCounts | null>(leadTodoCountsFetcher, dataVersion).data ?? null;
+  const todoCounts = todoKind === "leads" ? leadTodoCounts : dealTodoCounts;
   const todoLists = reference.listValues.todo_list;
 
   // Changing the status filter resets the reason filter, which only applies to Lost Lead and Disqualified (LEAD-07).
@@ -199,6 +209,10 @@ export default function LeadListPage({ view, embedded = false }: { view: LeadLis
         <div className="lead-list-wrap">
           {view === "todo" && (
             <div className="todo-bar">
+              <div className="scope-toggle todo-kind" role="group" aria-label="Deals or leads">
+                <button type="button" className={todoKind === "deals" ? "is-active" : ""} aria-pressed={todoKind === "deals"} onClick={() => { setTodoKind("deals"); setPage(1); setSelected([]); }}>Deals <span className="todo-count">{dealTodoCounts ? dealTodoCounts[todoScope] : 0}</span></button>
+                <button type="button" className={todoKind === "leads" ? "is-active" : ""} aria-pressed={todoKind === "leads"} onClick={() => { setTodoKind("leads"); setPage(1); setSelected([]); }}>Leads <span className="todo-count">{leadTodoCounts ? leadTodoCounts[todoScope] : 0}</span></button>
+              </div>
               <div className="todo-tabs" role="tablist" aria-label="To Do lists">
                 {todoTabs(todoLists, todoCounts, todoScope).map((tab) => (
                   <button key={tab.id ?? "all"} role="tab" aria-selected={todoTab === tab.id} className={todoTab === tab.id ? "is-active" : ""} onClick={() => { setTodoTab(tab.id); setPage(1); setSelected([]); }}>
@@ -207,11 +221,12 @@ export default function LeadListPage({ view, embedded = false }: { view: LeadLis
                 ))}
               </div>
               <div className="scope-toggle" role="group" aria-label="Whose deals">
-                <button className={todoScope === "mine" ? "is-active" : ""} onClick={() => { setTodoScope("mine"); setPage(1); setSelected([]); }}>My Deals</button>
+                <button className={todoScope === "mine" ? "is-active" : ""} onClick={() => { setTodoScope("mine"); setPage(1); setSelected([]); }}>{todoKind === "leads" ? "My Leads" : "My Deals"}</button>
                 <button className={todoScope === "everyone" ? "is-active" : ""} onClick={() => { setTodoScope("everyone"); setPage(1); setSelected([]); }}>Everyone</button>
               </div>
             </div>
           )}
+          {view === "todo" && todoKind === "leads" ? <LeadTodoList listId={todoTab} mine={todoScope === "mine"} /> : (<>
           <div className="lead-toolbar">
             <div className="search-field lead-search">
               <Search size={16} />
@@ -319,6 +334,7 @@ export default function LeadListPage({ view, embedded = false }: { view: LeadLis
               <Pagination page={data.page} pageSize={data.pageSize} total={data.total} onPage={setPage} />
             </div>
           )}
+          </>)}
         </div>
       </section>
 
@@ -408,6 +424,75 @@ export default function LeadListPage({ view, embedded = false }: { view: LeadLis
       {dialog?.kind === "reassign-reason" && (
         <PromptDialog title={`Reassign to ${dialog.user.name}`} eyebrow="OWNERSHIP" label="Reason (optional)" confirmLabel="Reassign" onClose={() => setDialog(null)} onConfirm={(reason) => runBulk(dialog.ids, "reassign", { ownerId: dialog.user.id, reason })} />
       )}
+    </>
+  );
+}
+
+/**
+ * The To Do page's leads (request of November 20, 2026): the leads on one To Do list, or on any, longest waiting first, with
+ * Move to another list and Take Off To Do.
+ */
+function LeadTodoList({ listId, mine }: { listId: number | null; mine: boolean }) {
+  const { notify, dataVersion, bumpData } = useApp();
+  const [q, setQ] = useState("");
+  const [term, setTerm] = useState("");
+  const [page, setPage] = useState(1);
+  const [moving, setMoving] = useState<Opportunity | null>(null);
+  useEffect(() => { const timer = window.setTimeout(() => { setTerm(q.trim()); setPage(1); }, 300); return () => window.clearTimeout(timer); }, [q]);
+  const fetcher = useCallback(() => fetchOpportunities({ status: "new", page, pageSize: 50, ...(listId ? { todoListId: listId } : { todo: "1" as const }), ...(mine ? { scope: "mine" as const } : {}), ...(term ? { search: term } : {}) }), [listId, mine, page, term]);
+  const { data, error, loading } = useAsyncData(fetcher, dataVersion);
+  const takeOff = async (lead: Opportunity) => {
+    try { await setOpportunityTodo(lead.id, null); notify(`${lead.companyName} taken off To Do`); bumpData(); } catch (caught) { notify(errorMessage(caught), "error"); }
+  };
+  return (
+    <>
+      <div className="lead-toolbar">
+        <div className="search-field lead-search">
+          <Search size={16} />
+          <input aria-label="Search leads" placeholder="Search company, role, location..." value={q} onChange={(event) => setQ(event.target.value)} />
+          {q && <button className="clear-search" aria-label="Clear search" onClick={() => setQ("")}><X size={13} /></button>}
+        </div>
+      </div>
+      <ErrorText message={error} />
+      {!data && !error ? <Loading /> : data && (data.opportunities.length === 0 ? (
+        <div className="empty-block"><strong>No leads on {listId ? "this list" : "a To Do list"}</strong><span>Put a lead here from Leads or Lead Generation: Actions → Move to To Do.</span></div>
+      ) : (
+        <div className="table-scroll">
+          <table className="lead-table todo-lead-table">
+            <thead><tr><th>LEAD</th><th>LOCATION</th><th>ROLES</th><th>TO DO LIST</th><th>ON THE LIST</th><th>ADDED BY</th><th><span className="sr-only">Actions</span></th></tr></thead>
+            <tbody>
+              {data.opportunities.map((lead) => (
+                <tr key={lead.id}>
+                  <td>
+                    <span className="todo-lead-name">
+                      <strong>{lead.website ? <a className="opp-name-link" href={lead.website} target="_blank" rel="noopener noreferrer" title={`Open ${lead.website}`}>{lead.companyName}</a> : lead.companyName}</strong>
+                      <small>{lead.status === "not_relevant" ? "Lead · Not Relevant" : "Lead"}{lead.leadSource ? ` · ${lead.leadSource}` : ""}</small>
+                    </span>
+                  </td>
+                  <td><span className="muted-cell">{lead.location || "—"}</span></td>
+                  <td><span className="muted-cell">{lead.latestTitle || "—"}</span></td>
+                  <td>{lead.todoList ? <span className="opp-todo">{lead.todoList}</span> : "—"}</td>
+                  <td><span className="muted-cell">{lead.todoSince ? relativeTime(lead.todoSince) : "—"}</span></td>
+                  <td><span className="muted-cell">{lead.addedByName ?? "Lead Generation"}</span></td>
+                  <td>
+                    <span className="todo-lead-actions">
+                      <button type="button" className="button button-outline button-small" onClick={() => setMoving(lead)}>Move</button>
+                      <button type="button" className="button button-outline button-small" onClick={() => void takeOff(lead)}>Take Off To Do</button>
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
+      {data && (
+        <div className="table-footer">
+          <span>Showing <strong>{data.opportunities.length}</strong> of <strong>{data.total}</strong> leads{loading ? " · refreshing" : ""}</span>
+          <Pagination page={page} pageSize={50} total={data.total} onPage={setPage} />
+        </div>
+      )}
+      {moving && <LeadTodoDialog lead={moving} onClose={() => setMoving(null)} onDone={(message) => { setMoving(null); notify(message); bumpData(); }} />}
     </>
   );
 }

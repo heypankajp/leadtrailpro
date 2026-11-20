@@ -1,13 +1,16 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { AlertTriangle, CircleDashed, ArrowRight, Clock3, ChevronRight, ListTodo, Mail, MailOpen, MapPin, Phone, Plus, Target } from "lucide-react";
+import { AlertTriangle, CircleDashed, ArrowRight, Clock3, ChevronRight, ListTodo, Mail, MailOpen, MapPin, Phone, Target } from "lucide-react";
 import { formatDate, formatDateTime, percentChange, relativeTime } from "@/lib/format";
 import { useAsyncData } from "@/lib/useAsyncData";
 import type { LeadSummary } from "@/features/leads/model";
 import { fetchDashboard } from "@/features/reports/client";
 import { useApp } from "@/features/shell/AppContext";
 import { Avatar, EmptyState, ErrorText, Loading, StatusPill, Tabs } from "@/features/shell/components";
+import LeadActionCenter from "./LeadActionCenter";
+
+const kindKey = "ltp.actionCenter.kind";
 
 type FollowUpTab = "overdue" | "today" | "tomorrow";
 
@@ -17,9 +20,17 @@ const greeting = () => {
 };
 
 export default function ActionCenter() {
-  const { user, can, navigate, openLead, openNewLead, dataVersion } = useApp();
+  const { user, can, navigate, openLead, dataVersion, reference } = useApp();
   const [scope, setScope] = useState<"mine" | "team">("mine");
-  const fetcher = useCallback(() => fetchDashboard(scope), [scope]);
+  // Lead or Deal (request of November 20, 2026) in place of Add a Deal: which dashboard the Action Center shows, remembered here.
+  const [kind, setKind] = useState<"deals" | "leads">(() => {
+    try { return typeof window !== "undefined" && window.localStorage.getItem(kindKey) === "leads" ? "leads" : "deals"; } catch { return "deals"; }
+  });
+  const chooseKind = (value: "deals" | "leads") => {
+    setKind(value);
+    try { window.localStorage.setItem(kindKey, value); } catch { /* storage blocked */ }
+  };
+  const fetcher = useCallback(() => (kind === "deals" ? fetchDashboard(scope) : Promise.resolve(null)), [scope, kind]);
   const { data, error } = useAsyncData(fetcher, dataVersion);
   const [chosenTab, setTab] = useState<FollowUpTab | null>(null);
   // Overdue follow-ups are emphasized by default, per the BRD.
@@ -55,7 +66,7 @@ export default function ActionCenter() {
         <div>
           <div className="eyebrow">YOUR DAY AT A GLANCE</div>
           <h1>{greeting()}, {user.firstName} <span className="wave">✦</span></h1>
-          <p>{data ? `Business day ${formatDate(data.today)}. Here's what's happening with your pipeline.` : "Loading your pipeline..."}</p>
+          <p>{kind === "leads" ? `Business day ${formatDate(reference.today)}. Here's what's happening with your leads.` : data ? `Business day ${formatDate(data.today)}. Here's what's happening with your pipeline.` : "Loading your pipeline..."}</p>
         </div>
         <div className="heading-actions">
           {can("view_team_reports") && (
@@ -64,14 +75,21 @@ export default function ActionCenter() {
               <button className={scope === "team" ? "is-active" : ""} onClick={() => setScope("team")}>Whole Team</button>
             </div>
           )}
-          {can("create_leads") && <button className="button button-primary" onClick={openNewLead}><Plus size={17} /> Add a Deal</button>}
+          <label className="dashboard-kind">
+            <span className="sr-only">Show the dashboard for</span>
+            <select value={kind} onChange={(event) => chooseKind(event.target.value === "leads" ? "leads" : "deals")} aria-label="Lead or Deal dashboard">
+              <option value="leads">Lead</option>
+              <option value="deals">Deal</option>
+            </select>
+          </label>
         </div>
       </div>
 
-      <ErrorText message={error} />
-      {!data && !error && <Loading text="Loading your action center..." />}
+      {kind === "leads" && <LeadActionCenter scope={scope} />}
+      {kind === "deals" && <ErrorText message={error} />}
+      {kind === "deals" && !data && !error && <Loading text="Loading your action center..." />}
 
-      {data && (
+      {kind === "deals" && data && (
         <>
           <section className="performance-grid" aria-label="Weekly performance">
             {metric("Calls made", <Phone size={17} />, "blue", data.metrics.calls.thisWeek, data.metrics.calls.lastWeek)}

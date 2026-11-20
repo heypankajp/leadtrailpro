@@ -35,6 +35,13 @@ export async function claimOpportunityForLead(db: Queryable, opportunityId: numb
   const nowSql = toSqlDateTime(now);
   await db.query("UPDATE opportunities SET status = 'converted', lead_id = ?, decided_by = ?, decided_at = ?, revived = FALSE, draft = NULL WHERE id = ?", [lead.id, actor.id, nowSql, opportunityId]);
   await db.query("UPDATE opportunity_listings SET lead_id = ? WHERE opportunity_id = ?", [lead.id, opportunityId]);
+  // A lead on a sales trip (request of November 20, 2026): its new deal takes its place on the trip.
+  await db.query(
+    `INSERT INTO visit_trip_deals (trip_id, lead_id, sort_order, added_by, added_at)
+     SELECT trip_id, ?, sort_order, added_by, added_at FROM visit_trip_leads WHERE opportunity_id = ? ON CONFLICT DO NOTHING`,
+    [lead.id, opportunityId],
+  );
+  await db.query("DELETE FROM visit_trip_leads WHERE opportunity_id = ?", [opportunityId]);
   const { rows: listings } = await db.query("SELECT title, url, source FROM opportunity_listings WHERE opportunity_id = ? ORDER BY posted_at DESC NULLS LAST, last_seen_at DESC, id DESC LIMIT 20", [opportunityId]);
   const draft = trackerDraft(row.draft);
   let trackerEntries = 0;

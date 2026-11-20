@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { handleRouteError, jsonError, readJsonBody, requireSameOrigin } from "@/lib/http";
 import { parseTripDeleteChoice, parseVisitTripInput } from "@/features/visit-trips/model";
-import { canManageTrip, deleteVisitTrip, getVisitTrip, updateVisitTrip, visitTripDeals } from "@/features/visit-trips/repository";
+import { canManageTrip, deleteVisitTrip, getVisitTrip, updateVisitTrip, visitTripDeals, visitTripLeads, visitTripOrder } from "@/features/visit-trips/repository";
 import { requirePrivilege, requireUser } from "@/features/users/session";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -20,7 +20,8 @@ export async function GET(_request: Request, context: RouteContext) {
     if (!id) return jsonError(400, "Invalid sales trip ID.");
     const trip = await getVisitTrip(id);
     if (!trip) return jsonError(404, "Sales trip not found.");
-    return NextResponse.json({ trip, deals: await visitTripDeals(id), permissions: { edit: canManageTrip(user, trip) } });
+    const [deals, leads, order] = await Promise.all([visitTripDeals(id), visitTripLeads(id), visitTripOrder(id)]);
+    return NextResponse.json({ trip, deals, leads, order, permissions: { edit: canManageTrip(user, trip) } });
   } catch (error) {
     return handleRouteError(error, "Open sales trip");
   }

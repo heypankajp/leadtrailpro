@@ -31,17 +31,23 @@ export default function LeadEmails({ leadId, addresses, attachments }: { leadId:
   const emailsFetcher = useCallback(() => (canLoad ? fetchLeadEmails(leadId) : Promise.resolve({ emails: [], failures: 0 })), [canLoad, leadId]);
   const { data: result, error: emailsError, loading } = useAsyncData(emailsFetcher, `${addresses.join(",")}|${version}`);
   const [compose, setCompose] = useState<Compose | null>(null);
+  // All, Sent or Received (request of November 20, 2026): the same toggle as Me / Everyone, with the count of each.
+  const [show, setShow] = useState<"all" | "sent" | "received">("all");
+  const counts = useMemo(() => {
+    const emails = result?.emails ?? [];
+    return { all: emails.length, sent: emails.filter((email) => email.direction === "sent").length, received: emails.filter((email) => email.direction === "received").length };
+  }, [result]);
 
   const threads = useMemo(() => {
     const byThread = new Map<string, LeadEmail[]>();
-    for (const email of result?.emails ?? []) {
+    for (const email of (result?.emails ?? []).filter((item) => show === "all" || item.direction === show)) {
       const key = email.threadId || email.id;
       const list = byThread.get(key) ?? [];
       if (!byThread.has(key)) byThread.set(key, list);
       list.push(email);
     }
     return [...byThread.values()].map((list) => list.sort((a, b) => a.date.localeCompare(b.date))).sort((a, b) => b[b.length - 1].date.localeCompare(a[a.length - 1].date));
-  }, [result]);
+  }, [result, show]);
 
   const disconnect = async () => {
     try {
@@ -84,7 +90,21 @@ export default function LeadEmails({ leadId, addresses, attachments }: { leadId:
       {canLoad && !loading && result && (
         <>
           {result.failures > 0 && <div className="form-note note-warning"><Mail size={14} /> Some mailboxes could not be read. Those users may need to reconnect Gmail.</div>}
-          {threads.length === 0
+          {counts.all > 0 && (
+            <div className="email-filter">
+              <div className="scope-toggle" role="group" aria-label="Which emails">
+                {(["all", "sent", "received"] as const).map((value) => (
+                  <button key={value} type="button" className={show === value ? "is-active" : ""} aria-pressed={show === value} onClick={() => setShow(value)}>
+                    {value === "all" ? "All" : value === "sent" ? "Sent" : "Received"} <span className="email-filter-count">{counts[value]}</span>
+                  </button>
+                ))}
+              </div>
+              <small className="field-hint">{show === "all" ? "Every message with the client, by conversation." : show === "sent" ? "Messages the team sent to the client." : "Messages the client sent to the team."}</small>
+            </div>
+          )}
+          {threads.length === 0 && counts.all > 0
+            ? <EmptyState icon={<Mail size={22} />} title={show === "sent" ? "No sent emails" : "No received emails"} text={show === "sent" ? "No message to the client was found in a connected mailbox." : "No message from the client was found in a connected mailbox."} />
+            : threads.length === 0
             ? <EmptyState icon={<Mail size={22} />} title="No recent emails found" text="Messages with any contact of the company, as sender, To or Cc, appear here." />
             : (
               <div className="email-list">

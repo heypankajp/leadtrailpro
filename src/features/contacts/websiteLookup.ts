@@ -101,8 +101,8 @@ async function fetchPage(start: URL): Promise<Page> {
   throw new HttpError(502, "The website redirected too many times.");
 }
 
-/** Visits the website and returns what it says about the company. */
-export async function lookupCompanyWebsite(value: string): Promise<WebsiteDetails> {
+/** Visits the website and returns what it says about the company. `google: false` leaves out the Google Maps fallback. */
+export async function lookupCompanyWebsite(value: string, options: { google?: boolean } = {}): Promise<WebsiteDetails> {
   const start = normalizeWebsite(value);
   if (!start) throw new HttpError(400, "Enter the company's website, e.g. https://company.com.");
   const home = await fetchPage(start);
@@ -133,7 +133,7 @@ export async function lookupCompanyWebsite(value: string): Promise<WebsiteDetail
     }
   }
   // Still no address: Google Maps, when a key is set (the trip planner's MAPS_API_KEY).
-  if (!details.address) {
+  if (!details.address && options.google !== false) {
     const place = await googleAddress(details.name, details.website).catch((error: unknown) => {
       console.error("Company lookup: Google Maps search failed.", error instanceof Error ? error.message : error);
       return null;
@@ -154,6 +154,12 @@ export async function lookupCompanyWebsite(value: string): Promise<WebsiteDetail
  * Maps like the planner's own; nothing is called with TRIPS_PROVIDER=stub, without a key or when the budget is spent.
  */
 async function googleAddress(name: string, website: string): Promise<{ address: string } | null> {
+  const place = await googlePlace(name, website, name);
+  return place?.address ? { address: place.address } : null;
+}
+
+/** One Places Text Search (metered as "places_text_search"): the place whose website is the company's, or one with its exact name. */
+async function googlePlace(query: string, website: string, name: string): Promise<{ address: string; website: string; phone: string } | null> {
   const { key } = mapsApiKey();
   if (!key || !name || (process.env.TRIPS_PROVIDER || "").trim().toLowerCase() === "stub") return null;
   const meter = createMapsMeter();
@@ -163,16 +169,49 @@ async function googleAddress(name: string, website: string): Promise<{ address: 
     const response = await fetch("https://places.googleapis.com/v1/places:searchText", {
       method: "POST", cache: "no-store", signal: AbortSignal.timeout(8000),
       headers: { "Content-Type": "application/json", "X-Goog-Api-Key": key, "X-Goog-FieldMask": placesFieldMask },
-      body: JSON.stringify({ textQuery: name, pageSize: 5, languageCode: "en" }),
+      body: JSON.stringify({ textQuery: query, pageSize: 5, languageCode: "en" }),
     });
     if (!response.ok) { failed = true; throw new Error(`Places search failed (${response.status}).`); }
     const { places } = mapPlacesSearch((await response.json()) as Record<string, unknown>);
-    const place = pickPlace(places.map((item) => ({ name: item.name, address: item.address, website: item.website })), website, name);
-    return place?.address ? { address: place.address } : null;
+    const picked = pickPlace(places.map((item) => ({ name: item.name, address: item.address, website: item.website })), website, name);
+    const place = picked ? places.find((item) => item.name === picked.name && item.address === picked.address) ?? null : null;
+    return place ? { address: place.address, website: place.website, phone: place.phone } : null;
   } catch (error) {
     failed = true;
     throw error;
   } finally {
     await meter.record("places_text_search", 1, failed).catch(() => undefined);
   }
+}
+
+/** What could be found about a lead's company before it becomes a deal (request of November 20, 2026). */
+export type LeadCompanyDetails = { website: string; address: string; city: string; phone: string; industry: string; sources: string[] };
+
+/**
+ * A lead converted to a deal (request of November 20, 2026): a lead the job searches found knows only the company's name and
+ * town, so Google Maps is asked first (name and town; website, address and phone, one metered search when a key is set), then
+ * the company's website (industry, and the address when Google had none). What the lead already holds is kept.
+ */
+export async function lookupLeadCompany(name: string, location: string, website: string): Promise<LeadCompanyDetails> {
+  const found: LeadCompanyDetails = { website: website.trim(), address: "", city: "", phone: "", industry: "", sources: [] };
+  const place = await googlePlace(`${name} ${location}`.trim(), found.website, name).catch((error: unknown) => {
+    console.error("Lead company lookup: Google Maps search failed.", error instanceof Error ? error.message : error);
+    return null;
+  });
+  if (place) {
+    found.website ||= place.website;
+    found.address = place.address;
+    found.city = cityInAddress(place.address);
+    found.phone = place.phone;
+    found.sources.push("Google Maps");
+  }
+  if (found.website) {
+    try {
+      const site = await lookupCompanyWebsite(found.website, { google: false });
+      found.industry = site.industry;
+      if (!found.address && site.address) { found.address = site.address; found.city = site.city; }
+      found.sources.push("the company's website");
+    } catch { /* the website could not be read: what Google found is kept */ }
+  }
+  return found;
 }

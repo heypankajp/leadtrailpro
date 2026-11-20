@@ -11,8 +11,12 @@ type TripRow = Omit<VisitTrip, "companies" | "dealCount" | "kind" | "address"> &
 const tripSelect = `
   SELECT 'visit' AS kind, '' AS address, t.id, t.title, TO_CHAR(t.trip_date, 'YYYY-MM-DD') AS "tripDate", t.owner_id AS "ownerId", CONCAT(o.first_name, ' ', o.last_name) AS "ownerName",
     t.created_by AS "createdById", CONCAT(c.first_name, ' ', c.last_name) AS "createdByName", t.created_at AS "createdAt", t.updated_at AS "updatedAt",
-    (SELECT COUNT(*) FROM visit_trip_deals d JOIN leads l ON l.id = d.lead_id WHERE d.trip_id = t.id AND l.record_state = 'active') AS "dealCount",
-    ARRAY(SELECT l.client_name FROM visit_trip_deals d JOIN leads l ON l.id = d.lead_id WHERE d.trip_id = t.id AND l.record_state = 'active' ORDER BY d.sort_order, d.added_at) AS companies
+    (SELECT COUNT(*) FROM visit_trip_deals d JOIN leads l ON l.id = d.lead_id WHERE d.trip_id = t.id AND l.record_state = 'active')
+      + (SELECT COUNT(*) FROM visit_trip_leads vl JOIN opportunities vo ON vo.id = vl.opportunity_id WHERE vl.trip_id = t.id AND vo.status IN ('new', 'not_relevant')) AS "dealCount",
+    ARRAY(SELECT name FROM (
+      SELECT l.client_name AS name, d.sort_order, d.added_at FROM visit_trip_deals d JOIN leads l ON l.id = d.lead_id WHERE d.trip_id = t.id AND l.record_state = 'active'
+      UNION ALL SELECT vo.company_name, vl.sort_order, vl.added_at FROM visit_trip_leads vl JOIN opportunities vo ON vo.id = vl.opportunity_id WHERE vl.trip_id = t.id AND vo.status IN ('new', 'not_relevant')
+    ) stops ORDER BY sort_order, added_at) AS companies
   FROM visit_trips t
   JOIN users o ON o.id = t.owner_id
   JOIN users c ON c.id = t.created_by
@@ -81,8 +85,12 @@ export async function listVisitTrips(filters: VisitTripFilters, viewer: UserAcco
   const where = (clauses: string[]) => (clauses.length ? clauses.join(" AND ") : "TRUE");
   const union = `
     SELECT 'visit' AS kind, t.id, t.title, t.trip_date, t.owner_id, t.created_by, t.created_at, t.updated_at, '' AS address,
-      (SELECT COUNT(*) FROM visit_trip_deals d JOIN leads l ON l.id = d.lead_id WHERE d.trip_id = t.id AND l.record_state = 'active') AS deal_count,
-      ARRAY(SELECT l.client_name FROM visit_trip_deals d JOIN leads l ON l.id = d.lead_id WHERE d.trip_id = t.id AND l.record_state = 'active' ORDER BY d.sort_order, d.added_at) AS companies
+      (SELECT COUNT(*) FROM visit_trip_deals d JOIN leads l ON l.id = d.lead_id WHERE d.trip_id = t.id AND l.record_state = 'active')
+        + (SELECT COUNT(*) FROM visit_trip_leads vl JOIN opportunities vo ON vo.id = vl.opportunity_id WHERE vl.trip_id = t.id AND vo.status IN ('new', 'not_relevant')) AS deal_count,
+      ARRAY(SELECT name FROM (
+        SELECT l.client_name AS name, d.sort_order, d.added_at FROM visit_trip_deals d JOIN leads l ON l.id = d.lead_id WHERE d.trip_id = t.id AND l.record_state = 'active'
+        UNION ALL SELECT vo.company_name, vl.sort_order, vl.added_at FROM visit_trip_leads vl JOIN opportunities vo ON vo.id = vl.opportunity_id WHERE vl.trip_id = t.id AND vo.status IN ('new', 'not_relevant')
+      ) stops ORDER BY sort_order, added_at) AS companies
     FROM visit_trips t WHERE ${where(visitClauses)}
     UNION ALL
     SELECT 'planner' AS kind, s.id, s.title,
@@ -211,12 +219,125 @@ async function tripOrigins(db: Queryable, tripId: number, leadId?: number): Prom
 }
 
 /** Adds deals to the end of the trip; deals already on it, and deals that are not active, are skipped. Returns how many were added. */
+/** The last place on a trip, deals and leads together (they share one visiting order). */
+async function lastStop(db: Queryable, tripId: number): Promise<number> {
+  const { rows } = await db.query(
+    "SELECT GREATEST((SELECT COALESCE(MAX(sort_order), 0) FROM visit_trip_deals WHERE trip_id = ?), (SELECT COALESCE(MAX(sort_order), 0) FROM visit_trip_leads WHERE trip_id = ?)) AS last",
+    [tripId, tripId],
+  );
+  return Number((rows as { last: number }[])[0]?.last ?? 0);
+}
+
+/** A lead on a trip (request of November 20, 2026): the company, the first contact, the roles it hires for, and where it stands. */
+export type TripLeadStop = {
+  id: number; companyName: string; website: string; location: string; status: "new" | "not_relevant"; archived: boolean;
+  person: { name: string; phone: string; emails: string[] } | null; positions: string[]; addedByName: string | null; sortOrder: number;
+};
+
+/** The leads on a trip in visiting order: those still leads (in the inbox or not relevant). */
+export async function visitTripLeads(id: number, db: Queryable = getDatabasePool()): Promise<TripLeadStop[]> {
+  const { rows } = await db.query(
+    `SELECT o.id, o.company_name AS "companyName", o.website, o.location, o.status, o.archived_at IS NOT NULL AS archived, o.latest_title AS "latestTitle",
+       (SELECT COALESCE(json_agg(DISTINCT ol.title), '[]'::json) FROM opportunity_listings ol WHERE ol.opportunity_id = o.id) AS titles,
+       (SELECT json_build_object('name', p.name, 'phone', p.phone, 'emails', p.emails) FROM opportunity_persons op JOIN persons p ON p.id = op.person_id
+          WHERE op.opportunity_id = o.id ORDER BY op.position LIMIT 1) AS person,
+       NULLIF(CONCAT(u.first_name, ' ', u.last_name), ' ') AS "addedByName", vl.sort_order AS "sortOrder"
+     FROM visit_trip_leads vl JOIN opportunities o ON o.id = vl.opportunity_id LEFT JOIN users u ON u.id = o.added_by
+     WHERE vl.trip_id = ? AND o.status IN ('new', 'not_relevant')
+     ORDER BY vl.sort_order, vl.added_at`,
+    [id],
+  );
+  type Row = { id: number; companyName: string; website: string; location: string; status: "new" | "not_relevant"; archived: boolean; latestTitle: string; titles: unknown; person: unknown; addedByName: string | null; sortOrder: number };
+  const parse = <T,>(value: unknown): T => (typeof value === "string" ? JSON.parse(value) : value) as T;
+  return (rows as Row[]).map((row) => {
+    const titles = parse<string[] | null>(row.titles) ?? [];
+    const person = parse<{ name: string; phone: string | null; emails: unknown } | null>(row.person);
+    const emails = person ? parse<string[] | null>(person.emails) ?? [] : [];
+    return {
+      id: Number(row.id), companyName: row.companyName, website: row.website, location: row.location, status: row.status, archived: Boolean(row.archived),
+      person: person ? { name: person.name, phone: person.phone ?? "", emails } : null,
+      positions: titles.length ? titles : row.latestTitle ? [row.latestTitle] : [], addedByName: row.addedByName?.trim() || null, sortOrder: Number(row.sortOrder),
+    };
+  });
+}
+
+/** The order of every stop on a trip: deals and leads, as they are visited. */
+export async function visitTripOrder(id: number, db: Queryable = getDatabasePool()): Promise<{ kind: "deal" | "lead"; id: number }[]> {
+  const { rows } = await db.query(
+    `SELECT kind, id FROM (
+       SELECT 'deal' AS kind, d.lead_id AS id, d.sort_order, d.added_at FROM visit_trip_deals d JOIN leads l ON l.id = d.lead_id WHERE d.trip_id = ? AND l.record_state = 'active'
+       UNION ALL SELECT 'lead', vl.opportunity_id, vl.sort_order, vl.added_at FROM visit_trip_leads vl JOIN opportunities o ON o.id = vl.opportunity_id WHERE vl.trip_id = ? AND o.status IN ('new', 'not_relevant')
+     ) stops ORDER BY sort_order, added_at`,
+    [id, id],
+  );
+  return (rows as { kind: "deal" | "lead"; id: number }[]).map((row) => ({ kind: row.kind, id: Number(row.id) }));
+}
+
+/** Adds leads to the end of a trip (request of November 20, 2026): leads still in the inbox or not relevant. */
+export async function addVisitTripLeads(id: number, opportunityIds: number[], actor: UserAccount): Promise<{ trip: VisitTrip; added: number }> {
+  return withTransaction(async (db) => {
+    const trip = await requireManageable(db, id, actor);
+    const now = new Date();
+    const { rows: open } = await db.query("SELECT id FROM opportunities WHERE id = ANY(?::int[]) AND status IN ('new', 'not_relevant')", [opportunityIds]);
+    const allowed = new Set((open as { id: number }[]).map((row) => Number(row.id)));
+    let order = await lastStop(db, id);
+    let added = 0;
+    for (const opportunityId of opportunityIds) {
+      if (!allowed.has(opportunityId)) continue;
+      const result = await db.query(
+        "INSERT INTO visit_trip_leads (trip_id, opportunity_id, sort_order, added_by, added_at, from_todo_list_id) VALUES (?, ?, ?, ?, ?, (SELECT todo_list_id FROM opportunities WHERE id = ?)) ON CONFLICT DO NOTHING",
+        [id, opportunityId, order + 1, actor.id, toSqlDateTime(now), opportunityId],
+      );
+      if (result.rowCount) { order += 1; added += 1; }
+      // As a deal does: a lead on the "To be visited" list leaves it once it is on a trip (request of November 20, 2026).
+      const list = await toBeVisitedList(db);
+      if (result.rowCount && list) await db.query("UPDATE opportunities SET todo_list_id = NULL, todo_since = NULL WHERE id = ? AND todo_list_id = ?", [opportunityId, list.id]);
+    }
+    if (added) {
+      await db.query("UPDATE visit_trips SET updated_at = ? WHERE id = ?", [toSqlDateTime(now), id]);
+      await recordAudit(db, { actorId: actor.id, action: "visit_trip.leads_added", entityType: "visit_trip", entityId: id, after: { opportunityIds }, details: `${actor.name} added ${added} ${added === 1 ? "lead" : "leads"} to the sales trip ${trip.title}` }, now);
+    }
+    return { trip: (await getVisitTrip(id, db))!, added };
+  });
+}
+
+/**
+ * Puts leads back on the To Do list they came from (request of November 20, 2026): a lead that is on no list now, still a lead
+ * and on no other trip; any other lead is left as it is.
+ */
+async function restoreLeadLists(db: Queryable, origins: { opportunityId: number; listId: number | null }[]): Promise<number> {
+  let restored = 0;
+  for (const origin of origins) {
+    if (!origin.listId) continue;
+    const result = await db.query(
+      `UPDATE opportunities SET todo_list_id = ?, todo_since = ? WHERE id = ? AND todo_list_id IS NULL AND status IN ('new', 'not_relevant')
+         AND NOT EXISTS (SELECT 1 FROM visit_trip_leads vl WHERE vl.opportunity_id = opportunities.id)`,
+      [origin.listId, toSqlDateTime(new Date()), origin.opportunityId],
+    );
+    restored += result.rowCount ?? 0;
+  }
+  return restored;
+}
+
+export async function removeVisitTripLead(id: number, opportunityId: number, actor: UserAccount): Promise<VisitTrip> {
+  return withTransaction(async (db) => {
+    const trip = await requireManageable(db, id, actor);
+    const result = await db.query("DELETE FROM visit_trip_leads WHERE trip_id = ? AND opportunity_id = ? RETURNING from_todo_list_id AS \"listId\"", [id, opportunityId]);
+    if (result.rowCount) {
+      await restoreLeadLists(db, [{ opportunityId, listId: (result.rows as { listId: number | null }[])[0]?.listId ?? null }]);
+      await db.query("UPDATE visit_trips SET updated_at = ? WHERE id = ?", [toSqlDateTime(new Date()), id]);
+      await recordAudit(db, { actorId: actor.id, action: "visit_trip.lead_removed", entityType: "visit_trip", entityId: id, before: { opportunityId }, details: `${actor.name} took a lead off the sales trip ${trip.title}` });
+    }
+    return (await getVisitTrip(id, db))!;
+  });
+}
+
 async function addDeals(db: Queryable, tripId: number, leadIds: number[], actor: UserAccount, now: Date): Promise<number> {
   if (!leadIds.length) return 0;
   const { rows: active } = await db.query("SELECT id FROM leads WHERE id = ANY(?::int[]) AND record_state = 'active'", [leadIds]);
   const allowed = new Set((active as { id: number }[]).map((row) => Number(row.id)));
-  const { rows: [{ last }] } = await db.query("SELECT COALESCE(MAX(sort_order), 0) AS last FROM visit_trip_deals WHERE trip_id = ?", [tripId]);
-  let order = Number(last);
+  const last = await lastStop(db, tripId);
+  let order = last;
   const added: number[] = [];
   for (const leadId of leadIds) {
     if (!allowed.has(leadId)) continue;
@@ -286,10 +407,15 @@ export async function deleteVisitTrip(id: number, choice: TripDeleteChoice, acto
     const trip = await requireManageable(db, id, actor);
     if (choice.deals === "archive" && !hasPrivilege(actor, "archive_leads")) throw new HttpError(403, "You do not have permission to archive deals.");
     const origins = await tripOrigins(db, id);
+    const { rows: leadOrigins } = await db.query('SELECT opportunity_id AS "opportunityId", from_todo_list_id AS "listId" FROM visit_trip_leads WHERE trip_id = ?', [id]);
     const now = new Date();
     await db.query("DELETE FROM visit_trips WHERE id = ?", [id]);
     let changed = 0;
-    if (choice.deals === "todo") changed = await moveBackToTodo(db, origins, trip, actor, now);
+    if (choice.deals === "todo") {
+      changed = await moveBackToTodo(db, origins, trip, actor, now);
+      // Its leads go back to their To Do lists too (request of November 20, 2026).
+      changed += await restoreLeadLists(db, (leadOrigins as { opportunityId: number; listId: number | null }[]).map((row) => ({ opportunityId: Number(row.opportunityId), listId: row.listId === null ? null : Number(row.listId) })));
+    }
     if (choice.deals === "archive") {
       const { rows } = await db.query("SELECT id FROM leads WHERE id = ANY(?::int[]) AND record_state = 'active'", [origins.map((origin) => origin.leadId)]);
       for (const row of rows as { id: number }[]) {

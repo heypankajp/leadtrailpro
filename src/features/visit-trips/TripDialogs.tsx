@@ -9,7 +9,8 @@ import { fetchLeads } from "@/features/leads/client";
 import type { LeadSummary } from "@/features/leads/model";
 import { useApp } from "@/features/shell/AppContext";
 import { Dialog, ErrorText, Field, Loading, StatusPill } from "@/features/shell/components";
-import { addVisitTripDeals, createVisitTrip, deleteVisitTrip, fetchVisitTrips, updateVisitTrip } from "./client";
+import { addVisitTripDeals, addVisitTripLeads, createVisitTrip, deleteVisitTrip, fetchVisitTrips, updateVisitTrip } from "./client";
+import { fetchOpportunities } from "@/features/opportunities/client";
 import { companiesSummary, type TripDealAction, type VisitTrip } from "./model";
 
 /** The salespeople a trip can be given to (managers plan trips for others). */
@@ -131,25 +132,38 @@ export function AddToTripDialog({ leadIds, onClose, onDone }: { leadIds: number[
 }
 
 /**
- * From a trip's page: pick deals to add to the trip (request of November 20, 2026). Two lists: **To be Visited** (the
- * default: the deals on the "To be visited" list, any To Do list when it does not exist) and **Other Deals** (the active deals
- * not marked To be visited, searched on the server as you type). Ticks are kept when switching between them.
+ * From a trip's page: pick deals and leads to add to the trip (requests of November 20, 2026). Three lists: **To Be Visited**
+ * (the default: the deals on the "To be visited" list, any To Do list when it does not exist), **Other Deals** (the active deals
+ * not marked To be visited) and **Leads** (the Leads inbox of Leads and Lead Generation), the last two searched on the server as
+ * you type. Ticks are kept when switching between them.
  */
-export function AddDealsDialog({ trip, onTrip, onClose, onDone }: { trip: VisitTrip; onTrip: number[]; onClose: () => void; onDone: (message: string) => void }) {
+export function AddDealsDialog({ trip, onTrip, onTripLeads = [], onClose, onDone }: { trip: VisitTrip; onTrip: number[]; onTripLeads?: number[]; onClose: () => void; onDone: (message: string) => void }) {
   const { reference } = useApp();
   const toBeVisited = reference.listValues.todo_list.find((item) => item.code === "to_be_visited") ?? null;
-  const [scope, setScope] = useState<"visit" | "all">("visit");
+  // Deals or Leads first (request of November 20, 2026), then To Be Visited or the others of that kind.
+  const [kind, setKind] = useState<"deals" | "leads">("deals");
+  const [list, setList] = useState<"visit" | "other">("visit");
+  const scope: "visit" | "all" | "leads" = kind === "leads" ? "leads" : list === "visit" ? "visit" : "all";
   const [q, setQ] = useState("");
   const [term, setTerm] = useState("");
   useEffect(() => { const timer = window.setTimeout(() => setTerm(q.trim()), 300); return () => window.clearTimeout(timer); }, [q]);
-  const fetcher = useCallback(
-    () => scope === "visit"
-      ? fetchLeads({ state: "active", pageSize: 200, sort: "client_name", direction: "asc", ...(toBeVisited ? { todoListId: toBeVisited.id } : { todo: true }) })
-      : fetchLeads({ state: "active", pageSize: 50, sort: "client_name", direction: "asc", ...(term ? { q: term } : {}) }),
+  const dealFetcher = useCallback(
+    () => scope === "leads" ? Promise.resolve(null)
+      : scope === "visit"
+        ? fetchLeads({ state: "active", pageSize: 200, sort: "client_name", direction: "asc", ...(toBeVisited ? { todoListId: toBeVisited.id } : { todo: true }) })
+        : fetchLeads({ state: "active", pageSize: 50, sort: "client_name", direction: "asc", ...(term ? { q: term } : {}) }),
     [scope, term, toBeVisited],
   );
-  const { data, error: loadError } = useAsyncData(fetcher);
+  const leadFetcher = useCallback(
+    () => scope !== "leads" ? Promise.resolve(null)
+      : list === "visit" && toBeVisited ? fetchOpportunities({ status: "new", pageSize: 200, todoListId: toBeVisited.id })
+        : fetchOpportunities({ status: "new", pageSize: 50, ...(term ? { search: term } : {}) }),
+    [scope, list, term, toBeVisited],
+  );
+  const { data, error: loadError } = useAsyncData(dealFetcher);
+  const { data: leadData, error: leadError } = useAsyncData(leadFetcher);
   const [picked, setPicked] = useState<number[]>([]);
+  const [pickedLeads, setPickedLeads] = useState<number[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const choices = useMemo(() => {
@@ -158,41 +172,79 @@ export function AddDealsDialog({ trip, onTrip, onClose, onDone }: { trip: VisitT
       .filter((lead) => !onTrip.includes(lead.id))
       // Other Deals leave out the deals marked To be visited: those are on the first list.
       .filter((lead) => scope === "visit" || !(toBeVisited ? lead.todoListId === toBeVisited.id : lead.todoListId !== null))
-      .filter((lead) => scope === "all" || !words || [lead.clientName, lead.city ?? "", lead.ownerName, lead.address].some((text) => text.toLowerCase().includes(words)));
+      .filter((lead) => scope !== "visit" || !words || [lead.clientName, lead.city ?? "", lead.ownerName, lead.address].some((text) => text.toLowerCase().includes(words)));
   }, [data, onTrip, q, scope, toBeVisited]);
+  const leadChoices = useMemo(() => {
+    const words = q.trim().toLowerCase();
+    return (leadData?.opportunities ?? [])
+      .filter((lead) => !onTripLeads.includes(lead.id))
+      // Other Leads leave out the leads marked To be visited: those are on the first list.
+      .filter((lead) => list === "visit" || !toBeVisited || lead.todoListId !== toBeVisited.id)
+      .filter((lead) => list !== "visit" || !words || [lead.companyName, lead.location, lead.latestTitle].some((text) => text.toLowerCase().includes(words)));
+  }, [leadData, onTripLeads, list, q, toBeVisited]);
   const toggle = (lead: LeadSummary) => setPicked((current) => (current.includes(lead.id) ? current.filter((item) => item !== lead.id) : [...current, lead.id]));
+  const toggleLead = (id: number) => setPickedLeads((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
+  const total = picked.length + pickedLeads.length;
   const submit = async () => {
     setBusy(true);
     setError("");
     try {
-      const result = await addVisitTripDeals(trip.id, picked);
-      onDone(`${result.added === 1 ? "1 deal" : `${result.added} deals`} added to ${trip.title}`);
+      const deals = picked.length ? (await addVisitTripDeals(trip.id, picked)).added : 0;
+      const leads = pickedLeads.length ? (await addVisitTripLeads(trip.id, pickedLeads)).added : 0;
+      const parts = [deals ? `${deals} ${deals === 1 ? "deal" : "deals"}` : "", leads ? `${leads} ${leads === 1 ? "lead" : "leads"}` : ""].filter(Boolean);
+      onDone(`${parts.join(" and ") || "Nothing"} added to ${trip.title}`);
     } catch (caught) {
-      setError(errorMessage(caught, "Could not add the deals."));
+      setError(errorMessage(caught, "Could not add them to the trip."));
       setBusy(false);
     }
   };
   const listName = toBeVisited ? toBeVisited.value : "To Do";
   const empty = scope === "visit"
     ? (q ? "No deal on the list matches the search." : `Every deal marked ${listName} is already on this trip, or none is marked.`)
-    : (term ? "No other deal matches the search." : `No other deal: every active deal is marked ${listName} or already on this trip.`);
+    : scope === "all"
+      ? (term ? "No other deal matches the search." : `No other deal: every active deal is marked ${listName} or already on this trip.`)
+      : list === "visit"
+        ? (q ? "No lead on the list matches the search." : `Every lead marked ${listName} is already on this trip, or none is marked.`)
+        : (term ? "No other lead matches the search." : "No other lead in the Leads inbox, or every one is already on this trip.");
+  const loading = scope === "leads" ? !leadData && !leadError : !data && !loadError;
   return (
-    <Dialog title={`Add Deals to ${trip.title}`} eyebrow="SALES TRIP" onClose={onClose}>
+    <Dialog title={`Add Deals and Leads to ${trip.title}`} eyebrow="SALES TRIP" onClose={onClose}>
       <div className="trip-add">
         <div className="trip-add-bar">
-          <div className="scope-toggle" role="group" aria-label="Which deals">
-            <button type="button" className={scope === "visit" ? "is-active" : ""} aria-pressed={scope === "visit"} onClick={() => setScope("visit")}>{toBeVisited ? "To Be Visited" : listName}</button>
-            <button type="button" className={scope === "all" ? "is-active" : ""} aria-pressed={scope === "all"} onClick={() => setScope("all")}>Other Deals</button>
+          <div className="trip-add-kind" role="radiogroup" aria-label="Deals or leads">
+            {(["deals", "leads"] as const).map((value) => (
+              <label key={value} className={kind === value ? "is-active" : ""}>
+                <input type="radio" name="trip-add-kind" value={value} checked={kind === value} onChange={() => { setKind(value); setList("visit"); }} />
+                {value === "deals" ? "Deals" : "Leads"}
+              </label>
+            ))}
           </div>
-          {picked.length > 0 && <span className="trip-add-count">{picked.length} selected</span>}
+          {total > 0 && <span className="trip-add-count">{total} selected</span>}
+        </div>
+        <div className="scope-toggle" role="group" aria-label={kind === "deals" ? "Which deals" : "Which leads"}>
+          <button type="button" className={list === "visit" ? "is-active" : ""} aria-pressed={list === "visit"} onClick={() => setList("visit")}>{toBeVisited ? "To Be Visited" : listName}</button>
+          <button type="button" className={list === "other" ? "is-active" : ""} aria-pressed={list === "other"} onClick={() => setList("other")}>{kind === "deals" ? "Other Deals" : "Other Leads"}</button>
         </div>
         <label className="trip-add-search">
           <Search size={15} />
-          <input aria-label="Search the deals" placeholder={scope === "visit" ? "Search company, city, owner..." : "Search the other deals: company, contact, city..."} value={q} onChange={(event) => setQ(event.target.value)} autoFocus />
+          <input aria-label="Search the deals" placeholder={scope === "visit" ? "Search company, city, owner..." : scope === "all" ? "Search the other deals: company, contact, city..." : list === "visit" ? "Search company, role, location..." : "Search the other leads: company, role, location..."} value={q} onChange={(event) => setQ(event.target.value)} autoFocus />
         </label>
-        <p className="field-hint">{scope === "visit" ? `The deals marked ${listName} that are not on this trip yet.` : `The active deals not marked ${listName} and not on this trip yet; the first 50 by name, or the ones matching the search.`}</p>
-        <ErrorText message={loadError} />
-        {!data && !loadError ? <Loading text="Loading the deals..." /> : (
+        <p className="field-hint">{scope === "visit" ? `The deals marked ${listName} that are not on this trip yet.` : scope === "all" ? `The active deals not marked ${listName} and not on this trip yet; the first 50 by name, or the ones matching the search.` : list === "visit" ? `The leads marked ${listName} that are not on this trip yet.` : `The leads in the inbox of Leads and Lead Generation not marked ${listName} and not on this trip yet; the first 50, or the ones matching the search.`}</p>
+        <ErrorText message={scope === "leads" ? leadError : loadError} />
+        {loading ? <Loading text={scope === "leads" ? "Loading the leads..." : "Loading the deals..."} /> : scope === "leads" ? (
+          <ul className="trip-pick-list">
+            {leadChoices.map((lead) => (
+              <li key={lead.id}>
+                <label className={pickedLeads.includes(lead.id) ? "is-picked" : ""}>
+                  <input type="checkbox" checked={pickedLeads.includes(lead.id)} onChange={() => toggleLead(lead.id)} />
+                  <span className="trip-pick-text"><strong>{lead.companyName}</strong><small>{[lead.location, lead.latestTitle, lead.addedByName ? `Added by ${lead.addedByName}` : ""].filter(Boolean).join(" · ")}</small></span>
+                  <span className="trip-pick-tags"><span className="trip-stage-lead">Lead</span></span>
+                </label>
+              </li>
+            ))}
+            {!leadChoices.length && <li className="trip-pick-empty">{empty}</li>}
+          </ul>
+        ) : (
           <ul className="trip-pick-list">
             {choices.map((lead) => (
               <li key={lead.id}>
@@ -211,7 +263,7 @@ export function AddDealsDialog({ trip, onTrip, onClose, onDone }: { trip: VisitT
         <ErrorText message={error} />
         <div className="modal-actions">
           <button type="button" className="button button-outline" onClick={onClose}>Cancel</button>
-          <button type="button" className="button button-primary" disabled={busy || !picked.length} onClick={() => void submit()}>{busy ? "Adding..." : picked.length ? `Add ${picked.length} ${picked.length === 1 ? "deal" : "deals"}` : "Add Deals"}</button>
+          <button type="button" className="button button-primary" disabled={busy || !total} onClick={() => void submit()}>{busy ? "Adding..." : total ? `Add ${total} to the Trip` : "Add to the Trip"}</button>
         </div>
       </div>
     </Dialog>

@@ -12,6 +12,7 @@ import { createListValue, fetchListValues, reorderListValues, updateListValue, c
 import { stagesOfPipeline } from "@/features/pipeline/model";
 import DeleteStageDialog from "./DeleteStageDialog";
 import TripPlannerSettings from "./TripPlannerSettings";
+import StageReminderSettings from "./StageReminderSettings";
 
 /** The tabs of List of Values → Sales Trip Planner, in order; the first one opens. */
 type PlannerTab = "business_type" | "trip_max_radius_km" | "trip_max_results" | "recent_trips_limit";
@@ -30,12 +31,14 @@ export default function ListValuesPanel() {
   const pipeline = pipelines.find((item) => item.id === pipelineId) ?? pipelines.find((item) => item.isDefault) ?? null;
   const [newPipeline, setNewPipeline] = useState("");
   // A list, or "trip_planner": the Sales Trip Planner's settings and its Business Type list on one page.
-  const [view, setView] = useState<ListKey | "trip_planner">("bd_action");
-  const listKey: ListKey = view === "trip_planner" ? "business_type" : view;
+  // "auto_reminder" (request of November 20, 2026): the pipeline stages' auto reminders.
+  const [view, setView] = useState<ListKey | "trip_planner" | "auto_reminder">("bd_action");
+  const listKey: ListKey = view === "trip_planner" || view === "auto_reminder" ? "business_type" : view;
   const plannerPage = view === "trip_planner";
+  const reminderPage = view === "auto_reminder";
   // The Sales Trip Planner page in four tabs (request of November 18, 2026); Business Type opens first.
   const [plannerTab, setPlannerTab] = useState<PlannerTab>("business_type");
-  const showList = !plannerPage || plannerTab === "business_type";
+  const showList = !reminderPage && (!plannerPage || plannerTab === "business_type");
   const fetcher = useCallback(() => fetchListValues(true).then((result) => result.listValues), []);
   const { data: values, error, reload } = useAsyncData<ListValuesByKey>(fetcher);
   const [newValue, setNewValue] = useState("");
@@ -153,8 +156,10 @@ export default function ListValuesPanel() {
         <nav className="panel values-nav" aria-label="Lists">
           {listKeys.filter((key) => !tripPlannerListKeys.includes(key)).map((key) => <button key={key} className={key === view ? "is-active" : ""} onClick={() => { setView(key); setEditing(null); }}>{listKeyLabels[key]}<span>{values ? values[key].length : ""}</span></button>)}
           <button className={plannerPage ? "is-active" : ""} onClick={() => { setView("trip_planner"); setEditing(null); }}>Sales Trip Planner<span>{values ? values.business_type.length : ""}</span></button>
+          <button className={reminderPage ? "is-active" : ""} onClick={() => { setView("auto_reminder"); setEditing(null); }}>Auto Reminder<span>{values ? values.stage.length : ""}</span></button>
         </nav>
         <section className="panel values-panel">
+          {reminderPage && <StageReminderSettings />}
           {plannerPage && (
             <>
               <div className="panel-heading"><div><h2>Sales Trip Planner</h2><p>The business types its searches offer and the planner&apos;s limits.</p></div></div>
