@@ -126,20 +126,30 @@ This also starts the **deployer**, the helper that makes part C work without the
 
 ## C. Releasing a change (deployments)
 
-The server fetches new code from GitHub by itself. A release is a push to `master` plus, while deploys are paused, one click. Nobody logs in to the server.
+The server fetches new code from GitHub by itself. A release is one git command: push `master` and the `release` branch together. No API token and no click needed. Nobody logs in to the server.
+
+```bash
+git pull --rebase origin master
+git push origin master master:release      # push and deploy
+```
+
+Whoever can push to the repository can release this way. Only `git push origin master` saves the work without releasing it, while deploys are paused.
 
 ```
-your laptop ──git push──▶ GitHub, branch master
+your laptop ──git push──▶ GitHub, branch master ─────────────┐
+            ──git push──▶ GitHub, branch release ──▶ deploy  │
                                │   the server's deployer looks every minute
-                               ▼
-                  deploys paused? ──yes──▶ waits until an administrator presses Deploy now
+                               ▼                             ▼
+                  release moved? ──yes──▶ deploys the commit release points to
+                               │ no
+                  deploys paused? ──yes──▶ master waits for a release push or Deploy now
                                │ no
                                ▼
      build the new version ──▶ upgrade the database (migrations) ──▶ restart the app
      (about 3 to 5 minutes; the old version keeps running during the build)
 ```
 
-> **Deploys are paused on leadtrail.pro** (since November 13, 2026). A push to `master` does **not** go live by itself:
+> **Deploys are paused on leadtrail.pro** (since November 13, 2026). A push to `master` alone does **not** go live:
 > it waits for step 3. Settings → Releases shows whether they are paused.
 
 **1. Check before you push.** Whatever is on `master` is what the server will run.
@@ -158,16 +168,19 @@ git pull --rebase origin master
 git push origin master
 ```
 
-**3. Release it** (an administrator, either way):
+**3. Release it**, any one of these:
 
-- **In the app:** Settings → Releases → **Deploy now**.
-- **From a laptop:** `npm run remote -- deploy`. It waits and prints the result. (Set up the remote client once: see below.)
+- **From a laptop, with git only:** `git push origin master:release` (or push both at once as above). The server starts within a minute and the release takes 3 to 5 minutes. No token needed.
+- **In the app** (an administrator): Settings → Releases → **Deploy now**.
+- **From a laptop with the remote client** (an administrator): `npm run remote -- deploy`. It waits and prints the result. (Set up the remote client once: see below.)
 
-**4. Check it is live.** Settings → Releases → **Running** shows the commit (compare with `git log -1 --format=%h`) and the database version. From a laptop: `npm run remote -- deploy-status`.
+The `release` branch is a pointer, not a place to work: never commit on it. Each push that moves it releases the commit it points to once. Pushing it again unchanged does nothing.
 
-**If a release fails,** the previous version keeps running. Settings → Releases → **Last deploy** names the step that failed; `npm run remote -- deploy-status --log` prints the output. Fix it, push, and press Deploy now again. A failed commit is not tried again by itself.
+**4. Check it is live.** Settings → Releases → **Running** shows the commit (compare with `git log -1 --format=%h`) and the database version. From a laptop with the remote client: `npm run remote -- deploy-status`.
 
-**To undo a release,** run `git revert <commit>`, push and deploy. A revert does not undo database changes. Fix data with `npm run remote -- sql "<statement>"`: it shows the rows it would change, and changes them only with `--apply`.
+**If a release fails,** the previous version keeps running. Settings → Releases → **Last deploy** names the step that failed; `npm run remote -- deploy-status --log` prints the output. Fix it, then push `master` and `release` again (or press Deploy now). A failed commit is not tried again by itself.
+
+**To undo a release,** run `git revert <commit>`, push `master` and `release`. A revert does not undo database changes. Fix data with `npm run remote -- sql "<statement>"`: it shows the rows it would change, and changes them only with `--apply`.
 
 **Pause or resume:** Settings → Releases → **Pause deploys** / **Resume automatic deploys** (or `npm run remote -- deploy-pause` / `deploy-resume`). While deploys are on, every push to `master` goes live within a few minutes, with no click.
 

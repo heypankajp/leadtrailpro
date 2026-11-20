@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { adminSqlEnabled, adminSqlSummary, normalizeAdminSql, parseAdminSql } from "../../src/features/admin/sql-model.ts";
 import { parseDeployEvent, sameCommit, shortCommit } from "../../src/features/deploy/model.ts";
-import { authenticatedRepoUrl, cleanOutput, decideDeploy, failureSummary, httpsRepoUrl, lastLines, publicRepoUrl } from "../../scripts/lib/deploy-plan.mjs";
+import { authenticatedRepoUrl, branchCommits, cleanOutput, decideDeploy, failureSummary, httpsRepoUrl, lastLines, publicRepoUrl } from "../../scripts/lib/deploy-plan.mjs";
 
 const full = "0123456789abcdef0123456789abcdef01234567";
 const other = "fedcba9876543210fedcba9876543210fedcba98";
@@ -75,6 +75,29 @@ describe("Deploys from a push (SPEC §2.4)", () => {
     assert.equal(decideDeploy(base).deploy, true);
     assert.equal(decideDeploy({ ...base, auto: false }).deploy, true);
     assert.equal(decideDeploy({ ...base, requested: false, running: other, failed: null, auto: false }).deploy, false);
+  });
+
+  test("a push to the release branch deploys its commit with no token, paused or not, once per move", () => {
+    const base = { remote: full, running: other, reachable: true, attempted: other, failed: null, requested: false, auto: true, paused: true };
+    assert.equal(decideDeploy(base).deploy, false); // paused: master waits
+    const moved = decideDeploy({ ...base, released: full, seenRelease: other });
+    assert.deepEqual([moved.deploy, moved.commit], [true, full]);
+    assert.equal(decideDeploy({ ...base, released: full, seenRelease: null }).deploy, true); // the branch was just created
+    assert.equal(decideDeploy({ ...base, auto: false, released: full, seenRelease: null }).deploy, true);
+    assert.equal(decideDeploy({ ...base, released: full, seenRelease: full }).deploy, false); // seen before: no repeat
+    assert.equal(decideDeploy({ ...base, released: full, seenRelease: undefined }).deploy, false); // first look only records it
+    assert.equal(decideDeploy({ ...base, running: full, released: full, seenRelease: other }).deploy, false); // already running
+    assert.equal(decideDeploy({ ...base, released: full, seenRelease: other, failed: full }).deploy, true); // a new push retries
+    const ahead = decideDeploy({ ...base, remote: "abcdefabcdefabcdefabcdefabcdefabcdefabcd", released: full, seenRelease: other });
+    assert.equal(ahead.commit, full, "the release branch's commit, not master's");
+    assert.equal(decideDeploy({ ...base, requested: true, released: other, seenRelease: null }).commit, full); // a request deploys master
+    assert.equal(decideDeploy({ ...base, paused: false, running: other }).commit, full);
+  });
+
+  test("ls-remote output is read by branch", () => {
+    assert.deepEqual(branchCommits(`${full}\trefs/heads/master\n${other}\trefs/heads/release\n`), { master: full, release: other });
+    assert.deepEqual(branchCommits(""), {});
+    assert.deepEqual(branchCommits("fatal: could not read"), {});
   });
 
   test("an app that does not answer is judged by the last attempt, so a push can repair a broken deploy", () => {

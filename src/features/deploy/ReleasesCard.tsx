@@ -44,7 +44,7 @@ export default function ReleasesCard() {
             {last && <div><dt>Last deploy</dt><dd>{formatDateTime(last.startedAt)} · {last.status}{last.details ? ` · ${last.details}` : ""}</dd></div>}
           </dl>
           {status.paused
-            ? <p className="form-note releases-note releases-paused" role="status"><Pause size={14} /> <span><strong>Deploys are paused</strong> since {formatDateTime(status.paused.pausedAt)} by {status.paused.pausedByName}. Pushed changes wait until someone deploys.{status.waiting ? " A newer version is waiting now." : ""}</span></p>
+            ? <p className="form-note releases-note releases-paused" role="status"><Pause size={14} /> <span><strong>Deploys are paused</strong> since {formatDateTime(status.paused.pausedAt)} by {status.paused.pausedByName}. Pushed changes wait until someone deploys (Deploy now, or a push to the release branch).{status.waiting ? " A newer version is waiting now." : ""}</span></p>
             : <p className="form-note releases-note" role="status"><Play size={14} /> <span><strong>Automatic deploys are on.</strong> A push to the followed branch goes live by itself within a couple of minutes.</span></p>}
           {status.request && <p className="field-hint">Deploy asked for by {status.request.requestedByName} at {formatDateTime(status.request.requestedAt)}; the deployer checks every minute.</p>}
           <div className="releases-actions">

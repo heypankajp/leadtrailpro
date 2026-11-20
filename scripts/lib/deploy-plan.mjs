@@ -16,18 +16,37 @@ export const sameCommit = (a, b) => Boolean(a && b && a.length >= 7 && b.length 
  *   requested  an administrator asked for a deploy now
  *   auto       whether a moved branch deploys by itself (DEPLOY_AUTO on the server)
  *   paused     an administrator paused deploys in the app: a moved branch waits until a deploy is asked for
+ *   released     the commit of the release branch (null: no such branch)
+ *   seenRelease  the release branch's commit at the previous check (undefined: never looked; null: there was none)
+ * A push to the release branch is a request too: whoever can push to the repository can release, with no API token,
+ * whether deploys are paused or automatic deploys are off. Only a move counts, so a release never undoes a later deploy.
+ * `commit` in the answer is what to deploy.
  */
-export function decideDeploy({ remote, running, reachable, attempted, failed, requested, auto, paused = false }) {
+export function decideDeploy({ remote, running, reachable, attempted, failed, requested, auto, paused = false, released = null, seenRelease = undefined }) {
+  // An app that does not answer is judged by what was last attempted, so a push can still repair a broken deploy.
+  const current = reachable ? running : attempted;
+  if (remote && requested) return { deploy: true, commit: remote, reason: "asked for by an administrator" };
+  if (released && seenRelease !== undefined && !sameCommit(seenRelease, released)) {
+    if (sameCommit(current, released)) return { deploy: false, reason: "up to date" };
+    return { deploy: true, commit: released, reason: "pushed to the release branch" };
+  }
   if (!remote) return { deploy: false, reason: "the repository could not be read" };
-  if (requested) return { deploy: true, reason: "asked for by an administrator" };
   if (!auto) return { deploy: false, reason: "automatic deploys are off" };
   if (paused) return { deploy: false, reason: "deploys are paused in the app; a pushed version waits until a deploy is asked for" };
   if (sameCommit(failed, remote)) return { deploy: false, reason: "the last deploy of this commit failed; push a fix or ask for a deploy" };
-  // An app that does not answer is judged by what was last attempted, so a push can still repair a broken deploy.
-  const current = reachable ? running : attempted;
   if (sameCommit(current, remote)) return { deploy: false, reason: "up to date" };
   if (!reachable && !attempted) return { deploy: false, reason: "the app is not answering yet" };
-  return { deploy: true, reason: current ? "the branch moved" : "the running image carries no commit" };
+  return { deploy: true, commit: remote, reason: current ? "the branch moved" : "the running image carries no commit" };
+}
+
+/** The commits of `git ls-remote` output, by branch name ("refs/heads/master" → "master"). */
+export function branchCommits(output) {
+  const commits = {};
+  for (const line of String(output ?? "").split(/\r?\n/)) {
+    const match = /^([0-9a-f]{40})\s+refs\/heads\/(\S+)$/.exec(line.trim());
+    if (match) commits[match[2]] = match[1];
+  }
+  return commits;
 }
 
 /** `git@github.com:owner/name.git` and `ssh://git@github.com/owner/name.git` as HTTPS; anything else unchanged. */

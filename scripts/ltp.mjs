@@ -82,7 +82,7 @@ function printDeployStatus(status) {
   console.log(`Running: commit ${status.commit ?? "unknown (image built by hand)"} · schema version ${status.schemaVersion ?? "?"}`);
   if (!status.agent) console.log("Deployer: none has checked in (it starts with the next manual deploy).");
   else console.log(`Deployer: ${status.agentOnline ? "online" : "NOT RUNNING"}, last seen ${status.agent.seenAt}; follows ${status.agent.branch} of ${status.agent.repo} (now at ${status.agent.remoteCommit?.slice(0, 12) ?? "?"}); automatic deploys ${status.agent.auto ? "on" : "off"}${status.behind ? "; the server is BEHIND the branch" : ""}`);
-  if (status.paused) console.log(`Deploys are PAUSED since ${status.paused.pausedAt} by ${status.paused.pausedByName}: pushes wait until "deploy".${status.waiting ? " A newer version is waiting now." : ""}`);
+  if (status.paused) console.log(`Deploys are PAUSED since ${status.paused.pausedAt} by ${status.paused.pausedByName}: pushes to master wait until "deploy" or git push origin master:release.${status.waiting ? " A newer version is waiting now." : ""}`);
   if (status.request) console.log(`Deploy requested by ${status.request.requestedByName} at ${status.request.requestedAt}, not picked up yet.`);
   if (status.runs.length) { console.log("Last deploys:"); for (const run of status.runs) console.log(`  ${run.startedAt}  ${run.status.padEnd(7)}  ${run.commit}  ${run.details ?? ""}`); }
   else console.log("No deploys recorded yet.");
