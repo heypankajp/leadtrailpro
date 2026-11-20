@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Briefcase, RefreshCw, SlidersHorizontal } from "lucide-react";
 import { formatDate, relativeTime } from "@/lib/format";
 import { useAsyncData } from "@/lib/useAsyncData";
@@ -28,7 +28,7 @@ function summaryOf(source: JobsUsageSource): string {
  * against the in-app budgets, what is left, and the vendor's own balance when it offers one (HasData). Refreshes after
  * a run, polls while the page is open, and hides itself when no live source is configured.
  */
-export default function JobsUsageCard({ refreshKey = 0, compact = false }: { refreshKey?: unknown; compact?: boolean }) {
+export default function JobsUsageCard({ refreshKey = 0, compact = false, inDialog = false, empty = null }: { refreshKey?: unknown; compact?: boolean; inDialog?: boolean; empty?: ReactNode }) {
   const { can, navigate, dataVersion } = useApp();
   const [tick, setTick] = useState(0);
   const fetcher = useCallback(() => fetchJobsUsage(), []);
@@ -40,15 +40,18 @@ export default function JobsUsageCard({ refreshKey = 0, compact = false }: { ref
   }, []);
 
   const usage = data?.usage;
-  if (!usage || !usage.configured) return null;
+  if (!usage) return inDialog ? <p className="field-hint">Loading...</p> : null;
+  if (!usage.configured) return <>{empty}</>;
   const tones = usage.sources.map((source) => toneOf(source, usage.warnAtPercent));
   const overall: Tone = tones.includes("spent") ? "spent" : tones.includes("warn") ? "warn" : "ok";
 
   return (
-    <section className={`panel maps-usage-card jobs-usage-card${compact ? " is-compact" : ""}`} aria-label="Job-source usage this month">
+    <section className={`panel maps-usage-card jobs-usage-card${compact ? " is-compact" : ""}${inDialog ? " is-in-dialog" : ""}`} aria-label="Job-source usage this month">
       <div className="panel-heading">
         <div>
-          <h2><Briefcase size={14} /> Job listing sources this month <span className={`maps-usage-pill is-${overall}`}>{toneLabels[overall]}</span></h2>
+          {inDialog
+            ? <span className={`maps-usage-pill is-${overall}`}>{toneLabels[overall]}</span>
+            : <h2><Briefcase size={14} /> Job listing sources this month <span className={`maps-usage-pill is-${overall}`}>{toneLabels[overall]}</span></h2>}
           <p>Searches and hiring lookups stop asking a source when its budget is spent; the counters restart on {formatDate(usage.resetsOn)}.</p>
         </div>
         <div className="heading-actions">

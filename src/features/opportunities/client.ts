@@ -1,7 +1,7 @@
 import { api, toQuery } from "@/lib/api";
-import type { LeadEntryInput, Opportunity, OpportunityPage, OpportunityRun, OpportunitySearch, OpportunitySearchInput, OpportunityStatus } from "./model";
+import type { LeadEntryInput, Opportunity, OpportunityOrigin, OpportunityPage, OpportunityRun, OpportunitySearch, OpportunitySearchInput, OpportunityStatus } from "./model";
 
-export const fetchOpportunities = (query: { status: OpportunityStatus; page?: number; pageSize?: number; search?: string }) => api<OpportunityPage>(`/api/opportunities${toQuery(query)}`);
+export const fetchOpportunities = (query: { status: OpportunityStatus; page?: number; pageSize?: number; search?: string; origin?: OpportunityOrigin; scope?: "mine" | "everyone" }) => api<OpportunityPage>(`/api/opportunities${toQuery(query)}`);
 export const fetchOpportunity = (id: number) => api<{ opportunity: Opportunity }>(`/api/opportunities/${id}`);
 export const markOpportunityNotRelevant = (id: number, reasonId: number, note: string) => api<{ opportunity: Opportunity }>(`/api/opportunities/${id}`, { method: "PATCH", json: { action: "not_relevant", reasonId, note } });
 export const createOpportunity = (input: LeadEntryInput) => api<{ opportunity: Opportunity }>("/api/opportunities", { method: "POST", json: input });

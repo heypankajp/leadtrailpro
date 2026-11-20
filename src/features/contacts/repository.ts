@@ -4,6 +4,7 @@ import { recordAudit } from "@/features/audit/repository";
 import { statusLabel } from "@/features/list-values/model";
 import { hasPrivilege, type UserAccount } from "@/features/users/model";
 import { copyOrganizationToDeals, copyPersonToDeals } from "../../../scripts/lib/contacts-sync.mjs";
+import { sameWebsite, websiteKey } from "@/lib/website-key";
 import {
   contactKey, emailKey, phoneKey, type ContactActivity, type ContactActivityInput, type ContactDeal, type ContactPage, type ContactPermissions, type ContactQuery, type Organization, type OrganizationDetail, type OrganizationInput,
   type OrganizationRow, type Person, type PersonDetail, type PersonInput, type PersonRow, contactActivityTypes, timelineMonths, type ContactActivityType, type ContactsTimeline, type TimelineRow,
@@ -154,6 +155,17 @@ export async function getPersonDetail(id: number, viewer: UserAccount, db: Query
 
 const requireCreate = (actor: UserAccount) => { if (!hasPrivilege(actor, "create_leads")) throw new HttpError(403, "You do not have permission to add contacts."); };
 const requireEdit = (actor: UserAccount, ownerId: number) => { if (!permissionsFor(actor, ownerId, 0).edit) throw new HttpError(403, "You can only change contacts you own."); };
+/**
+ * Another company with the same website (request of November 19, 2026): compared without the protocol, "www." or letter
+ * case, so "https://www.Acme.ca/" and "acme.ca" are one site.
+ */
+async function companyWithWebsite(connection: Queryable, website: string, exceptId: number | null): Promise<{ id: number; name: string } | null> {
+  if (!websiteKey(website)) return null;
+  const { rows } = await connection.query("SELECT id, name, website FROM organizations WHERE website <> '' AND id <> ?", [exceptId ?? 0]);
+  const found = (rows as { id: number; name: string; website: string }[]).find((row) => sameWebsite(row.website, website));
+  return found ? { id: Number(found.id), name: found.name } : null;
+}
+
 const organizationValues = (input: OrganizationInput) => [input.name, contactKey(input.name), input.website, input.address, input.cityId, input.industry, input.companySizeId];
 
 export async function createOrganization(input: OrganizationInput, actor: UserAccount): Promise<Organization> {
@@ -161,6 +173,8 @@ export async function createOrganization(input: OrganizationInput, actor: UserAc
   return withTransaction(async (connection) => {
     const clash = await connection.query("SELECT id FROM organizations WHERE name_key = ?", [contactKey(input.name)]);
     if (clash.rows.length) throw new HttpError(409, `${input.name} is already a company. Open it from the list.`, { organizationId: Number(clash.rows[0].id) });
+    const sameSite = await companyWithWebsite(connection, input.website, null);
+    if (sameSite) throw new HttpError(409, `${sameSite.name} already has the website ${websiteKey(input.website)}. Open it from the list.`, { organizationId: sameSite.id });
     const result = await connection.query(
       "INSERT INTO organizations (name, name_key, website, address, city_id, industry, company_size_id, owner_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
       [...organizationValues(input), actor.id, actor.id],
@@ -178,6 +192,8 @@ export async function updateOrganization(id: number, input: OrganizationInput, a
     requireEdit(actor, before.ownerId);
     const clash = await connection.query("SELECT id FROM organizations WHERE name_key = ? AND id <> ?", [contactKey(input.name), id]);
     if (clash.rows.length) throw new HttpError(409, `Another company is already called ${input.name}.`);
+    const sameSite = websiteKey(input.website) !== websiteKey(before.website) ? await companyWithWebsite(connection, input.website, id) : null;
+    if (sameSite) throw new HttpError(409, `${sameSite.name} already has the website ${websiteKey(input.website)}.`);
     await connection.query("UPDATE organizations SET name = ?, name_key = ?, website = ?, address = ?, city_id = ?, industry = ?, company_size_id = ? WHERE id = ?", [...organizationValues(input), id]);
     // The sales tracker may still list the old name: it stays known, so the next import finds this organization's deal.
     if (contactKey(input.name) !== contactKey(before.name)) await rememberName(connection, id, [before.name]);

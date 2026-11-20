@@ -5,8 +5,8 @@ import { ArrowRight, BriefcaseBusiness, Building2, MapPin, ShieldCheck, Sparkles
 import { leadGenToolSourceId } from "@/features/list-values/model";
 import { useApp } from "@/features/shell/AppContext";
 
-/** Preview only: the BRD's lead generation module needs connected job, review, and company-data sources. */
-export default function LeadGenerationPage() {
+/** Preview only: Lead Discovery (the BRD's lead generation module, renamed November 19, 2026) needs connected job, review, and company-data sources. */
+export default function LeadDiscoveryPage() {
   const { openNewLeadFor, can, notify, reference } = useApp();
   const [company, setCompany] = useState("");
   const [website, setWebsite] = useState("");
@@ -24,7 +24,7 @@ export default function LeadGenerationPage() {
 
   return (
     <>
-      <div className="page-heading"><div><div className="eyebrow">DISCOVER YOUR NEXT CLIENT <span className="eyebrow-dot">·</span> PREVIEW</div><h1>Lead Generation</h1><p>Explore a company and find a thoughtful way to start a conversation.</p></div></div>
+      <div className="page-heading"><div><div className="eyebrow">DISCOVER YOUR NEXT CLIENT <span className="eyebrow-dot">·</span> PREVIEW</div><h1>Lead Discovery</h1><p>Explore a company and find a thoughtful way to start a conversation.</p></div></div>
       <div className="panel generation-panel">
         <div className="generation-intro"><div className="generation-icon"><Sparkles size={20} /></div><div><h2>Research a company</h2><p>Company overview, open positions, hiring challenges, review summary, and a suggested introduction.</p></div></div>
         <form className="generation-form" onSubmit={generate}>

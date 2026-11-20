@@ -1,22 +1,23 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Briefcase, Building2, ChevronDown, ChevronRight, ExternalLink, Pencil, Play, Plus, RotateCcw, Search, Trash2, UserPlus, UserRound, X } from "lucide-react";
-import { errorMessage } from "@/lib/api";
+import { ArrowRightCircle, Briefcase, Gauge, Building2, ChevronDown, ChevronRight, ExternalLink, Pencil, Play, Plus, RotateCcw, Search, Trash2, UserRound, X } from "lucide-react";
+import { ApiError, errorMessage } from "@/lib/api";
 import { formatDate, formatDateTime, relativeTime } from "@/lib/format";
 import { useAsyncData } from "@/lib/useAsyncData";
 import { createOrganization, createPerson, fetchOrganization, fetchOrganizations } from "@/features/contacts/client";
 import { contactKey, type OrganizationRow, type PersonRow } from "@/features/contacts/model";
 import { OrganizationFormDialog, PersonFormDialog } from "@/features/contacts/ContactFormDialogs";
 import JobsUsageCard from "@/features/jobs/JobsUsageCard";
-import LeadFormDialog from "@/features/leads/LeadFormDialog";
+import { createLead } from "@/features/leads/client";
+import { offBoardStatusCodes, stageChoices } from "@/features/pipeline/model";
 import { bdCommentLines, type LeadInput } from "@/features/leads/model";
 import { leadGenToolSourceId, type ListValuesByKey } from "@/features/list-values/model";
 import { useApp } from "@/features/shell/AppContext";
 import SuggestInput from "@/features/shell/SuggestInput";
 import { Dialog, EmptyState, ErrorText, Field, Loading, Pagination, Tabs, type TabOption } from "@/features/shell/components";
 import { createOpportunity, createSearch, deleteSearch, editOpportunity, fetchOpportunities, fetchRuns, fetchSearches, markOpportunityNotRelevant, reopenOpportunity, restoreOpportunity, runSearchesNow, updateSearch } from "./client";
-import { jobTypeOptions, maxMaxListings, maxPostedWithinDays, maxSearchTitles, minMaxListings, minPostedWithinDays, type Opportunity, type OpportunitySearch, type OpportunitySearchInput, type OpportunityStatus, type LeadEntryInput } from "./model";
+import { jobTypeOptions, maxMaxListings, maxPostedWithinDays, maxSearchTitles, minMaxListings, minPostedWithinDays, type Opportunity, type OpportunitySearch, type OpportunitySearchInput, type OpportunityStatus, type LeadEntryInput, type OpportunityOrigin } from "./model";
 
 type Tab = OpportunityStatus | "searches";
 const pageSize = 50;
@@ -53,28 +54,42 @@ function prefillFor(item: Opportunity, values: ListValuesByKey): Partial<LeadInp
 const capitalize = (value: string) => (value ? value.charAt(0).toUpperCase() + value.slice(1) : value);
 
 /** The opportunity pool (OPP-02, OPP-11..13 as decided): one card per hiring company, assign or dismiss. */
-export default function OpportunitiesPage() {
+/**
+ * Two pages over the same cards (request of November 19, 2026): **Leads** (`origin="manual"`) lists the leads added by hand and
+ * the tracker import's drafts, with Add lead; **Lead Generation** (`origin="found"`, under Tools) lists the companies the job
+ * searches found, with Searches & runs, Execute (run the searches now) and Budget (the jobs usage).
+ */
+export default function OpportunitiesPage({ origin }: { origin: OpportunityOrigin }) {
   const { can, notify, openLead, dataVersion, bumpData, reference } = useApp();
+  const found = origin === "found";
   const [tab, setTab] = useState<Tab>("new");
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState("");
+  // My Leads / Everyone on Leads, By Me / Everyone on Lead Generation (request of November 19, 2026).
+  const [scope, setScope] = useState<"mine" | "everyone">("everyone");
   const status: OpportunityStatus = tab === "searches" ? "new" : tab;
-  const fetcher = useCallback(() => fetchOpportunities({ status, page, pageSize, search: filter.trim() }), [status, page, filter]);
+  const fetcher = useCallback(() => fetchOpportunities({ status, page, pageSize, search: filter.trim(), origin, scope }), [status, page, filter, origin, scope]);
   const { data, error, reload } = useAsyncData(fetcher, dataVersion);
-  const [assigning, setAssigning] = useState<Opportunity | null>(null);
+  // Leads: Move to Pipeline asks the stage and the status, like Move back to pipeline (request of November 19, 2026).
+  const [moving, setMoving] = useState<Opportunity | null>(null);
   const [dismissing, setDismissing] = useState<Opportunity | null>(null);
   // Add lead (null: closed; "new": a new lead; a card: that lead's fields).
   const [entry, setEntry] = useState<Opportunity | "new" | null>(null);
   const [reopening, setReopening] = useState<Opportunity | null>(null);
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
   const [running, setRunning] = useState(false);
+  // Request of November 19, 2026: the job sources' budgets open from a Budget button instead of filling the top of the page.
+  const [budgetOpen, setBudgetOpen] = useState(false);
   const counts = data?.counts;
   const tabs: TabOption<Tab>[] = [
     { id: "new", label: statusLabels.new, count: counts?.new },
     { id: "not_relevant", label: statusLabels.not_relevant, count: counts?.not_relevant },
-    { id: "converted", label: statusLabels.converted, count: counts?.converted },
-    { id: "attached", label: statusLabels.attached, count: counts?.attached },
-    ...(can("manage_settings") ? [{ id: "searches" as Tab, label: "Searches & runs" }] : []),
+    // Request of November 19, 2026: Leads shows only its inbox and the leads marked not relevant; a converted lead is in the Pipeline.
+    ...(found ? [
+      { id: "converted" as Tab, label: statusLabels.converted, count: counts?.converted },
+      { id: "attached" as Tab, label: statusLabels.attached, count: counts?.attached },
+    ] : []),
+    ...(found && can("manage_settings") ? [{ id: "searches" as Tab, label: "Searches & runs" }] : []),
   ];
 
   const runNow = async () => {
@@ -98,26 +113,34 @@ export default function OpportunitiesPage() {
     <>
       <div className="page-heading">
         <div>
-          <div className="eyebrow">LEADS INBOX</div>
-          <h1>Leads</h1>
-          <p>Companies that are hiring, found by the scheduled job searches, and leads added by hand. Convert one to a deal for yourself or a colleague, or mark it not relevant. A company that is already a deal or client never appears here: its new listings go to that deal.</p>
+          <div className="eyebrow">{found ? "TOOLS" : "LEADS INBOX"}</div>
+          <h1>{found ? "Lead Generation" : "Leads"}</h1>
+          <p>{found
+            ? "Hiring companies found by the job searches: move one to the Pipeline or mark it not relevant."
+            : "Leads added by hand and companies from the sales tracker with no Sales Manager. Move one to the Pipeline for yourself or a colleague, or mark it not relevant. The companies the job searches find are on Lead Generation."}</p>
         </div>
         <div className="page-heading-actions">
-          {can("manage_settings") && <button className="button button-outline" onClick={() => void runNow()} disabled={running}><Play size={14} /> {running ? "Running searches..." : "Run searches now"}</button>}
-          {can("create_leads") && <button className="button button-primary" onClick={() => setEntry("new")}><Plus size={14} /> Add lead</button>}
+          {found && <button type="button" className="button button-soft" onClick={() => setBudgetOpen(true)}><Gauge size={14} /> Budget</button>}
+          {found && can("manage_settings") && <button type="button" className="button button-primary" onClick={() => void runNow()} disabled={running} title="Run the searches now"><Play size={14} /> {running ? "Executing..." : "Execute"}</button>}
+          {!found && can("create_leads") && <button className="button button-primary" onClick={() => setEntry("new")}><Plus size={14} /> Add lead</button>}
         </div>
       </div>
-      <JobsUsageCard compact refreshKey={running} />
-      <Tabs tabs={tabs} active={tab} onChange={(id) => { setTab(id); setPage(1); setExpanded({}); }} />
+      <div className="opp-tabs"><Tabs tabs={tabs} active={tab} onChange={(id) => { setTab(id); setPage(1); setExpanded({}); }} /></div>
       {tab === "searches" ? <SearchesPanel /> : (
         <div className="panel">
           <div className="opp-toolbar">
+            <div className="opp-toolbar-left">
+            <div className="scope-toggle" role="group" aria-label={found ? "Found by" : "Whose leads"}>
+              <button type="button" className={scope === "mine" ? "is-active" : ""} aria-pressed={scope === "mine"} onClick={() => { setScope("mine"); setPage(1); }}>{found ? "By Me" : "My Leads"}</button>
+              <button type="button" className={scope === "everyone" ? "is-active" : ""} aria-pressed={scope === "everyone"} onClick={() => { setScope("everyone"); setPage(1); }}>Everyone</button>
+            </div>
             <label className="opp-search"><Search size={13} /><input placeholder="Filter by company, role, or location" aria-label="Filter leads" value={filter} onChange={(event) => { setFilter(event.target.value); setPage(1); }} /></label>
+            </div>
             {data && <small className="field-hint">{data.total} {data.total === 1 ? "company" : "companies"}</small>}
           </div>
           {error && <ErrorText message={error} />}
           {!data && !error ? <Loading /> : data && data.opportunities.length === 0 ? (
-            <EmptyState icon={<Briefcase size={22} />} title={status === "new" ? "Nothing in the inbox" : `No ${statusLabels[status].toLowerCase()} yet`} text={status === "new" ? (can("manage_settings") ? "Add a search under Searches & runs and run it, or wait for the next scheduled run." : "The next scheduled search run will add companies here.") : undefined} />
+            <EmptyState icon={<Briefcase size={22} />} title={status === "new" ? "Nothing in the inbox" : `No ${statusLabels[status].toLowerCase()} yet`} text={status === "new" ? (!found ? (can("create_leads") ? "Add a lead by hand with Add lead." : undefined) : can("manage_settings") ? "Add a search under Searches & runs and run it, or wait for the next scheduled run." : "The next scheduled search run will add companies here.") : undefined} />
           ) : data && (
             <table className="opp-table">
               <thead><tr><th>Company</th><th>Roles / history</th><th>Location</th><th>Seen</th><th>{status === "new" ? "Notes" : "Outcome"}</th><th aria-label="Actions" /></tr></thead>
@@ -133,6 +156,7 @@ export default function OpportunitiesPage() {
                         {item.contacts.length > 0 && <small className="opp-contacts"><UserRound size={11} /> {item.contacts.map((contact) => contact.name).join(", ")}</small>}
                       </td>
                       <td>
+                        {item.listingsCount === 0 && !item.tracker ? <span className="muted-cell">—</span> : <>
                         <button type="button" className="opp-expand" onClick={() => setExpanded((current) => ({ ...current, [item.id]: !open }))} aria-expanded={open}>
                           {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />} {[
                             item.listingsCount > 0 || !item.tracker ? `${item.listingsCount} ${item.listingsCount === 1 ? "role" : "roles"}` : "",
@@ -151,6 +175,7 @@ export default function OpportunitiesPage() {
                             ))}
                           </ul>
                         )}
+                        </>}
                       </td>
                       <td>{item.location || "—"}</td>
                       <td><span title={formatDateTime(item.lastSeenAt)}>{relativeTime(item.lastSeenAt)}</span><small className="muted-cell">first {formatDate(item.firstSeenAt.slice(0, 10))}</small></td>
@@ -175,7 +200,8 @@ export default function OpportunitiesPage() {
                       </td>
                       <td>
                         <div className="opp-actions">
-                          {item.status === "new" && can("create_leads") && !item.history && <button type="button" className="button button-primary button-small" onClick={() => setAssigning(item)}><UserPlus size={13} /> Convert to deal</button>}
+                          {/* Request of November 19, 2026: on Leads and Lead Generation a lead moves to the Pipeline asking only the stage, the status and the owner. */}
+                          {item.status === "new" && can("create_leads") && !item.history && <button type="button" className="button button-primary button-small" onClick={() => setMoving(item)}><ArrowRightCircle size={13} /> Move to Pipeline</button>}
                           {item.status === "new" && can("create_leads") && item.history && <button type="button" className="button button-primary button-small" onClick={() => setReopening(item)}><RotateCcw size={13} /> Reopen deal</button>}
                           {(item.status === "new" || item.status === "not_relevant") && can("create_leads") && <button type="button" className="button button-outline button-small" onClick={() => setEntry(item)} aria-label={`Edit ${item.companyName}`}><Pencil size={13} /> Edit</button>}
                           {item.status === "new" && can("create_leads") && <button type="button" className="button button-outline button-small" onClick={() => setDismissing(item)}><X size={13} /> Not relevant</button>}
@@ -192,14 +218,17 @@ export default function OpportunitiesPage() {
           {data && data.total > pageSize && <Pagination page={page} pageSize={pageSize} total={data.total} onPage={setPage} />}
         </div>
       )}
-      {assigning && (
-        <LeadFormDialog
-          prefill={prefillFor(assigning, reference.listValues)}
-          opportunityId={assigning.id}
-          contact={assigning.organizationId ? { organizationId: assigning.organizationId, personId: assigning.contacts[0]?.id ?? null } : undefined}
-          importedHistory={Boolean(assigning.tracker)}
-          onClose={() => setAssigning(null)}
-          onSaved={(lead) => { setAssigning(null); notify(`${lead.clientName} is now a deal owned by ${lead.ownerName}`); bumpData(); reload(); }}
+      {budgetOpen && (
+        <Dialog title="Job listing sources this month" eyebrow="LEAD GENERATION" size="wide" onClose={() => setBudgetOpen(false)}>
+          <JobsUsageCard inDialog refreshKey={running} empty={<p className="dialog-description">No live job source is set up: the searches use the sample listings, so there is no budget to show.</p>} />
+          <div className="modal-actions"><button type="button" className="button button-outline" onClick={() => setBudgetOpen(false)}>Close</button></div>
+        </Dialog>
+      )}
+      {moving && (
+        <MoveToPipelineDialog
+          opportunity={moving}
+          onClose={() => setMoving(null)}
+          onDone={(lead) => { setMoving(null); notify(`${lead.clientName} moved to the Pipeline: ${lead.stage}, ${lead.statusLabel}, owner ${lead.ownerName}`); bumpData(); reload(); }}
         />
       )}
       {reopening && (
@@ -233,7 +262,7 @@ export default function OpportunitiesPage() {
  * values; the deal takes it when the lead is converted), BD action and Client response (fields of the lead, no longer of the
  * deal), and a note. A new lead starts with the Lead Gen Tool source.
  */
-function LeadEntryDialog({ lead, onClose, onSaved }: { lead: Opportunity | null; onClose: () => void; onSaved: (item: Opportunity, created: boolean) => void }) {
+export function LeadEntryDialog({ lead, onClose, onSaved }: { lead: Opportunity | null; onClose: () => void; onSaved: (item: Opportunity, created: boolean) => void }) {
   const { reference } = useApp();
   const values = reference.listValues;
   const usable = <T extends { id: number; active: boolean }>(list: T[], current: number | null) => list.filter((item) => item.active || item.id === current);
@@ -419,6 +448,83 @@ function LeadEntryDialog({ lead, onClose, onSaved }: { lead: Opportunity | null;
           onSaved={(saved) => { setAddingPerson(null); linkPerson(saved.id, saved.name); }}
         />
       )}
+    </Dialog>
+  );
+}
+
+/**
+ * Move to Pipeline (request of November 19, 2026): a lead becomes a deal with what the lead already holds (company, contact,
+ * Lead source, notes, BD action and Client response in the comments); the dialog asks only the pipeline stage, the status
+ * and, for someone who may assign deals, the owner. A near-duplicate deal is shown, with Move anyway when it may be overridden.
+ */
+function MoveToPipelineDialog({ opportunity, onClose, onDone }: { opportunity: Opportunity; onClose: () => void; onDone: (lead: { clientName: string; ownerName: string; statusLabel: string; stage: string }) => void }) {
+  const { reference, can, user } = useApp();
+  const values = reference.listValues;
+  const stages = stageChoices(values.stage, reference.pipelines).filter((item) => item.active);
+  const statuses = values.status.filter((item) => item.active && !offBoardStatusCodes.includes(item.code));
+  const prefill = prefillFor(opportunity, values);
+  const owners = reference.users.filter((item) => item.role !== "recruiter" && item.active !== false);
+  const [stageId, setStageId] = useState(String(stages[0]?.id ?? ""));
+  const [statusId, setStatusId] = useState(String(statuses.find((item) => item.id === prefill.statusId)?.id ?? statuses.find((item) => item.code === "cold")?.id ?? statuses[0]?.id ?? ""));
+  const [ownerId, setOwnerId] = useState(String(user.id));
+  const [error, setError] = useState("");
+  const [similar, setSimilar] = useState<{ message: string; canOverride: boolean } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const website = (prefill.companyUrl ?? "").trim();
+  const move = async (allowSimilar: boolean) => {
+    if (!stageId) { setError("Choose the pipeline stage."); return; }
+    if (!prefill.leadTypeId) { setError("The lead has no Lead source: edit the lead and choose one."); return; }
+    setBusy(true);
+    setError("");
+    setSimilar(null);
+    try {
+      const { lead } = await createLead({
+        clientName: prefill.clientName ?? opportunity.companyName, companyUrl: website && !/^https?:\/\//i.test(website) ? `https://${website}` : website,
+        address: prefill.address ?? "", comments: prefill.comments ?? "", clientExecutive: prefill.clientExecutive ?? "", contactPhone: prefill.contactPhone ?? "",
+        contactAltPhone: prefill.contactAltPhone ?? "", contactRemark: prefill.contactRemark ?? "", clientEmails: prefill.clientEmails ?? [], industry: prefill.industry ?? "",
+        positions: prefill.positions ?? "", leadTypeId: prefill.leadTypeId, statusId: Number(statusId), statusReasonId: null, leadCategoryId: null, companySizeId: null,
+        cityId: prefill.cityId ?? null, firstContactDate: prefill.firstContactDate || reference.today, followUpDate: prefill.followUpDate ?? null,
+        contractSignedDate: prefill.contractSignedDate ?? null, stageId: Number(stageId),
+        ownerId: can("reassign_leads") ? Number(ownerId) : null, opportunityId: opportunity.id,
+        organizationId: opportunity.organizationId ?? null, personId: opportunity.contacts[0]?.id ?? null,
+        allowSimilar, createOrganization: true, createContact: true,
+      });
+      onDone({ clientName: lead.clientName, ownerName: lead.ownerName, statusLabel: lead.statusLabel, stage: stages.find((item) => item.id === Number(stageId))?.value ?? "" });
+    } catch (caught) {
+      const apiError = caught instanceof ApiError ? caught : null;
+      if (apiError?.status === 409 && apiError.data.duplicate) setSimilar({ message: apiError.message, canOverride: apiError.data.canOverride === true });
+      else setError(errorMessage(caught, "Could not move the lead to the Pipeline."));
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog title={`Move ${opportunity.companyName} to the Pipeline`} eyebrow={opportunity.addedByName || opportunity.tracker ? "LEADS INBOX" : "LEAD GENERATION"} size="narrow" onClose={onClose}>
+      <form className="lead-form" onSubmit={(event: FormEvent<HTMLFormElement>) => { event.preventDefault(); void move(false); }}>
+        <p className="dialog-description field-wide">The lead becomes a deal with its company, contacts, Lead source, notes and advertised roles. Choose where it starts in the pipeline.</p>
+        <Field label="Pipeline stage" required wide>
+          <select value={stageId} onChange={(event) => setStageId(event.target.value)} required autoFocus>
+            <option value="">Choose a stage...</option>
+            {stages.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
+          </select>
+        </Field>
+        <Field label="Status" required wide>
+          <select value={statusId} onChange={(event) => setStatusId(event.target.value)} required>
+            {statuses.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
+          </select>
+        </Field>
+        {can("reassign_leads") && (
+          <Field label="Owner" wide hint="The deal is created in their name.">
+            <select value={ownerId} onChange={(event) => setOwnerId(event.target.value)}>{owners.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
+          </Field>
+        )}
+        {similar && <div className="field-wide"><ErrorText message={similar.message} /></div>}
+        <div className="field-wide"><ErrorText message={error} /></div>
+        <div className="modal-actions">
+          <button type="button" className="button button-outline" onClick={onClose}>Cancel</button>
+          {similar?.canOverride && <button type="button" className="button button-outline" disabled={busy} onClick={() => void move(true)}>Move anyway</button>}
+          <button type="submit" className="button button-primary" disabled={busy}><ArrowRightCircle size={14} /> {busy ? "Moving..." : "Move to Pipeline"}</button>
+        </div>
+      </form>
     </Dialog>
   );
 }

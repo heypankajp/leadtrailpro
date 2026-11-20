@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   AlertCircle, BellRing, Building2, CalendarCheck2, Check, ChevronDown, CircleDollarSign, Compass, Contact, FileSpreadsheet, Handshake, MapPinned, KeyRound, LayoutDashboard, ListChecks, LogOut, Map, Menu,
-  PanelLeftClose, PanelLeftOpen, Plus, Radar, Search, Settings2, ShieldCheck, SlidersHorizontal, Target, TrendingUp, UsersRound,
+  PanelLeftClose, PanelLeftOpen, Plus, Radar, ScanSearch, Search, Settings2, ShieldCheck, SlidersHorizontal, Target, TrendingUp, UsersRound,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAsyncData } from "@/lib/useAsyncData";
@@ -18,11 +18,11 @@ import LeadFormDialog from "@/features/leads/LeadFormDialog";
 import type { LeadInput } from "@/features/leads/model";
 import LeadListPage from "@/features/leads/LeadListPage";
 import NotificationsMenu from "@/features/notifications/NotificationsMenu";
-import OpportunitiesPage from "@/features/opportunities/OpportunitiesPage";
+import OpportunitiesPage, { LeadEntryDialog } from "@/features/opportunities/OpportunitiesPage";
 import { fetchOpportunities } from "@/features/opportunities/client";
 import PreferencesDialog from "@/features/notifications/PreferencesDialog";
 import AdminPage, { adminTabs, type AdminTab } from "@/features/admin/AdminPage";
-import LeadGenerationPage from "@/features/preview/LeadGenerationPage";
+import LeadDiscoveryPage from "@/features/preview/LeadDiscoveryPage";
 import PlannerPage from "@/features/preview/PlannerPage";
 import ReportsPage from "@/features/reports/ReportsPage";
 import { fetchTasks } from "@/features/tasks/client";
@@ -37,7 +37,7 @@ import { hasPrivilege } from "@/features/users/model";
 import { AppContext, useHashRoute, type AppContextValue, type Route, type ToastTone } from "./AppContext";
 import { fetchReference } from "./client";
 
-type NavItem = { id: string; label: string; icon: LucideIcon; privilege?: UserPrivilege; count?: "queued" | "tasks" | "leads" | "todo"; preview?: boolean; hideForRecruiter?: boolean };
+type NavItem = { id: string; label: string; icon: LucideIcon; privilege?: UserPrivilege; count?: "queued" | "tasks" | "leads" | "found" | "todo"; preview?: boolean; hideForRecruiter?: boolean };
 
 // The first group is the sales menu (Pipeline, Leads, Contacts, Activities, Insights); the tools come after it.
 // PD-26: the entry that opens the deals is called "Pipeline"; the records stay "deals".
@@ -62,8 +62,16 @@ const navigation: { title: string; items: NavItem[] }[] = [
     items: [
       { id: "todo", label: "To Do", icon: ListChecks, privilege: "view_leads", count: "todo", hideForRecruiter: true },
       { id: "trips", label: "Sales Trip Planner", icon: Compass, privilege: "plan_trips" },
-      { id: "lead-generation", label: "Lead Generation", icon: Building2, privilege: "create_leads", preview: true },
-      { id: "planner", label: "Road Visit Planner", icon: Map, privilege: "create_leads", preview: true },
+      // Request of November 19, 2026: the companies the job searches find, apart from the leads added by hand.
+      { id: "lead-generation", label: "Lead Generation", icon: ScanSearch, privilege: "view_leads", count: "found", hideForRecruiter: true },
+    ],
+  },
+  {
+    // Request of November 19, 2026: the pages that show sample content until their data sources are connected.
+    title: "PREVIEW",
+    items: [
+      { id: "lead-discovery", label: "Lead Discovery", icon: Building2, privilege: "create_leads" },
+      { id: "planner", label: "Road Visit Planner", icon: Map, privilege: "create_leads" },
     ],
   },
   {
@@ -82,7 +90,7 @@ const navigation: { title: string; items: NavItem[] }[] = [
 
 const pageTitles: Record<string, string> = {
   home: "Action Center", deals: "Pipeline", leads: "Leads", contacts: "Contacts", activities: "Activities", clients: "Clients", insights: "Insights", todo: "To Do",
-  "sales-trips": "Sales Trips", "lead-generation": "Lead Generation", trips: "Sales Trip Planner", planner: "Road Visit Planner",
+  "sales-trips": "Sales Trips", "lead-generation": "Lead Generation", "lead-discovery": "Lead Discovery", trips: "Sales Trip Planner", planner: "Road Visit Planner",
   targets: "Targets & Templates", admin: "User Management", values: "List of Values", devices: "Device Authorization", settings: "Settings",
   import: "Tracker Import", api: "API Access",
 };
@@ -113,6 +121,7 @@ export default function AppShell({ user, setUser, signOut, passwordSignIn }: { u
   const [newDeal, setNewDeal] = useState<{ stageId?: number; prefill?: Partial<LeadInput>; organizationId?: number | null; personId?: number | null } | null>(null);
   const [activityOpen, setActivityOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [leadOpen, setLeadOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [prefsOpen, setPrefsOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -140,16 +149,17 @@ export default function AppShell({ user, setUser, signOut, passwordSignIn }: { u
   }, [recordKey]);
 
   const countsFetcher = useCallback(async () => {
-    const [queued, tasks, leads, todo] = await Promise.all([
+    const [queued, tasks, leads, found, todo] = await Promise.all([
       can("review_queued") ? fetchLeads({ state: "queued", pageSize: 1 }).then((page) => page.total).catch(() => 0) : Promise.resolve(0),
       fetchTasks({ status: "open" }).then((result) => result.tasks.length).catch(() => 0),
-      can("create_leads") ? fetchOpportunities({ status: "new", pageSize: 1 }).then((page) => page.counts.new).catch(() => 0) : Promise.resolve(0),
+      can("create_leads") ? fetchOpportunities({ status: "new", pageSize: 1, origin: "manual" }).then((page) => page.counts.new).catch(() => 0) : Promise.resolve(0),
+      can("create_leads") ? fetchOpportunities({ status: "new", pageSize: 1, origin: "found" }).then((page) => page.counts.new).catch(() => 0) : Promise.resolve(0),
       // TODO-04: the person's own leads waiting on a To Do list.
       can("view_leads") ? fetchTodoCounts().then((result) => result.mine).catch(() => 0) : Promise.resolve(0),
     ]);
-    return { queued, tasks, leads, todo };
+    return { queued, tasks, leads, found, todo };
   }, [can]);
-  const counts = useAsyncData(countsFetcher, dataVersion).data ?? { queued: 0, tasks: 0, leads: 0, todo: 0 };
+  const counts = useAsyncData(countsFetcher, dataVersion).data ?? { queued: 0, tasks: 0, leads: 0, found: 0, todo: 0 };
 
   const notify = useCallback((message: string, tone: ToastTone = "success") => {
     setToast({ id: Date.now(), message, tone });
@@ -251,13 +261,14 @@ export default function AppShell({ user, setUser, signOut, passwordSignIn }: { u
     if (view === "deals") return can("view_leads") ? <DealsPage key={base.query.toString()} mode={base.param} /> : <NoAccess />;
     if (view === "todo") return <LeadListPage view="todo" />;
     if (view === "sales-trips") return can("view_leads") ? (base.param && /^\d+$/.test(base.param) ? <SalesTripPage key={base.param} tripId={Number(base.param)} /> : <SalesTripsPage />) : <NoAccess />;
-    if (view === "leads") return can("view_leads") ? <OpportunitiesPage /> : <NoAccess />;
+    if (view === "leads") return can("view_leads") ? <OpportunitiesPage key="manual" origin="manual" /> : <NoAccess />;
+    if (view === "lead-generation") return can("view_leads") ? <OpportunitiesPage key="found" origin="found" /> : <NoAccess />;
     if (view === "contacts") return can("view_leads") ? <ContactsPage key={base.param === "companies" ? "organizations" : base.param ?? "people"} tab={base.param === "organizations" || base.param === "companies" ? "organizations" : base.param === "timeline" ? "timeline" : "people"} /> : <NoAccess />;
     if (view === "activities") return <TasksPage />;
     if (view === "clients") return can("view_leads") ? <LeadListPage key={base.query.toString()} view="client" /> : <NoAccess />;
     if (view === "insights") return can("view_reports") ? <ReportsPage /> : <NoAccess />;
     if (adminTabs.includes(view as AdminTab)) return <AdminPage tab={view as AdminTab} />;
-    if (view === "lead-generation") return <LeadGenerationPage />;
+    if (view === "lead-discovery") return <LeadDiscoveryPage />;
     if (view === "trips") return can("plan_trips") ? (base.param && /^\d+$/.test(base.param) ? <TripResultsPage key={base.param} tripId={Number(base.param)} /> : <TripsPage />) : <NoAccess />;
     if (view === "planner") return <PlannerPage />;
     return <ActionCenter />;
@@ -330,6 +341,8 @@ export default function AppShell({ user, setUser, signOut, passwordSignIn }: { u
                   <button className="quick-add" aria-label="Quick add" title="Quick add" aria-haspopup="menu" aria-expanded={addOpen} onClick={() => setAddOpen((open) => !open)}><Plus size={18} /></button>
                   {addOpen && (
                     <div className="menu-dropdown quick-add-menu" role="menu">
+                      {/* Request of November 19, 2026: Lead first, then Deal, then Activity. */}
+                      {canAddDeal && <button role="menuitem" onClick={() => { setAddOpen(false); setLeadOpen(true); }}><Radar size={14} /> Lead</button>}
                       {canAddDeal && <button role="menuitem" onClick={() => { setAddOpen(false); setNewDeal({}); }}><CircleDollarSign size={14} /> Deal</button>}
                       {canAddActivity && <button role="menuitem" onClick={() => { setAddOpen(false); setActivityOpen(true); }}><CalendarCheck2 size={14} /> Activity</button>}
                     </div>
@@ -374,6 +387,13 @@ export default function AppShell({ user, setUser, signOut, passwordSignIn }: { u
               if (lead.recordState === "queued" && can("review_queued")) navigate("deals", "queued");
               else openLead(lead.id);
             }}
+          />
+        )}
+        {leadOpen && (
+          <LeadEntryDialog
+            lead={null}
+            onClose={() => setLeadOpen(false)}
+            onSaved={(item) => { setLeadOpen(false); bumpData(); notify(`${item.companyName} added to Leads`); }}
           />
         )}
         {activityOpen && <TaskFormDialog onClose={() => setActivityOpen(false)} onSaved={() => { setActivityOpen(false); bumpData(); notify("Task created"); }} />}

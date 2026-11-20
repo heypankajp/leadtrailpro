@@ -339,10 +339,13 @@ export default function PipelinePage({ groupBy = "stage" }: { groupBy?: Pipeline
                     const next = nextStepOf(card);
                     const overdue = Boolean(next?.date && next.date < reference.today);
                     const movable = canMove(card) && !editable;
+                    // Request of November 19, 2026: a Hot, Warm or Cold deal shows as the card's colour instead of a label.
+                    const tone = card.statusCode === "hot" || card.statusCode === "warm" || card.statusCode === "cold" ? card.statusCode : null;
                     return (
                       <article
                         key={card.id}
-                        className={`pipeline-card ${dragging === card.id ? "is-dragging" : ""} ${card.quiet ? "is-quiet" : ""}`}
+                        className={`pipeline-card ${tone ? `pipeline-card-${tone}` : ""} ${dragging === card.id ? "is-dragging" : ""} ${card.quiet ? "is-quiet" : ""}`}
+                        title={tone ? card.statusLabel : undefined}
                         draggable={movable}
                         onDragStart={(event) => { event.dataTransfer.setData("text/plain", String(card.id)); event.dataTransfer.effectAllowed = "move"; setDragging(card.id); }}
                         onDragEnd={() => { setDragging(null); setOverColumn(null); }}
@@ -366,7 +369,7 @@ export default function PipelinePage({ groupBy = "stage" }: { groupBy?: Pipeline
                         </div>
                         <div className="pipeline-card-meta">
                           <span className="pipeline-owner" title={card.ownerName}><span className="mini-avatar">{initials(card.ownerName)}</span>{scope === "team" ? card.ownerName : null}</span>
-                          <StatusPill status={card.statusLabel} code={card.statusCode} />
+                          {tone ? <span className="sr-only">{card.statusLabel}</span> : <StatusPill status={card.statusLabel} code={card.statusCode} />}
                           {card.dealValue !== null && <span className="deal-value" title="Deal value">{formatDealValue(card.dealValue)}</span>}
                         </div>
                         {byStatus

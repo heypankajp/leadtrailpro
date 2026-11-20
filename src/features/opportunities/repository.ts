@@ -9,7 +9,8 @@ import { normalizeCompanyName } from "@/features/trips/matching";
 import type { LeadSummary } from "@/features/leads/model";
 import type { UserAccount } from "@/features/users/model";
 import { claimOpportunityForLead } from "./claim";
-import { closedStatusCodes, defaultPostedWithinDays, indeedKeyword, parseTitles, reasonScopeFor, trackerCard, trackerDraft, type Opportunity, type OpportunityListing, type OpportunityPage, type OpportunityRun, type OpportunitySearch, type OpportunitySearchInput, type OpportunityStatus, type ReasonScope, type LeadEntryInput } from "./model";
+import { closedStatusCodes, defaultPostedWithinDays, indeedKeyword, parseTitles, reasonScopeFor, trackerCard, trackerDraft, type Opportunity, type OpportunityListing, type OpportunityPage, type OpportunityRun, type OpportunitySearch, type OpportunitySearchInput, type OpportunityStatus, type ReasonScope, type LeadEntryInput, type OpportunityOrigin } from "./model";
+import { sameWebsite, websiteKey } from "@/lib/website-key";
 
 /** Reads and the people's actions on the opportunity pool (OPP-*); the search runs live in `runner.ts`. */
 
@@ -178,9 +179,27 @@ async function listingsFor(ids: number[], db: Queryable): Promise<Map<number, Op
   return byOpportunity;
 }
 
-export async function listOpportunities(filter: { status: OpportunityStatus; page: number; pageSize: number; search?: string }, db: Queryable = getDatabasePool()): Promise<OpportunityPage> {
-  const clauses = ["o.status = ?"];
-  const params: unknown[] = [filter.status];
+/**
+ * SQL for a lead's origin: one added by hand has `added_by`, one the tracker import drafted has `draft` (cleared when it is
+ * converted, so a card with no job listings counts too); the rest the job searches found.
+ */
+const manualOrigin = "(o.added_by IS NOT NULL OR o.draft IS NOT NULL OR o.listings_count = 0)";
+const originClause = (origin?: OpportunityOrigin) => (origin === "manual" ? manualOrigin : origin === "found" ? `NOT ${manualOrigin}` : "TRUE");
+
+/**
+ * My Leads / By Me (request of November 19, 2026): on Leads, the leads the person added; on Lead Generation, the companies
+ * found by the job searches the person created.
+ */
+const mineClause = (origin?: OpportunityOrigin) => (origin === "found"
+  ? "EXISTS (SELECT 1 FROM opportunity_listings ml JOIN opportunity_searches ms ON ms.id = ml.search_id WHERE ml.opportunity_id = o.id AND ms.created_by = ?)"
+  : "o.added_by = ?");
+
+export async function listOpportunities(filter: { status: OpportunityStatus; page: number; pageSize: number; search?: string; origin?: OpportunityOrigin; mineOf?: number | null }, db: Queryable = getDatabasePool()): Promise<OpportunityPage> {
+  const scope = [originClause(filter.origin)];
+  const scopeParams: unknown[] = [];
+  if (filter.mineOf) { scope.push(mineClause(filter.origin)); scopeParams.push(filter.mineOf); }
+  const clauses = ["o.status = ?", ...scope];
+  const params: unknown[] = [filter.status, ...scopeParams];
   if (filter.search) {
     clauses.push("(LOWER(o.company_name) LIKE ? OR LOWER(o.latest_title) LIKE ? OR LOWER(o.location) LIKE ? OR LOWER(COALESCE(o.draft->'lead'->>'executive', '')) LIKE ? OR LOWER(o.note) LIKE ?)");
     const like = `%${filter.search.toLowerCase()}%`;
@@ -188,7 +207,7 @@ export async function listOpportunities(filter: { status: OpportunityStatus; pag
   }
   const where = `WHERE ${clauses.join(" AND ")}`;
   const order = filter.status === "new" ? "o.last_seen_at DESC, o.listings_count DESC, o.id DESC" : "o.decided_at DESC NULLS LAST, o.last_seen_at DESC, o.id DESC";
-  const { rows: countRows } = await db.query("SELECT status, COUNT(*)::int AS count FROM opportunities GROUP BY status");
+  const { rows: countRows } = await db.query(`SELECT o.status, COUNT(*)::int AS count FROM opportunities o WHERE ${scope.join(" AND ")} GROUP BY o.status`, scopeParams);
   const counts: Record<OpportunityStatus, number> = { new: 0, attached: 0, converted: 0, not_relevant: 0 };
   for (const row of countRows as { status: OpportunityStatus; count: number }[]) counts[row.status] = Number(row.count);
   const { rows: totalRows } = await db.query(`SELECT COUNT(*)::int AS total FROM opportunities o ${where}`, params);
@@ -236,6 +255,23 @@ async function saveLeadContacts(db: Queryable, opportunityId: number, personIds:
  * A lead added by hand (request of November 19, 2026): it goes to the inbox like a card the searches found. A company that is
  * already a lead in the inbox, or a live deal, is refused with its name, so it is not added twice.
  */
+/**
+ * A lead or a deal with the same website (request of November 19, 2026), compared without the protocol, "www." or letter
+ * case. Throws 409 naming it.
+ */
+async function refuseSameWebsite(connection: Queryable, website: string, exceptOpportunityId: number | null): Promise<void> {
+  const key = websiteKey(website);
+  if (!key) return;
+  const { rows: cards } = await connection.query("SELECT id, company_name AS \"companyName\", website, status FROM opportunities WHERE website <> '' AND id <> ?", [exceptOpportunityId ?? 0]);
+  const card = (cards as { id: number; companyName: string; website: string; status: OpportunityStatus }[]).find((row) => sameWebsite(row.website, website));
+  if (card) throw new HttpError(409, `${card.companyName} is already a lead with the website ${key} (${card.status === "new" ? "in the inbox" : card.status === "not_relevant" ? "marked not relevant" : "converted to a deal"}).`);
+  const { rows: deals } = await connection.query(
+    "SELECT l.client_name AS \"clientName\", l.company_url AS \"companyUrl\", st.code AS \"statusCode\", CONCAT(u.first_name, ' ', u.last_name) AS \"ownerName\" FROM leads l JOIN list_values st ON st.id = l.status_id JOIN users u ON u.id = l.owner_id WHERE l.company_url <> '' AND l.record_state <> 'archived'",
+  );
+  const deal = (deals as { clientName: string; companyUrl: string; statusCode: string; ownerName: string }[]).find((row) => sameWebsite(row.companyUrl, website));
+  if (deal) throw new HttpError(409, `${deal.clientName} is already a ${deal.statusCode === "client" ? "client" : "deal"} with the website ${key} (owner ${deal.ownerName}).`);
+}
+
 export async function createManualOpportunity(input: LeadEntryInput, actor: UserAccount): Promise<Opportunity> {
   return withTransaction(async (connection) => {
     await checkLeadEntry(connection, input);
@@ -245,6 +281,7 @@ export async function createManualOpportunity(input: LeadEntryInput, actor: User
     const { rows: existing } = await connection.query("SELECT id, company_name AS \"companyName\", status FROM opportunities WHERE company_key = ?", [key]);
     const same = (existing as { id: number; companyName: string; status: OpportunityStatus }[])[0];
     if (same) throw new HttpError(409, `${same.companyName} is already a lead (${same.status === "new" ? "in the inbox" : same.status === "not_relevant" ? "marked not relevant" : "converted to a deal"}).`);
+    await refuseSameWebsite(connection, input.website, null);
     const duplicate = await findDuplicateLead({ clientName: input.companyName, companyUrl: input.website, contactPhone: "", contactAltPhone: "", address: input.location, clientEmails: [] }, connection);
     if (duplicate?.exact) throw new HttpError(409, `${duplicate.lead.clientName} is already a deal (owner ${duplicate.lead.ownerName}).`);
     const now = toSqlDateTime(new Date());
@@ -271,6 +308,7 @@ export async function updateOpportunityDetails(id: number, input: LeadEntryInput
     if (!before) throw new HttpError(404, "Lead not found.");
     if (before.status !== "new" && before.status !== "not_relevant") throw new HttpError(409, `${before.companyName} is already a deal: change it on the deal.`);
     await checkLeadEntry(connection, input);
+    if (websiteKey(input.website) !== websiteKey(before.website)) await refuseSameWebsite(connection, input.website, id);
     await connection.query(
       "UPDATE opportunities SET company_name = ?, website = ?, location = ?, lead_type_id = ?, bd_action_id = ?, client_response_id = ?, note = ?, organization_id = ? WHERE id = ?",
       [input.companyName, input.website, input.location, input.leadSourceId, input.bdActionId, input.clientResponseId, input.note, input.organizationId ?? null, id],

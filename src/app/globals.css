@@ -1511,6 +1511,13 @@ h1 { margin: 9px 0 5px; color: #242941; font-size: 25px; font-weight: 690; lette
 .pipeline-column:hover .pipeline-add, .pipeline-add:focus-visible { opacity: 1; }
 .pipeline-add:hover { color: #3f4fc9; background: #dfe3f1; }
 @media (hover: none) { .pipeline-card .pipeline-move, .pipeline-add { opacity: 1; } }
+/* Request of November 19, 2026: the card's colour is its status (the status pill colours), with a stronger left edge. */
+.pipeline-card.pipeline-card-hot { border-color: #f3cdc7; border-left: 4px solid #d2503f; background: #fff1ef; }
+.pipeline-card.pipeline-card-warm { border-color: #f1dcb6; border-left: 4px solid #d89a3a; background: #fff7e8; }
+.pipeline-card.pipeline-card-cold { border-color: #cfdcf3; border-left: 4px solid #5b7fc4; background: #eef4ff; }
+.pipeline-card.pipeline-card-hot:hover { border-color: #e9b1a8; border-left-color: #d2503f; }
+.pipeline-card.pipeline-card-warm:hover { border-color: #e3c58f; border-left-color: #d89a3a; }
+.pipeline-card.pipeline-card-cold:hover { border-color: #b3c6ea; border-left-color: #5b7fc4; }
 
 /* Deal page */
 .deal-page { display: grid; gap: 12px; }
@@ -2201,3 +2208,42 @@ button.activity-row-icon.is-button:hover, button.activity-row-icon.is-button:foc
 .opp-note { display: block; margin-top: 4px; padding: 4px 8px; border-radius: 6px; background: #fff8dc; color: #5c4a10; font-size: 11.5px; white-space: pre-wrap; }
 .opp-contacts { display: flex; align-items: center; gap: 4px; margin-top: 3px; color: #3d4359; font-size: 11.5px; }
 .lead-contacts { display: grid; gap: 8px; }
+
+/* Leads and Lead Generation (request of November 19, 2026): heading buttons on one line, a padded usage card, readable rows. */
+.page-heading-actions { flex: 0 0 auto; }
+.page-heading-actions .button { white-space: nowrap; }
+.maps-usage-card { padding: 14px 16px; }
+.maps-usage-card .panel-heading { margin-bottom: 10px; }
+.maps-usage-card .panel-heading p { font-size: 11px; }
+.maps-usage-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.maps-usage-tile-head strong { font-size: 11.5px; }
+.maps-usage-tile-head span, .maps-usage-tile small { font-size: 10.5px; }
+.maps-usage-summary { font-size: 10.5px; }
+.maps-usage-pill { font-size: 9px; }
+.opp-tabs .followup-tab { font-size: 12px; }
+.opp-tabs .followup-tab span { font-size: 10.5px; }
+.opp-toolbar { padding: 12px 16px; }
+.opp-search { height: 34px; }
+.opp-search input { font-size: 12px; }
+.opp-toolbar .field-hint { font-size: 11.5px; }
+.opp-table th { height: 38px; padding: 0 16px; font-size: 10px; }
+.opp-table td { padding: 12px 16px; font-size: 12.5px; vertical-align: top; }
+.opp-table td:first-child { min-width: 220px; }
+.opp-table td:nth-child(3), .opp-table td:nth-child(4) { white-space: nowrap; }
+.opp-table td strong { font-size: 13.5px; }
+.opp-table td small.muted-cell, .opp-table .muted-cell { font-size: 11px; }
+.opp-table .opp-expand { font-size: 12.5px; }
+.opp-table .opp-flag { font-size: 11px; }
+.opp-table td:last-child { width: 1%; }
+.opp-actions { flex-wrap: nowrap; }
+.opp-actions .button { white-space: nowrap; }
+@media (max-width: 1100px) { .opp-actions { flex-wrap: wrap; } }
+.opp-toolbar-left { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.opp-toolbar .scope-toggle { flex: 0 0 auto; }
+.opp-toolbar .scope-toggle button { padding: 6px 12px; font-size: 12px; }
+/* The job sources' budgets in the Budget dialog of Lead Generation: no second frame inside the dialog. */
+.maps-usage-card.is-in-dialog { margin-top: 0; padding: 0; border: 0; box-shadow: none; }
+.maps-usage-card.is-in-dialog .maps-usage-pill { margin: 0 0 6px; font-size: 10px; }
+/* A secondary action in the brand colour (Budget on Lead Generation), beside a primary one. */
+.button-soft { border-color: #dfe3fb; color: #4a59c9; background: #eef0ff; }
+.button-soft:hover { border-color: #cfd5f7; background: #e3e7ff; }

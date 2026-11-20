@@ -17,6 +17,7 @@ import type { UserAccount } from "@/features/users/model";
 import { activityTypes } from "./model";
 import type { ActivityType, LeadActivity, LeadFilters, LeadInput, LeadPage, LeadRecordState, LeadSummary, LoggableActivityType } from "./model";
 import { quickFilterClause } from "./quick-filter-sql";
+import { sameWebsite, websiteKey } from "@/lib/website-key";
 
 // ---- Row mapping ----
 
@@ -629,6 +630,17 @@ export async function updateLead(id: number, changes: Partial<LeadInput>, actor:
     const existing = await getLead(id, connection);
     if (!existing) throw new HttpError(404, "Deal not found.");
     await validateListReferences(connection, changes);
+    // A website changed to one another deal or client has (request of November 19, 2026): compared without the protocol,
+    // "www." or letter case. Deals of the same company share its website and are not duplicates.
+    if (changes.companyUrl !== undefined && websiteKey(changes.companyUrl) && websiteKey(changes.companyUrl) !== websiteKey(existing.companyUrl)) {
+      const { rows } = await connection.query(
+        "SELECT l.id, l.client_name AS \"clientName\", l.company_url AS \"companyUrl\", l.organization_id AS \"organizationId\", st.code AS \"statusCode\", CONCAT(u.first_name, ' ', u.last_name) AS \"ownerName\" FROM leads l JOIN list_values st ON st.id = l.status_id JOIN users u ON u.id = l.owner_id WHERE l.id <> ? AND l.company_url <> ''",
+        [id],
+      );
+      const other = (rows as { clientName: string; companyUrl: string; organizationId: number | null; statusCode: string; ownerName: string }[])
+        .find((row) => sameWebsite(row.companyUrl, changes.companyUrl) && !(existing.organizationId && Number(row.organizationId) === existing.organizationId));
+      if (other) throw new HttpError(409, `${other.clientName} is already a ${other.statusCode === "client" ? "client" : "deal"} with the website ${websiteKey(changes.companyUrl)} (owner ${other.ownerName}).`);
+    }
     // PIPE-03: a BD action that belongs to a later stage moves the lead forward, never back; a stage chosen outright wins.
     let stageVia: "detail" | "bd_action" = "detail";
     if (changes.stageId === undefined && changes.bdActionId && changes.bdActionId !== existing.bdActionId) {

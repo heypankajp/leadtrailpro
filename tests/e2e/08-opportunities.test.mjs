@@ -3,13 +3,29 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { after, before, describe } from "node:test";
 import ExcelJS from "exceljs";
-import { By, Page, createDriver, outputDir, uiTest, waitForServices } from "./helpers/ui.mjs";
+import { By, Key, Page, createDriver, outputDir, uiTest, waitForServices } from "./helpers/ui.mjs";
 import { admin, ensureAdmin, runId } from "./helpers/data.mjs";
 
 // Runs on the sample job source (TRIPS_PROVIDER=stub): the keyword "baker" near Mississauga finds three sample companies.
 describe("Leads inbox", () => {
   const company = "Lakeshore Bakery Co.";
   const cardRow = (name) => By.xpath(`//table[contains(@class,"opp-table")]//tr[.//strong[normalize-space()="${name}"]]`);
+  // Move to Pipeline (request of November 19, 2026): the dialog asks the stage and the status; the deal takes the lead's details.
+  const moveToPipeline = async (row, name, stage, status) => {
+    await row.findElement(By.xpath('.//button[contains(normalize-space(.), "Move to Pipeline")]')).click();
+    await page.dialogTitle(`Move ${name} to the Pipeline`);
+    await page.fill("Pipeline stage", stage);
+    await page.fill("Status", status);
+    await page.clickButton("Move to Pipeline");
+    await page.toast(`${name} moved to the Pipeline: ${stage}, ${status}`);
+  };
+  const openDeal = async (name) => {
+    const search = await page.wait(By.css('input[aria-label="Search all deals"]'));
+    await search.sendKeys(Key.chord(Key.CONTROL, "a"), Key.BACK_SPACE, name, Key.ENTER);
+    await page.heading("All deals");
+    await page.click(By.xpath(`//tr[.//strong[normalize-space()="${name}"]]//button[contains(@class,"client-cell")]`), { global: true });
+    await page.wait(By.css("div.deal-page"));
+  };
   let driver;
   let page;
 
@@ -23,8 +39,8 @@ describe("Leads inbox", () => {
   after(async () => { await driver?.quit(); });
 
   uiTest("an administrator adds a search and runs it; hiring companies appear as cards", async () => {
-    await page.nav("Leads");
-    await page.heading("Leads");
+    await page.nav("Lead Generation");
+    await page.heading("Lead Generation");
     await page.tab("Searches & runs");
     await page.clickButton("Add search");
     await page.dialogTitle("Add a search");
@@ -33,7 +49,7 @@ describe("Leads inbox", () => {
     await page.fill("Location", "Mississauga, ON");
     await page.clickButton("Save search");
     await page.toast("saved");
-    await page.clickButton("Run searches now", { global: true });
+    await page.clickButton("Execute", { global: true });
     await page.toast("new companies");
     await page.tab("Inbox");
     const row = await page.wait(cardRow(company));
@@ -41,14 +57,9 @@ describe("Leads inbox", () => {
     assert.match(await row.getText(), /Sample listings/);
   });
 
-  uiTest("assigning a card creates the deal, pre-filled, and the card leaves the pool", async () => {
+  uiTest("Move to Pipeline creates the deal at the chosen stage and status, and the card leaves the pool", async () => {
     const row = await page.wait(cardRow(company));
-    await row.findElement(By.xpath('.//button[contains(normalize-space(.), "Convert to deal")]')).click();
-    await page.dialogTitle("Add deal");
-    assert.equal(await (await page.control("Company")).getAttribute("value"), company);
-    assert.match(await (await page.control("Position(s)")).getAttribute("value"), /Baker/);
-    await page.saveDeal();
-    await page.toast("is now a deal owned by");
+    await moveToPipeline(row, company, "Qualified", "Warm");
     await page.tab("Converted to deals");
     const assigned = await page.wait(cardRow(company));
     assert.match(await assigned.getText(), /Deal:/);
@@ -103,16 +114,18 @@ describe("Leads inbox", () => {
     assert.match(await row.getText(), /Lead source: Referral/);
     assert.match(await row.getText(), /First Call/);
     assert.match(await row.getText(), /Nora Hand, Omar Hand/);
-    await row.findElement(By.xpath('.//button[contains(normalize-space(.), "Convert to deal")]')).click();
-    await page.dialogTitle("Add deal");
-    assert.equal(await page.selectedText(await page.control("Deal source")), "Referral");
-    assert.match(await (await page.control("Comments")).getAttribute("value"), /BD Action : First Call\nClient response : Approach Later\nOther contacts: Omar Hand/);
-    await page.closeDialog();
+    // Leads keeps only its inbox and Not relevant.
+    assert.equal((await driver.findElements(By.xpath('//button[@role="tab"][starts-with(normalize-space(.), "Converted to deals")]'))).length, 0);
+    await moveToPipeline(row, manual, "New Deal", "Cold");
+    await openDeal(manual);
+    await page.waitText(By.css("div.deal-page"), "Referral");
+    await page.waitText(By.css("div.deal-page"), "BD Action : First Call");
+    await page.waitText(By.css("div.deal-page"), "Other contacts: Omar Hand");
   });
 
   uiTest("a card can be marked not relevant and brought back", async () => {
-    await page.nav("Leads");
-    await page.heading("Leads");
+    await page.nav("Lead Generation");
+    await page.heading("Lead Generation");
     await page.tab("Inbox");
     const row = await page.wait(cardRow("Streetsville Pastry Kitchen"));
     await row.findElement(By.xpath('.//button[contains(normalize-space(.), "Not relevant")]')).click();
@@ -177,19 +190,15 @@ describe("Leads inbox cards from the sales tracker", () => {
     assert.match(text, /Sales tracker/);
     assert.match(text, /2 tracker entries/);
     assert.match(text, /Jamie Ortiz/);
-    await row.findElement(By.xpath('.//button[contains(normalize-space(.), "Convert to deal")]')).click();
-    await page.dialogTitle("Add deal");
-    assert.equal(await (await page.control("Company")).getAttribute("value"), company);
-    assert.equal(await (await page.control("Contact")).getAttribute("value"), "Jamie Ortiz");
-    assert.equal(await (await page.control("First contact date")).getAttribute("value"), "2026-10-01");
+    // The sheet's status is the dialog's starting status.
+    await row.findElement(By.xpath('.//button[contains(normalize-space(.), "Move to Pipeline")]')).click();
+    await page.dialogTitle(`Move ${company} to the Pipeline`);
     assert.equal(await page.selectedText(await page.control("Status")), "Warm");
-    assert.equal(await page.selectedText(await page.control("City")), "Oakville");
-    await page.saveDeal();
-    await page.toast("is now a deal owned by");
-    await page.tab("Converted to deals");
-    const assigned = await page.wait(cardRow(company));
-    assert.match(await assigned.getText(), /Deal:/);
-    await assigned.findElement(By.xpath('.//button[normalize-space()="Open deal"]')).click();
+    await page.closeDialog();
+    await moveToPipeline(await page.wait(cardRow(company)), company, "New Deal", "Warm");
+    await openDeal(company);
+    await page.waitText(By.css("div.deal-page"), "Jamie Ortiz");
+    await page.waitText(By.css("div.deal-page"), "Oakville");
     await page.tab("Timeline");
     await page.wait(By.xpath('//article[contains(@class,"timeline-entry")]//strong[starts-with(normalize-space(.), "First Call")]'));
     await page.wait(By.xpath('//article[contains(@class,"timeline-entry")]//strong[normalize-space()="Created from the leads inbox: 2 timeline entries from the sales tracker"]'));

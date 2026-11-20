@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { asString, handleRouteError, jsonError, readJsonBody, requireSameOrigin } from "@/lib/http";
 import { createManualOpportunity, listOpportunities } from "@/features/opportunities/repository";
-import { opportunityStatuses, parseLeadEntry, type OpportunityStatus } from "@/features/opportunities/model";
+import { opportunityOrigins, opportunityStatuses, parseLeadEntry, type OpportunityOrigin, type OpportunityStatus } from "@/features/opportunities/model";
 import { requirePrivilege, requireUser } from "@/features/users/session";
 
-/** The pool (OPP-02, OPP-11): one card per company with its listings, by status. */
+/** The pool (OPP-02, OPP-11): one card per company with its listings, by status; `origin` (manual | found) splits Leads from Lead Generation. */
 export async function GET(request: Request) {
   try {
     const user = await requireUser();
@@ -12,9 +12,12 @@ export async function GET(request: Request) {
     const params = new URL(request.url).searchParams;
     const status = params.get("status") ?? "new";
     if (!opportunityStatuses.includes(status as OpportunityStatus)) return NextResponse.json({ error: "Unknown status." }, { status: 400 });
+    const originParam = params.get("origin");
+    if (originParam && !opportunityOrigins.includes(originParam as OpportunityOrigin)) return NextResponse.json({ error: "Unknown origin." }, { status: 400 });
+    const origin = (originParam || undefined) as OpportunityOrigin | undefined;
     const page = Math.max(1, Number(params.get("page") ?? "1") || 1);
     const pageSize = Math.min(100, Math.max(1, Number(params.get("pageSize") ?? "50") || 50));
-    return NextResponse.json(await listOpportunities({ status: status as OpportunityStatus, page, pageSize, search: asString(params.get("search"), 120) }));
+    return NextResponse.json(await listOpportunities({ status: status as OpportunityStatus, page, pageSize, search: asString(params.get("search"), 120), origin, mineOf: params.get("scope") === "mine" ? user.id : null }));
   } catch (error) {
     return handleRouteError(error, "List leads");
   }

@@ -293,6 +293,12 @@ export type OpportunityRun = {
 };
 
 export type OpportunityPage = { opportunities: Opportunity[]; total: number; counts: Record<OpportunityStatus, number> };
+/**
+ * Where a lead came from (request of November 19, 2026): "manual" (added by hand with Add lead, or drafted by the tracker
+ * import) is listed on Leads; "found" (found by the scheduled job searches) on Lead Generation.
+ */
+export const opportunityOrigins = ["manual", "found"] as const;
+export type OpportunityOrigin = (typeof opportunityOrigins)[number];
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Cards from the sales tracker (§10.9, migration 17): a company whose sheet rows name no Sales Manager
