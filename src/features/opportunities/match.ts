@@ -19,7 +19,7 @@ export async function findExistingLeadCard(db: Queryable, company: { clientName:
     `SELECT o.id, o.company_name AS "companyName", o.company_key AS "companyKey", o.website, o.status, o.archived_at IS NOT NULL AS archived,
        NULLIF(CONCAT(u.first_name, ' ', u.last_name), ' ') AS "addedByName"
      FROM opportunities o LEFT JOIN users u ON u.id = o.added_by
-     WHERE o.status IN ('new', 'not_relevant')
+     WHERE o.status IN ('new', 'not_relevant') AND o.deleted_at IS NULL
      ORDER BY o.archived_at IS NOT NULL, o.status = 'not_relevant', o.last_seen_at DESC`,
   );
   type Row = { id: number; companyName: string; companyKey: string; website: string; status: "new" | "not_relevant"; archived: boolean; addedByName: string | null };

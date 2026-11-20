@@ -371,7 +371,7 @@ export default function PipelinePage({ groupBy = "stage", favoritesOnly = false 
                         <div className="pipeline-card-head">
                           <button className="pipeline-card-title" onClick={() => openLead(card.id)}>
                             <strong>{card.clientName}</strong>
-                            <small>{card.clientExecutive || "No contact yet"}{card.city ? ` · ${card.city}` : ""}</small>
+                            <small>{card.clientExecutive || "No contact yet"}{card.city ? ` · ${card.city}` : ""}{byStatus ? ` · ${stageName(card.stageId)}` : ""}</small>
                           </button>
                           {/* PD-22: one menu for moving, following up, To Do, converting to a client and archiving; it shows on hover or focus. */}
                           {!editable && (
@@ -385,15 +385,10 @@ export default function PipelinePage({ groupBy = "stage", favoritesOnly = false 
                             />
                           )}
                         </div>
-                        <div className="pipeline-card-meta">
-                          <span className="pipeline-owner" title={card.ownerName}><span className="mini-avatar">{initials(card.ownerName)}</span>{scope === "team" ? card.ownerName : null}</span>
-                          {tone ? <span className="sr-only">{card.statusLabel}</span> : <StatusPill status={card.statusLabel} code={card.statusCode} />}
-                          {card.dealValue !== null && <span className="deal-value" title="Deal value">{formatDealValue(card.dealValue)}</span>}
-                        </div>
-                        {byStatus
-                          ? <small className="pipeline-action">{stageName(card.stageId)} · {relativeTime(card.lastActivityAt)}</small>
-                          : <small className="pipeline-action">Last activity {relativeTime(card.lastActivityAt)}</small>}
+                        {/* A smaller card (request of November 20, 2026): the owner's initials (name and last activity on hover), no deal value. */}
                         <div className="pipeline-card-foot">
+                          <span className="pipeline-owner" title={`${card.ownerName} · last activity ${relativeTime(card.lastActivityAt)}`} aria-label={`Owner ${card.ownerName}, last activity ${relativeTime(card.lastActivityAt)}`}><span className="mini-avatar">{initials(card.ownerName)}</span></span>
+                          {tone ? <span className="sr-only">{card.statusLabel}</span> : <StatusPill status={card.statusLabel} code={card.statusCode} />}
                           {next
                             ? <span className={`pipeline-next ${overdue ? "overdue" : ""}`} title={next.title ?? undefined}><Clock3 size={12} /> {next.kind === "task" ? "Task" : "Follow-up"} {next.date ? formatShortDate(next.date) : "no date"}</span>
                             : <span className="pipeline-next pipeline-none"><CircleDashed size={12} /> No next step</span>}

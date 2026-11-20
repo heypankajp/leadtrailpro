@@ -91,7 +91,8 @@ const toTask = (row: Row): Task => {
 export type TaskFilter = { assigneeId?: number; leadId?: number; status?: TaskStatus; dueFrom?: Date; dueTo?: Date; limit?: number };
 
 export async function listTasks(filter: TaskFilter, db: Queryable = getDatabasePool()): Promise<Task[]> {
-  const clauses: string[] = ["1 = 1"];
+  // Tasks of a deleted deal are out of every list until it is restored (request of November 20, 2026).
+  const clauses: string[] = ["(l.id IS NULL OR l.record_state <> 'deleted')"];
   const params: unknown[] = [];
   // A person's activities include those they are one of several assignees of.
   if (filter.assigneeId) { clauses.push("(t.assignee_id = ? OR EXISTS (SELECT 1 FROM task_assignees tas WHERE tas.task_id = t.id AND tas.user_id = ?))"); params.push(filter.assigneeId, filter.assigneeId); }

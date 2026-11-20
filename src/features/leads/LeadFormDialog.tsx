@@ -7,6 +7,7 @@ import { entryStageCode, listNumber, reasonListFor } from "@/features/list-value
 import { formatDate } from "@/lib/format";
 import { needsPeerApproval, queueCutoff } from "./queue-rules";
 import { useApp } from "@/features/shell/AppContext";
+import StatusMenu from "./StatusMenu";
 import { Dialog, ErrorText, Field, ConvertToClientDialog } from "@/features/shell/components";
 import SuggestInput from "@/features/shell/SuggestInput";
 import StagePicker from "@/features/pipeline/StagePicker";
@@ -322,14 +323,16 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
           <>
           <Field label="Deal Source" required>{select("leadTypeId", values.lead_type, "")}</Field>
           <Field label="Status" required>
-            <select value={form.statusId} onChange={(event) => {
-              const statusId = event.target.value;
-              // Client asks first (request of November 19, 2026); the deal becomes a client when it is saved.
-              if (values.status.find((item) => String(item.id) === statusId)?.code === "client" && lead?.statusCode !== "client") { setClientStatusId(statusId); return; }
-              setForm((current) => ({ ...current, statusId, statusReasonId: "" }));
-            }}>
-              {values.status.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
-            </select>
+            {/* Coloured like the status pills (request of November 20, 2026). */}
+            <StatusMenu variant="field" current={Number(form.statusId)} code={values.status.find((item) => String(item.id) === form.statusId)?.code ?? ""}
+              label={values.status.find((item) => String(item.id) === form.statusId)?.value ?? "Choose a status"}
+              options={values.status.filter((item) => item.active || String(item.id) === form.statusId).map((item) => ({ id: item.id, value: item.value, code: item.code }))}
+              onPick={(picked) => {
+                const statusId = String(picked);
+                // Client asks first (request of November 19, 2026); the deal becomes a client when it is saved.
+                if (values.status.find((item) => String(item.id) === statusId)?.code === "client" && lead?.statusCode !== "client") { setClientStatusId(statusId); return; }
+                setForm((current) => ({ ...current, statusId, statusReasonId: "" }));
+              }} />
           </Field>
           </>
           )}

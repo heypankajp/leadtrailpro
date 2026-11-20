@@ -477,14 +477,47 @@ export async function mergeOrganizations(keepId: number, otherId: number, actor:
  * Contacts timeline (SPEC §10.17): for a page of people, how many calls, emails, visits and notes each month of the
  * last twelve saw, on their deals and on the person themselves.
  */
-export async function contactsTimeline(query: ContactQuery, todayYmd: string, db: Queryable = getDatabasePool()): Promise<ContactsTimeline> {
+export async function contactsTimeline(query: ContactQuery, todayYmd: string, db: Queryable = getDatabasePool(), pickedMonth: string | null = null): Promise<ContactsTimeline> {
   const months = timelineMonths(todayYmd);
+  // "old": the people with no contact in the twelve months (the rail's last entry).
+  const month = pickedMonth && (months.includes(pickedMonth) || pickedMonth === "old") ? pickedMonth : null;
   const clauses = ["TRUE"];
   const params: unknown[] = [];
   if (query.q) {
     const pattern = likePattern(query.q.toLowerCase());
     clauses.push("(p.name_key LIKE ? OR COALESCE(o.name_key, '') LIKE ?)");
     params.push(pattern, pattern);
+  }
+  // Every contact entry since the first month shown: calls, emails, visits and notes on the person's deals and on the person.
+  const allEntries = `
+    SELECT l.person_id, a.occurred_at FROM lead_activities a JOIN leads l ON l.id = a.lead_id
+    WHERE l.person_id IS NOT NULL AND a.activity_type IN (${contactActivityTypes.map((type) => `'${type}'`).join(", ")}) AND a.occurred_at >= ?::date
+    UNION ALL
+    SELECT c.person_id, c.occurred_at FROM contact_activities c WHERE c.occurred_at >= ?::date`;
+  const firstDay = `${months[0]}-01`;
+  // The rail's numbers: people (matching the search) contacted in each month.
+  const perMonth = await db.query(
+    `SELECT to_char(e.occurred_at, 'YYYY-MM') AS month, COUNT(DISTINCT e.person_id)::int AS people
+     FROM (${allEntries}) e JOIN persons p ON p.id = e.person_id LEFT JOIN organizations o ON o.id = p.organization_id
+     WHERE ${clauses.join(" AND ")} GROUP BY 1`,
+    [firstDay, firstDay, ...params],
+  );
+  const monthPeople: Record<string, number> = Object.fromEntries(months.map((value) => [value, 0]));
+  for (const row of perMonth.rows as { month: string; people: number }[]) if (row.month in monthPeople) monthPeople[row.month] = Number(row.people);
+  const quiet = await db.query(
+    `SELECT COUNT(*)::int AS people FROM persons p LEFT JOIN organizations o ON o.id = p.organization_id
+     WHERE ${clauses.join(" AND ")} AND p.id NOT IN (SELECT e.person_id FROM (${allEntries}) e WHERE e.person_id IS NOT NULL)`,
+    [...params, firstDay, firstDay],
+  );
+  monthPeople.old = Number((quiet.rows as { people: number }[])[0]?.people ?? 0);
+  if (month === "old") {
+    clauses.push(`p.id NOT IN (SELECT e.person_id FROM (${allEntries}) e WHERE e.person_id IS NOT NULL)`);
+    params.push(firstDay, firstDay);
+  } else if (month) {
+    const [year, index] = month.split("-").map(Number);
+    const next = new Date(Date.UTC(year, index, 1)).toISOString().slice(0, 10);
+    clauses.push(`p.id IN (SELECT e.person_id FROM (${allEntries}) e WHERE e.occurred_at < ?::date)`);
+    params.push(`${month}-01`, `${month}-01`, next);
   }
   const from = `FROM persons p LEFT JOIN organizations o ON o.id = p.organization_id WHERE ${clauses.join(" AND ")}`;
   const total = await db.query(`SELECT COUNT(*)::int AS total ${from}`, params);
@@ -513,5 +546,5 @@ export async function contactsTimeline(query: ContactQuery, todayYmd: string, db
       if (latest && (!row.lastContactAt || latest > row.lastContactAt)) row.lastContactAt = latest;
     }
   }
-  return { months, rows, total: Number(total.rows[0]?.total ?? 0), page: query.page, pageSize: query.pageSize };
+  return { months, rows, total: Number(total.rows[0]?.total ?? 0), page: query.page, pageSize: query.pageSize, month, monthPeople };
 }

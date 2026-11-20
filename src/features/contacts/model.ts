@@ -138,7 +138,11 @@ export function parseContactActivity(value: unknown): { input: ContactActivityIn
 export const timelineMonthCount = 12;
 export type TimelineCounts = Partial<Record<ContactActivityType, number>>;
 export type TimelineRow = { id: number; name: string; organizationId: number | null; organization: string | null; months: Record<string, TimelineCounts>; lastContactAt: string | null };
-export type ContactsTimeline = { months: string[]; rows: TimelineRow[]; total: number; page: number; pageSize: number };
+/**
+ * `month`: the month picked on the right-hand rail (request of November 20, 2026), only the people contacted in it; null for
+ * everyone. `monthPeople`: per month, how many people (matching the search) were contacted, for the rail.
+ */
+export type ContactsTimeline = { months: string[]; rows: TimelineRow[]; total: number; page: number; pageSize: number; month: string | null; monthPeople: Record<string, number> };
 
 /** The months shown, oldest first, ending with the month of `todayYmd`: ["2025-12", …, "2026-11"]. */
 export function timelineMonths(todayYmd: string, count = timelineMonthCount): string[] {

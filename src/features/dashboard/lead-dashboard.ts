@@ -41,7 +41,7 @@ const toItem = (row: ItemRow): LeadDashboardItem => ({
 
 export async function buildLeadDashboard(viewer: UserAccount, scope: "mine" | "team", db: Queryable = getDatabasePool()): Promise<LeadDashboard> {
   const teamWide = scope === "team";
-  const mine = teamWide ? "TRUE" : mineClause;
+  const mine = teamWide ? "o.deleted_at IS NULL" : `(${mineClause} AND o.deleted_at IS NULL)`;
   const mineParams: unknown[] = teamWide ? [] : [viewer.id, viewer.id, viewer.id];
   const thisWeek = periodRange("this_week");
   const lastWeek = periodRange("last_week");

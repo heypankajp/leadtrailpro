@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   AlertCircle, Archive as ArchiveIcon, BellRing, Building2, CalendarCheck2, Check, ChevronDown, CircleDollarSign, Compass, Contact, FileSpreadsheet, Handshake, MapPinned, KeyRound, LayoutDashboard, ListChecks, LogOut, Map, Menu,
-  PanelLeftClose, PanelLeftOpen, Plus, Radar, ScanSearch, Search, Settings2, ShieldCheck, SlidersHorizontal, Target, TrendingUp, UsersRound,
+  PanelLeftClose, PanelLeftOpen, Plus, Radar, RotateCcw, ScanSearch, Search, Settings2, ShieldCheck, SlidersHorizontal, Target, TrendingUp, UsersRound,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAsyncData } from "@/lib/useAsyncData";
@@ -24,6 +24,7 @@ import PreferencesDialog from "@/features/notifications/PreferencesDialog";
 import AdminPage, { adminTabs, type AdminTab } from "@/features/admin/AdminPage";
 import LeadDiscoveryPage from "@/features/preview/LeadDiscoveryPage";
 import ArchivePage from "@/features/archive/ArchivePage";
+import RestoreDataPage from "@/features/deletion/RestoreDataPage";
 import PlannerPage from "@/features/preview/PlannerPage";
 import ReportsPage from "@/features/reports/ReportsPage";
 import { fetchTasks } from "@/features/tasks/client";
@@ -67,6 +68,8 @@ const navigation: { title: string; items: NavItem[] }[] = [
       { id: "lead-generation", label: "Lead Generation", icon: ScanSearch, privilege: "view_leads", count: "found", hideForRecruiter: true },
       // Request of November 20, 2026: archived leads and deals, each in a tab, restored from here.
       { id: "archives", label: "Archive", icon: ArchiveIcon, privilege: "view_leads" },
+      // Request of November 20, 2026: deleted deals and leads, restorable for 30 days.
+      { id: "restore-data", label: "Restore Data", icon: RotateCcw, privilege: "view_leads" },
     ],
   },
   {
@@ -93,7 +96,7 @@ const navigation: { title: string; items: NavItem[] }[] = [
 
 const pageTitles: Record<string, string> = {
   home: "Action Center", deals: "Pipeline", leads: "Leads", contacts: "Contacts", activities: "Activities", clients: "Clients", insights: "Insights", todo: "To Do",
-  "sales-trips": "Sales Trips", "lead-generation": "Lead Generation", archives: "Archive", "lead-discovery": "Lead Discovery", trips: "Sales Trip Planner", planner: "Road Visit Planner",
+  "sales-trips": "Sales Trips", "lead-generation": "Lead Generation", archives: "Archive", "restore-data": "Restore Data", "lead-discovery": "Lead Discovery", trips: "Sales Trip Planner", planner: "Road Visit Planner",
   targets: "Targets & Templates", admin: "User Management", values: "List of Values", devices: "Device Authorization", settings: "Settings",
   import: "Tracker Import", api: "API Access",
 };
@@ -266,6 +269,7 @@ export default function AppShell({ user, setUser, signOut, passwordSignIn }: { u
     if (view === "sales-trips") return can("view_leads") ? (base.param && /^\d+$/.test(base.param) ? <SalesTripPage key={base.param} tripId={Number(base.param)} /> : <SalesTripsPage />) : <NoAccess />;
     if (view === "leads") return can("view_leads") ? <OpportunitiesPage key="manual" origin="manual" /> : <NoAccess />;
     if (view === "lead-generation") return can("view_leads") ? <OpportunitiesPage key="found" origin="found" /> : <NoAccess />;
+    if (view === "restore-data") return can("view_leads") ? <RestoreDataPage key={base.param ?? "deals"} kind={base.param === "leads" ? "leads" : "deals"} /> : <NoAccess />;
     if (view === "archives") return can("view_leads") ? <ArchivePage key={base.param ?? "leads"} tab={base.param === "deals" ? "deals" : "leads"} /> : <NoAccess />;
     if (view === "contacts") return can("view_leads") ? <ContactsPage key={base.param === "companies" ? "organizations" : base.param ?? "people"} tab={base.param === "organizations" || base.param === "companies" ? "organizations" : base.param === "timeline" ? "timeline" : "people"} /> : <NoAccess />;
     if (view === "activities") return <TasksPage />;

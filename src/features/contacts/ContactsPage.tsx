@@ -78,7 +78,8 @@ export default function ContactsPage({ tab }: { tab: ContactsTab }) {
       </div>
 
       {tab === "timeline" && <ContactsTimeline />}
-      {tab !== "timeline" && <section className="panel leads-panel">
+      {tab !== "timeline" && <div className="contacts-layout">
+      <section className="panel leads-panel">
         <div className="lead-list-wrap">
           <div className="lead-toolbar">
             <div className="search-field lead-search">
@@ -130,12 +131,6 @@ export default function ContactsPage({ tab }: { tab: ContactsTab }) {
                 </tbody>
               </table>
             </div>
-            {/* A to Z and #: a letter with names opens their page and scrolls to them; the others are greyed out. */}
-            <nav className="az-index" aria-label={`Jump to ${noun} by first letter`}>
-              {indexLetters.map((letter) => (
-                <button key={letter} type="button" disabled={!letterPages[letter]} aria-label={letter === "#" ? "Names starting with another character" : `Names starting with ${letter}`} onClick={() => jump(letter)}>{letter}</button>
-              ))}
-            </nav>
             </div>
           )}
           {data && (
@@ -145,7 +140,17 @@ export default function ContactsPage({ tab }: { tab: ContactsTab }) {
             </div>
           )}
         </div>
-      </section>}
+      </section>
+      {/* Outside the white panel (request of November 20, 2026), so it floats beside the list while it scrolls. */}
+      {/* A to Z and #: a letter with names opens their page and scrolls to them; the others are greyed out. */}
+      {data && (
+          <nav className="az-index" aria-label={`Jump to ${noun} by first letter`}>
+            {indexLetters.map((letter) => (
+              <button key={letter} type="button" disabled={!letterPages[letter]} aria-label={letter === "#" ? "Names starting with another character" : `Names starting with ${letter}`} onClick={() => jump(letter)}>{letter}</button>
+            ))}
+          </nav>
+      )}
+      </div>}
 
       {adding && tab === "people" && <PersonFormDialog onClose={() => setAdding(false)} onSaved={(person) => { setAdding(false); bumpData(); notify(`${person.name} added`); openContact("person", person.id); }} />}
       {adding && tab === "organizations" && <OrganizationFormDialog onClose={() => setAdding(false)} onSaved={(organization) => { setAdding(false); bumpData(); notify(`${organization.name} added`); openContact("organization", organization.id); }} />}

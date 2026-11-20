@@ -2411,3 +2411,95 @@ button.activity-row-icon.is-button:hover, button.activity-row-icon.is-button:foc
 .recent-leads-filter { align-self: flex-start; margin: 4px 0 8px; }
 .panel .scope-toggle.recent-leads-filter button { padding: 5px 12px; font-size: 12px; }
 .lead-source-row.is-empty span, .lead-source-row.is-empty strong { color: #a3a8b8; }
+.tl-summary { display: inline-flex; align-items: center; gap: 8px; color: #4d5268; font-size: 12.5px; }
+/* Contacts: the A to Z and the months are their own card outside the white panel (request of November 20, 2026), sticky
+   beside the list and as tall as the window under the top bar; letters and months spread evenly and scale with it. The negative
+   bottom margin lets the card keep its place at the very end of the list instead of being pushed up under the top bar. */
+.contacts-layout { display: flex; align-items: flex-start; gap: 12px; }
+.contacts-layout > .leads-panel { flex: 1 1 auto; min-width: 0; }
+.contacts-layout > .az-index { position: sticky; top: 150px; width: 40px; height: calc(100vh - 166px); height: calc(100dvh - 166px); max-height: none; min-height: 240px; margin-bottom: -90px; padding: 10px 4px; border: 1px solid #eceef4; border-radius: 12px; background: #fff; box-shadow: 0 6px 18px rgba(38, 43, 66, .06); }
+.contacts-layout > .az-index button { width: 30px; font-size: clamp(9px, 1.6vh, 13px); }
+.contacts-layout > .month-index { width: 76px; padding: 8px 6px; }
+.contacts-layout > .month-index button { display: flex; align-items: center; justify-content: center; width: 100%; flex: 1 1 0; min-height: 0; max-height: 52px; padding: 0 4px; border-radius: 7px; font-size: clamp(10px, 1.6vh, 13px); white-space: nowrap; }
+.contacts-layout > .month-index button.is-active { background: #586be3; color: #fff; }
+@media (max-width: 720px) {
+  .contacts-layout { gap: 6px; }
+  .contacts-layout > .az-index { top: 162px; width: 28px; height: calc(100vh - 174px); height: calc(100dvh - 174px); padding: 6px 2px; }
+  .contacts-layout > .az-index button { width: 22px; }
+  .contacts-layout > .month-index { width: 60px; }
+  .contacts-layout > .month-index button { font-size: clamp(9px, 1.5vh, 11px); }
+}
+@media (max-height: 460px) { .contacts-layout > .month-index button:nth-child(even) { display: flex; } }
+/* Pipeline board (request of November 20, 2026): no scrollbar inside a stage; every column grows with its cards (50 at a time,
+   then Show More) and the page scrolls. The board still scrolls sideways when the stages do not fit the width. */
+.pipeline-board { height: auto; min-height: 380px; overflow-y: visible; align-items: flex-start; }
+.pipeline-column { align-self: stretch; }
+.pipeline-column-body { overflow-y: visible; overscroll-behavior: auto; }
+/* Smaller pipeline cards (request of November 20, 2026): name, contact and city, then one row with the owner's initials, next step and favourite. */
+.pipeline-card { gap: 4px; padding: 8px 10px 7px; }
+.pipeline-card-title { gap: 1px; }
+.pipeline-card-title strong { font-size: 13px; line-height: 1.3; }
+.pipeline-card-title small { font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pipeline-card-foot { display: flex; align-items: center; gap: 6px; min-height: 22px; }
+.pipeline-card-foot .pipeline-owner { display: inline-flex; flex: 0 0 auto; cursor: default; }
+.pipeline-card-foot .pipeline-owner .mini-avatar { width: 20px; height: 20px; font-size: 8.5px; }
+.pipeline-card-foot .pipeline-fav { margin-left: auto; }
+.pipeline-card-foot .pipeline-next, .pipeline-card-foot .pipeline-quiet { font-size: 11px; }
+/* Every stage reaches the bottom of the window even with few deals, and grows past it with more (request of November 20, 2026). */
+.pipeline-board { min-height: calc(100vh - 250px); min-height: calc(100dvh - 250px); }
+/* Delete and restore (request of November 20, 2026). */
+.delete-dialog { display: grid; gap: 12px; color: #3d4359; font-size: 14px; line-height: 1.5; }
+.delete-dialog p { margin: 0; }
+.delete-note { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid #b9cdf6; border-radius: 9px; background: #eef4ff; color: #2d3b63; }
+.delete-note svg { flex: 0 0 auto; margin-top: 2px; color: #3866d6; }
+.delete-note .text-button { padding: 0; font-size: inherit; font-weight: 700; }
+.button-success { color: #fff; background: #23854f; box-shadow: 0 3px 7px #23854f2b; }
+.button-success:hover { background: #1d7344; }
+.button-delete { color: #b8402f; border-color: #f0c9c2; }
+.button-delete:hover { color: #9d3426; background: #fdf1ef; border-color: #e7a99e; }
+.opp-actions-menu button.is-delete { color: #b8402f; }
+.opp-actions-menu button.is-delete:hover { color: #9d3426; background: #fdf1ef; }
+.deleted-badge { display: inline-flex; align-items: center; padding: 4px 9px; border: 1px solid #e7a99e; border-radius: 6px; color: #b8402f; background: #fff; font-size: 11px; font-weight: 800; letter-spacing: .05em; }
+.deleted-banner { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 0 0 12px; padding: 11px 16px; border: 1px solid #f1d58f; border-radius: 9px; background: #fff7df; color: #5c4a14; font-size: 13.5px; text-align: center; }
+.deleted-banner svg { flex: 0 0 auto; color: #d49a16; }
+.deleted-banner a { color: #2459c9; font-weight: 700; text-decoration: none; }
+.deleted-banner a:hover { text-decoration: underline; }
+.restore-table .check-cell { width: 34px; }
+.restore-table tr.is-selected td { background: #f1f4ff; }
+.restore-expiry { color: #b8402f; font-weight: 600; white-space: nowrap; }
+.tab-count { margin-left: 4px; padding: 1px 7px; border-radius: 9px; background: #eef0f5; color: #62697c; font-size: 11px; }
+.restore-table th, .restore-table td { vertical-align: middle; }
+.restore-table td:nth-child(2) { min-width: 200px; }
+.restore-table td:nth-child(2) .opp-name { display: block; padding: 0; border: 0; background: none; color: #2b3048; font-size: 13.5px; font-weight: 700; text-align: left; cursor: pointer; }
+.restore-table td:nth-child(2) button.opp-name:hover { color: #4a59c9; text-decoration: underline; }
+.restore-table td:nth-child(2) small { display: block; margin-top: 2px; }
+.restore-table .opp-actions { display: flex; justify-content: flex-end; gap: 6px; white-space: nowrap; }
+.restore-panel .opp-toolbar { padding: 14px 16px; }
+/* The deal page's Actions menu (request of November 20, 2026). */
+.deal-header .opp-row-actions .button { min-height: 34px; }
+.opp-actions-menu button.is-delete svg, .opp-actions-menu button.is-archive svg { flex: 0 0 auto; }
+/* A tick before the current stage's number (request of November 20, 2026). */
+.stage-step-check { flex: 0 0 auto; color: #fff; margin-right: -2px; }
+/* The deal's status menu (request of November 20, 2026): coloured like the status pills elsewhere. */
+.status-menu { position: relative; }
+.status-menu-button { gap: 7px; padding: 7px 10px 7px 11px; border: 1px solid transparent; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.status-menu-button:hover, .status-menu-button[aria-expanded="true"] { border-color: currentColor; }
+.status-menu-button svg { opacity: .75; }
+.status-menu-list { min-width: 190px; padding: 6px; }
+.status-menu-list .status-menu-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0; border-radius: 7px; background: none; font-size: 13px; font-weight: 600; text-align: left; cursor: pointer; }
+.status-menu-label { flex: 1; }
+.status-menu-dot { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; }
+.status-menu-dot i { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.status-menu-list .status-text-hot, .status-field-button.status-text-hot { color: #bb3d2f; } .status-menu-list .status-text-hot:hover, .status-menu-list .status-text-hot.is-current { color: #bb3d2f; background: #fff1ef; }
+.status-menu-list .status-text-warm, .status-field-button.status-text-warm { color: #906126; } .status-menu-list .status-text-warm:hover, .status-menu-list .status-text-warm.is-current { color: #906126; background: #fff7e8; }
+.status-menu-list .status-text-cold, .status-field-button.status-text-cold { color: #486aaa; } .status-menu-list .status-text-cold:hover, .status-menu-list .status-text-cold.is-current { color: #486aaa; background: #eef4ff; }
+.status-menu-list .status-text-lost, .status-field-button.status-text-lost { color: #646b77; } .status-menu-list .status-text-lost:hover, .status-menu-list .status-text-lost.is-current { color: #646b77; background: #f1f2f5; }
+.status-menu-list .status-text-disqualified, .status-field-button.status-text-disqualified { color: #a3455a; } .status-menu-list .status-text-disqualified:hover, .status-menu-list .status-text-disqualified.is-current { color: #a3455a; background: #fbeef1; }
+.status-menu-list .status-text-client, .status-field-button.status-text-client { color: #30755c; } .status-menu-list .status-text-client:hover, .status-menu-list .status-text-client.is-current { color: #30755c; background: #eaf8f1; }
+.status-menu-list .status-text-none, .status-field-button.status-text-none { color: #4d5268; } .status-menu-list .status-text-none:hover, .status-menu-list .status-text-none.is-current { color: #4d5268; background: #f3f4f8; }
+.status-menu-check { flex: 0 0 auto; }
+.status-menu.is-field { display: block; width: 100%; }
+.status-field-button { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 6px 12px 6px 8px; border: 1px solid #dfe2ea; border-radius: 8px; background: #fff; font: inherit; font-size: 14px; font-weight: 600; text-align: left; cursor: pointer; }
+.status-field-button:hover, .status-field-button[aria-expanded="true"] { border-color: #8f9be8; }
+.status-field-button svg { color: #8a90a6; }
+.status-menu.is-field .status-menu-list { left: 0; right: auto; width: 100%; }

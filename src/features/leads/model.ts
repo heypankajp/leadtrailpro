@@ -2,7 +2,8 @@ import { parseDealValue } from "./deal-value";
 import { isValidYmd } from "@/lib/dates";
 import { isQuickFilterKey, type QuickFilterKey } from "./quick-filters";
 
-export const recordStates = ["active", "queued", "archived"] as const;
+/** "deleted" (request of November 20, 2026): kept 30 days for Restore Data, then removed for good. */
+export const recordStates = ["active", "queued", "archived", "deleted"] as const;
 export type LeadRecordState = (typeof recordStates)[number];
 
 export function isRecordState(value: unknown): value is LeadRecordState {
@@ -75,6 +76,8 @@ export type LeadSummary = LeadInput & {
   companySize: string | null;
   city: string | null;
   recordState: LeadRecordState;
+  /** When the deal was deleted (request of November 20, 2026); it is removed for good 30 days later. */
+  deletedAt: string | null;
   /** The notes typed when the deal was archived (or restored, or reviewed). */
   stateReason: string | null;
   /** Review of November 18, 2026: the Archival reason picked when the deal was archived; null while it is not archived. */

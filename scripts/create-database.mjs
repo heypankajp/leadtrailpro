@@ -1404,6 +1404,31 @@ const migrations = [
       await client.query("ALTER TABLE stage_reminder_log ADD PRIMARY KEY (lead_id, stage_id, entered_at, reminder_no)");
     },
   },
+  {
+    version: 49,
+    name: "Delete and restore (request of November 20, 2026): a deleted deal (record_state deleted) or lead is kept 30 days for Restore Data, then removed for good",
+    async run(client) {
+      // The record state check is unnamed in migration 1: drop whichever check names record_state, then allow deleted.
+      await client.query(`
+        DO $$ DECLARE c RECORD; BEGIN
+          FOR c IN SELECT conname FROM pg_constraint WHERE conrelid = 'leads'::regclass AND contype = 'c' AND pg_get_constraintdef(oid) LIKE '%record_state%' LOOP
+            EXECUTE format('ALTER TABLE leads DROP CONSTRAINT %I', c.conname);
+          END LOOP;
+        END $$`);
+      await client.query("ALTER TABLE leads ADD CONSTRAINT leads_record_state_check CHECK (record_state IN ('active', 'queued', 'archived', 'deleted'))");
+      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP(0) NULL");
+      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS deleted_by INTEGER NULL REFERENCES users(id) ON DELETE SET NULL");
+      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS deleted_from_state VARCHAR(10) NULL");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_deleted ON leads (deleted_at) WHERE deleted_at IS NOT NULL");
+      // A deleted lead is also out of every list through archived_at; deleted_was_archived restores it to the Archive or the inbox.
+      await client.query("ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP(0) NULL");
+      await client.query("ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS deleted_by INTEGER NULL REFERENCES users(id) ON DELETE SET NULL");
+      await client.query("ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS deleted_was_archived BOOLEAN NOT NULL DEFAULT FALSE");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_opportunities_deleted ON opportunities (deleted_at) WHERE deleted_at IS NOT NULL");
+      // How many days a deleted deal or lead can be restored, in List of Values (30 to start).
+      await client.query("INSERT INTO list_values (list_key, code, value, sort_order) VALUES ('restore_days', 'days', '30', 1) ON CONFLICT DO NOTHING");
+    },
+  },
 ];
 
 if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port > 65535 || !/^[a-z_][a-z0-9_]*$/.test(databaseName)) {

@@ -1,4 +1,4 @@
-export const listKeys = ["lead_type", "status", "bd_action", "stage", "client_response", "lead_category", "company_size", "city", "lost_reason", "disqualified_reason", "business_type", "opportunity_reason", "todo_list", "archival_reason", "recent_trips_limit", "trip_max_radius_km", "trip_max_results", "activity_outcome", "lead_archive_days", "queue_working_days"] as const;
+export const listKeys = ["lead_type", "status", "bd_action", "stage", "client_response", "lead_category", "company_size", "city", "lost_reason", "disqualified_reason", "business_type", "opportunity_reason", "todo_list", "archival_reason", "recent_trips_limit", "trip_max_radius_km", "trip_max_results", "activity_outcome", "lead_archive_days", "queue_working_days", "restore_days"] as const;
 export type ListKey = (typeof listKeys)[number];
 
 // Title Case, as the left list of the List of Values page shows them (review of November 18, 2026).
@@ -23,13 +23,14 @@ export const listKeyLabels: Record<ListKey, string> = {
   activity_outcome: "Activity Outcome",
   lead_archive_days: "Archive Not Relevant Leads After (Days)",
   queue_working_days: "Queue Deals Older Than (Working Days)",
+  restore_days: "Restore Deleted Deals and Leads Within (Days)",
 };
 
 /**
  * Lists whose values can be renamed but not added to or deactivated: the Recent Planned Trips number (one value). The
  * Disqualified reasons were fixed by LEAD-06 until the review of November 18, 2026, which opened them to new values.
  */
-export const fixedListKeys: readonly ListKey[] = ["recent_trips_limit", "trip_max_radius_km", "trip_max_results", "lead_archive_days", "queue_working_days"];
+export const fixedListKeys: readonly ListKey[] = ["recent_trips_limit", "trip_max_radius_km", "trip_max_results", "lead_archive_days", "queue_working_days", "restore_days"];
 
 /**
  * Lists that hold one whole number, with the range it must stay in and the number used when the value is not usable.
@@ -44,6 +45,8 @@ export const numericListBounds: Partial<Record<ListKey, { min: number; max: numb
   lead_archive_days: { min: 1, max: 3650, fallback: 90 },
   // How many working days back a new deal's first contact may be before a colleague must approve it (request of November 20, 2026).
   queue_working_days: { min: 0, max: 60, fallback: 1 },
+  // How long a deleted deal or lead stays in Restore Data before it is removed for good (request of November 20, 2026).
+  restore_days: { min: 1, max: 365, fallback: 30 },
 };
 
 /** The number a single-number list holds, inside its range, or its fallback. */

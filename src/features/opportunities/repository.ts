@@ -204,7 +204,8 @@ const mineClause = (origin?: OpportunityOrigin) => (origin === "found"
 
 export async function listOpportunities(filter: { status: OpportunityStatus; page: number; pageSize: number; search?: string; origin?: OpportunityOrigin; mineOf?: number | null; archived?: boolean; todoListId?: number | null; todo?: boolean }, db: Queryable = getDatabasePool()): Promise<OpportunityPage> {
   // The Archive lists archived leads whatever their status; every other list leaves them out (request of November 20, 2026).
-  const scope = [originClause(filter.origin), filter.archived ? "o.archived_at IS NOT NULL" : "o.archived_at IS NULL"];
+  // A deleted lead (request of November 20, 2026) also has archived_at, so it is out of every list; the Archive leaves it out too.
+  const scope = [originClause(filter.origin), filter.archived ? "o.archived_at IS NOT NULL AND o.deleted_at IS NULL" : "o.archived_at IS NULL"];
   const scopeParams: unknown[] = [];
   if (filter.mineOf) { scope.push(mineClause(filter.origin)); scopeParams.push(filter.mineOf); }
   // The To Do page's leads (request of November 20, 2026): on one list, or on any, in the inbox or not relevant.
@@ -275,11 +276,11 @@ async function saveLeadContacts(db: Queryable, opportunityId: number, personIds:
 async function refuseSameWebsite(connection: Queryable, website: string, exceptOpportunityId: number | null): Promise<void> {
   const key = websiteKey(website);
   if (!key) return;
-  const { rows: cards } = await connection.query("SELECT id, company_name AS \"companyName\", website, status FROM opportunities WHERE website <> '' AND id <> ?", [exceptOpportunityId ?? 0]);
+  const { rows: cards } = await connection.query("SELECT id, company_name AS \"companyName\", website, status FROM opportunities WHERE website <> '' AND id <> ? AND deleted_at IS NULL", [exceptOpportunityId ?? 0]);
   const card = (cards as { id: number; companyName: string; website: string; status: OpportunityStatus }[]).find((row) => sameWebsite(row.website, website));
   if (card) throw new HttpError(409, `${card.companyName} is already a lead with the website ${key} (${card.status === "new" ? "in the inbox" : card.status === "not_relevant" ? "marked not relevant" : "converted to a deal"}).`);
   const { rows: deals } = await connection.query(
-    "SELECT l.client_name AS \"clientName\", l.company_url AS \"companyUrl\", st.code AS \"statusCode\", st.value AS status, l.record_state AS \"recordState\", CONCAT(u.first_name, ' ', u.last_name) AS \"ownerName\" FROM leads l JOIN list_values st ON st.id = l.status_id JOIN users u ON u.id = l.owner_id WHERE l.company_url <> ''",
+    "SELECT l.client_name AS \"clientName\", l.company_url AS \"companyUrl\", st.code AS \"statusCode\", st.value AS status, l.record_state AS \"recordState\", CONCAT(u.first_name, ' ', u.last_name) AS \"ownerName\" FROM leads l JOIN list_values st ON st.id = l.status_id JOIN users u ON u.id = l.owner_id WHERE l.company_url <> '' AND l.record_state <> 'deleted'",
   );
   const deal = (deals as { clientName: string; companyUrl: string; statusCode: string; status: string; recordState: string; ownerName: string }[]).find((row) => sameWebsite(row.companyUrl, website));
   if (deal) throw new HttpError(409, `${deal.clientName} already exists as ${dealWhere(deal)} with the website ${key}.`);
@@ -310,6 +311,8 @@ export async function createManualOpportunity(input: LeadEntryInput, actor: User
     const key = normalizeCompanyName(input.companyName);
     // A company picked from Contacts that already has a live deal is that deal's: the check below names it.
     if (!key) throw new HttpError(400, "Enter the company's name.");
+    // A deleted lead of the same company gives way to the new one (request of November 20, 2026): it is removed for good.
+    await connection.query("DELETE FROM opportunities WHERE company_key = ? AND deleted_at IS NOT NULL", [key]);
     const { rows: existing } = await connection.query("SELECT id, company_name AS \"companyName\", status FROM opportunities WHERE company_key = ?", [key]);
     const same = (existing as { id: number; companyName: string; status: OpportunityStatus }[])[0];
     if (same) throw new HttpError(409, `${same.companyName} is already a lead (${same.status === "new" ? "in the inbox" : same.status === "not_relevant" ? "marked not relevant" : "converted to a deal"}).`);

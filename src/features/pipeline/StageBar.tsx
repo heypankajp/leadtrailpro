@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Check } from "lucide-react";
 import { errorMessage } from "@/lib/api";
 import { useApp } from "@/features/shell/AppContext";
 import { Dialog, ErrorText } from "@/features/shell/components";
@@ -59,6 +60,8 @@ export default function StageBar({ lead, canMove, onMoved }: Props) {
                 aria-label={index === currentIndex ? `${stage.value} (current stage)` : `Move to ${stage.value}`} title={clickable ? `Move to ${stage.value}` : stage.value}
                 onClick={() => setTarget({ id: stage.id, value: stage.value })}
               >
+                {/* The current stage gets a tick before its number (request of November 20, 2026). */}
+                {index === currentIndex && <Check className="stage-step-check" size={15} strokeWidth={3} aria-hidden="true" />}
                 <span className="stage-step-index">{index + 1}</span>
                 <span className="stage-step-label">{stage.value}{stage.active ? "" : " (Inactive)"}</span>
               </button>

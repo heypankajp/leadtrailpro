@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { Archive, ArrowRightCircle, Briefcase, ListChecks, MoreHorizontal, Gauge, Building2, ChevronDown, ChevronRight, ExternalLink, Pencil, Play, Plus, RotateCcw, Search, Trash2, UserRound, X } from "lucide-react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Archive, ArrowRightCircle, Briefcase, ListChecks, Gauge, Building2, ChevronDown, ChevronRight, ExternalLink, Pencil, Play, Plus, RotateCcw, Search, Trash2, UserRound, X } from "lucide-react";
 import { ApiError, errorMessage } from "@/lib/api";
 import { formatDate, formatDateTime, relativeTime } from "@/lib/format";
 import { useAsyncData } from "@/lib/useAsyncData";
@@ -14,8 +14,11 @@ import { offBoardStatusCodes, stageChoices } from "@/features/pipeline/model";
 import { bdCommentLines, type LeadInput } from "@/features/leads/model";
 import { leadGenToolSourceId, type ListValuesByKey } from "@/features/list-values/model";
 import { useApp } from "@/features/shell/AppContext";
+import ActionsMenu from "@/features/shell/ActionsMenu";
 import SuggestInput from "@/features/shell/SuggestInput";
 import { Dialog, EmptyState, ErrorText, Field, Loading, Pagination, Tabs, type TabOption } from "@/features/shell/components";
+import { deleteLead } from "@/features/deletion/client";
+import { DeleteConfirmDialog } from "@/features/deletion/DeleteDialogs";
 import { archiveOpportunity, createOpportunity, createSearch, lookupLeadCompanyDetails, setOpportunityTodo, deleteSearch, editOpportunity, fetchOpportunities, fetchRuns, fetchSearches, markOpportunityNotRelevant, reopenOpportunity, restoreOpportunity, runSearchesNow, updateSearch } from "./client";
 import { jobTypeOptions, maxMaxListings, maxPostedWithinDays, maxSearchTitles, minMaxListings, minPostedWithinDays, type Opportunity, type OpportunitySearch, type OpportunitySearchInput, type OpportunityStatus, type LeadEntryInput, type OpportunityOrigin } from "./model";
 
@@ -73,6 +76,7 @@ export default function OpportunitiesPage({ origin }: { origin: OpportunityOrigi
   const { data, error, reload } = useAsyncData(fetcher, dataVersion);
   // Leads: Move to Pipeline asks the stage and the status, like Move back to pipeline (request of November 19, 2026).
   const [moving, setMoving] = useState<Opportunity | null>(null);
+  const [deleting, setDeleting] = useState<Opportunity | null>(null);
   // To Do lists for leads (request of November 20, 2026).
   // To Be Visited (request of November 20, 2026): one click puts the lead on the "To be visited" list.
   const toBeVisitedId = reference.listValues.todo_list.find((list) => list.code === "to_be_visited" && list.active)?.id ?? null;
@@ -214,7 +218,7 @@ export default function OpportunitiesPage({ origin }: { origin: OpportunityOrigi
                       </td>
                       <td>
                         {/* Request of November 20, 2026: one Actions menu per lead. Convert to Deal asks only the stage, the status and the owner. */}
-                        <RowActions
+                        <ActionsMenu
                           name={item.companyName}
                           items={[
                             ...(item.status === "new" && can("create_leads") && !item.history ? [{ tone: "convert" as const, label: "Convert to Deal", icon: <ArrowRightCircle size={14} />, run: () => setMoving(item) }] : []),
@@ -225,6 +229,8 @@ export default function OpportunitiesPage({ origin }: { origin: OpportunityOrigi
                             ...((item.status === "new" || item.status === "not_relevant") && can("create_leads") && toBeVisitedId && item.todoListId !== toBeVisitedId ? [{ tone: "restore" as const, label: "To Be Visited", icon: <ListChecks size={14} />, run: () => void markToBeVisited(item) }] : []),
                             ...((item.status === "new" || item.status === "not_relevant") && can("create_leads") && item.todoList ? [{ tone: "edit" as const, label: item.todoListId === toBeVisitedId ? "Remove From To Be Visited" : "Remove From To Do", icon: <X size={14} />, run: () => void takeOffTodo(item) }] : []),
                             ...((item.status === "new" || item.status === "not_relevant") && can("create_leads") ? [{ tone: "archive" as const, label: "Archive", icon: <Archive size={14} />, run: () => void archive(item) }] : []),
+                            // Request of November 20, 2026: restorable from Restore Data for 30 days.
+                            ...((item.status === "new" || item.status === "not_relevant") && can("create_leads") ? [{ tone: "delete" as const, label: "Delete", icon: <Trash2 size={14} />, run: () => setDeleting(item) }] : []),
                             ...((item.status === "converted" || item.status === "attached") && item.lead ? [{ tone: "edit" as const, label: "Open Deal", icon: <ExternalLink size={14} />, run: () => openLead(item.lead!.id) }] : []),
                           ]}
                         />
@@ -243,6 +249,10 @@ export default function OpportunitiesPage({ origin }: { origin: OpportunityOrigi
           <JobsUsageCard inDialog refreshKey={running} empty={<p className="dialog-description">No live job source is set up: the searches use the sample listings, so there is no budget to show.</p>} />
           <div className="modal-actions"><button type="button" className="button button-outline" onClick={() => setBudgetOpen(false)}>Close</button></div>
         </Dialog>
+      )}
+      {deleting && (
+        <DeleteConfirmDialog kind="lead" name={deleting.companyName} onClose={() => setDeleting(null)}
+          onConfirm={async () => { await deleteLead(deleting.id); setDeleting(null); notify(`${deleting.companyName} deleted. Restore it from Restore Data within 30 days.`); bumpData(); reload(); }} />
       )}
       {moving && (
         <MoveToPipelineDialog
@@ -512,38 +522,6 @@ export function LeadTodoDialog({ lead, onClose, onDone }: { lead: { id: number; 
         </div>
       </form>
     </Dialog>
-  );
-}
-
-/** The Actions menu of a lead's row (request of November 20, 2026): every action on the lead in one drop-down. */
-/** Each action has its colour (request of November 20, 2026): convert green, edit blue, not relevant red, back to the inbox teal, archive amber. */
-type ActionTone = "convert" | "edit" | "dismiss" | "restore" | "archive";
-
-function RowActions({ name, items }: { name: string; items: { tone: ActionTone; label: string; icon: ReactNode; run: () => void }[] }) {
-  const [open, setOpen] = useState(false);
-  const anchor = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const close = (event: MouseEvent) => { if (!anchor.current?.contains(event.target as Node)) setOpen(false); };
-    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
-    document.addEventListener("mousedown", close);
-    document.addEventListener("keydown", escape);
-    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", escape); };
-  }, [open]);
-  if (!items.length) return null;
-  return (
-    <div className="menu-anchor opp-row-actions" ref={anchor}>
-      <button type="button" className="button button-soft button-small" aria-haspopup="menu" aria-expanded={open} aria-label={`Actions for ${name}`} onClick={() => setOpen((value) => !value)}>
-        <MoreHorizontal size={14} /> Actions <ChevronDown size={12} />
-      </button>
-      {open && (
-        <div className="menu-dropdown opp-actions-menu" role="menu">
-          {items.map((item) => (
-            <button key={item.label} type="button" role="menuitem" className={`is-${item.tone}`} onClick={() => { setOpen(false); item.run(); }}>{item.icon} {item.label}</button>
-          ))}
-        </div>
-      )}
-    </div>
   );
 }
 

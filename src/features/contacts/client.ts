@@ -20,4 +20,4 @@ export const mergeOrganization = (id: number, otherId: number) => api<{ organiza
 export const mergePerson = (id: number, otherId: number) => api<{ person: Person }>(`/api/contacts/people/${id}/merge`, { method: "POST", json: { otherId } });
 /** The company details read from its website (Add company → Website → Fetch). */
 export const lookupWebsite = (url: string) => api<{ details: WebsiteDetails }>("/api/contacts/organizations/lookup", { method: "POST", json: { url } });
-export const fetchContactsTimeline = (q: string, page: number) => api<ContactsTimeline>(`/api/contacts/timeline?${search(q, page)}`);
+export const fetchContactsTimeline = (q: string, page: number, month: string | null = null) => api<ContactsTimeline>(`/api/contacts/timeline?${search(q, page)}${month ? `&month=${month}` : ""}`);

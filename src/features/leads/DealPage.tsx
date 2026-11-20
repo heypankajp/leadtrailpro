@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useCallback, useEffect, type FormEvent, type ReactNode } from "react";
 import {
-  Archive, ArrowLeft, Building2, CalendarCheck2, Check, ChevronDown, CircleDollarSign, Download, ExternalLink, FileSignature, FileText, History, Info, Mail, MapPin, MessageSquare, Paperclip, Pencil, Phone, Plus, RotateCcw, Trash2, Undo2, UserRound, Users,
+  AlertTriangle, Archive, ArrowLeft, Building2, CalendarCheck2, Check, ChevronDown, CircleDollarSign, Download, ExternalLink, FileText, History, Info, Mail, MapPin, MessageSquare, Paperclip, Pencil, Phone, Plus, RotateCcw, Trash2, Undo2, UserRound, Users,
 } from "lucide-react";
 import { canPeerReview } from "./queue-rules";
 import mammoth from "mammoth";
@@ -28,6 +28,11 @@ import type { Task } from "@/features/tasks/model";
 import UserDirectoryDialog from "@/features/users/UserDirectoryDialog";
 import type { UserSummary } from "@/features/users/model";
 import ArchiveDialog from "./ArchiveDialog";
+import StatusMenu from "./StatusMenu";
+import ActionsMenu from "@/features/shell/ActionsMenu";
+import { dealExportUrl, deleteDeal, restoreDeleted } from "@/features/deletion/client";
+import { DeleteConfirmDialog, RestoreConfirmDialog } from "@/features/deletion/DeleteDialogs";
+import { restoreDaysOf } from "@/features/deletion/model";
 import { attachmentUrl, fetchLead, logActivity, removeAttachment, reviewLead, setLeadState, transferLead, updateLead, uploadAttachment, type LeadDetail } from "./client";
 import { activityIcons } from "@/features/tasks/ScheduleActivity";
 import LeadFormDialog from "./LeadFormDialog";
@@ -69,6 +74,7 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
     | { kind: "status-reason"; statusId: number; statusName: string; listKey: ListKey }
     | { kind: "convert-client"; statusId: number }
     | { kind: "move-back" }
+    | { kind: "delete" } | { kind: "undelete" }
     | null
   >(null);
 
@@ -84,6 +90,9 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
 
   const { lead, permissions } = detail;
   const canEdit = permissions.edit;
+  const restoreDays = restoreDaysOf(reference.listValues.restore_days);
+  // An archived or deleted deal is read-only (deleted: request of November 20, 2026).
+  const readOnly = lead.recordState === "archived" || lead.recordState === "deleted";
   const canTransfer = can("reassign_leads") || (can("transfer_leads") && lead.ownerId === user.id);
   // PIPE-09: ask for the next step after an activity, a BD action, or a stage move, unless Settings → Pipeline creates it without asking.
   const offerNextStep = (reason: string, saved: LeadSummary = lead) => {
@@ -123,23 +132,27 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
     }
   };
 
+  // Request of November 20, 2026: Upload Contract left the top (the Contracts tab uploads); Edit, Transfer, Archive or Restore and
+  // Delete are one Actions menu, each in its colour. Approve and Reject of a queued deal, and Restore of a deleted one, stay buttons.
+  const menuItems = [
+    ...(canEdit && !readOnly ? [{ tone: "edit" as const, label: "Edit", icon: <Pencil size={14} />, run: () => setEditing(true) }] : []),
+    ...(canTransfer && lead.recordState === "active" ? [{ tone: "restore" as const, label: "Transfer", icon: <UserRound size={14} />, run: () => setDialog({ kind: "transfer-pick" }) }] : []),
+    ...(can("archive_leads") && lead.recordState === "active" ? [{ tone: "archive" as const, label: "Archive", icon: <Archive size={14} />, run: () => setDialog({ kind: "archive" }) }] : []),
+    ...(can("archive_leads") && lead.recordState === "archived" ? [{ tone: "convert" as const, label: "Restore", icon: <RotateCcw size={14} />, run: () => setDialog({ kind: "restore" }) }] : []),
+    ...(can("archive_leads") && canEdit && lead.recordState !== "deleted" ? [{ tone: "delete" as const, label: "Delete", icon: <Trash2 size={14} />, run: () => setDialog({ kind: "delete" }) }] : []),
+  ];
   const headerActions = (
     <>
-      {can("upload_files") && lead.recordState !== "archived" && (
-        <button className="button button-outline button-small" onClick={() => { setTab("contracts"); window.setTimeout(() => document.getElementById("deal-history")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); }}>
-          <FileSignature size={14} /> Upload Contract
-        </button>
-      )}
-      {canEdit && lead.recordState !== "archived" && <button className="button button-outline button-small" onClick={() => setEditing(true)}><Pencil size={14} /> Edit</button>}
-      {canTransfer && lead.recordState === "active" && <button className="button button-outline button-small" onClick={() => setDialog({ kind: "transfer-pick" })}><UserRound size={14} /> Transfer</button>}
       {lead.recordState === "queued" && canPeerReview({ id: user.id, mayReview: can("review_queued") || can("edit_leads") }, lead) && (
         <>
           <button className="button button-primary button-small" onClick={() => setDialog({ kind: "review", approve: true })}><Check size={14} /> Approve</button>
           <button className="button button-outline button-small" onClick={() => setDialog({ kind: "review", approve: false })}>Reject</button>
         </>
       )}
-      {can("archive_leads") && lead.recordState === "active" && <button className="button button-outline button-small" onClick={() => setDialog({ kind: "archive" })}><Archive size={14} /> Archive</button>}
-      {can("archive_leads") && lead.recordState === "archived" && <button className="button button-outline button-small" onClick={() => setDialog({ kind: "restore" })}><RotateCcw size={14} /> Restore</button>}
+      {/* Delete and restore (request of November 20, 2026): kept in Restore Data for the days set in List of Values. */}
+      {lead.recordState === "deleted" && <span className="deleted-badge">DELETED</span>}
+      {can("archive_leads") && canEdit && lead.recordState === "deleted" && <button className="button button-outline button-small" onClick={() => setDialog({ kind: "undelete" })}><RotateCcw size={14} /> Restore</button>}
+      <ActionsMenu name={lead.clientName} items={menuItems} />
     </>
   );
 
@@ -174,11 +187,17 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
   return (
     <>
       <div className="deal-page">
+        {lead.recordState === "deleted" && lead.deletedAt && (
+          <div className="deleted-banner" role="status">
+            <AlertTriangle size={16} />
+            <span>This deal will be deleted permanently after <strong>{formatDate(new Date(new Date(lead.deletedAt).getTime() + restoreDays * 86_400_000).toISOString().slice(0, 10))}</strong>. If needed, <a href={dealExportUrl(lead.id)}>export the data</a> before that.</span>
+          </div>
+        )}
         <header className="deal-header">
           {back}
           <Avatar name={lead.clientName} seed={lead.id} />
           <div className="deal-heading">
-            <span className="eyebrow">{lead.recordState === "queued" ? "QUEUED FOR APPROVAL" : lead.recordState === "archived" ? (isClient ? "ARCHIVED CLIENT" : "ARCHIVED DEAL") : isClient ? "CLIENT" : "DEAL"}</span>
+            <span className="eyebrow">{lead.recordState === "queued" ? "QUEUED FOR APPROVAL" : lead.recordState === "deleted" ? "DELETED DEAL" : lead.recordState === "archived" ? (isClient ? "ARCHIVED CLIENT" : "ARCHIVED DEAL") : isClient ? "CLIENT" : "DEAL"}</span>
             <h1 className="lead-title">
               {/* Request of November 20, 2026: with a company website, the deal name opens it in a new tab. */}
               {lead.companyUrl
@@ -195,16 +214,13 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
                 <StatusPill status={lead.statusLabel} code={lead.statusCode} />
                 {canEdit && lead.recordState === "active" && <button type="button" className="button button-outline button-small" onClick={() => setDialog({ kind: "move-back" })}><Undo2 size={14} /> Move Back to Pipeline</button>}
               </>
-            ) : canEdit && lead.recordState !== "archived" ? (
-              <label className={`status-pill status-${lead.statusCode} status-select-pill`}>
-                <i />
-                <select aria-label="Update deal status" value={lead.statusId} onChange={(event) => void changeStatus(Number(event.target.value))}>
-                  {/* Client is not offered here (request of November 19, 2026): a deal becomes a client through Convert to Client. */}
-                  {reference.listValues.status.filter((status) => status.code !== "client" || status.id === lead.statusId).map((status) => <option key={status.id} value={status.id}>{status.value}</option>)}
-                </select>
-              </label>
+            ) : canEdit && !readOnly ? (
+              // Client is not offered here (request of November 19, 2026): a deal becomes a client through Convert to Client.
+              <StatusMenu current={lead.statusId} code={lead.statusCode} label={lead.statusLabel}
+                options={reference.listValues.status.filter((status) => status.active && (status.code !== "client" || status.id === lead.statusId)).map((status) => ({ id: status.id, value: status.value, code: status.code }))}
+                onPick={(statusId) => void changeStatus(statusId)} />
             ) : <StatusPill status={lead.statusLabel} code={lead.statusCode} />}
-            {reasonKey && canEdit && lead.recordState !== "archived" && (
+            {reasonKey && canEdit && !readOnly && (
               <select className="inline-select" aria-label="Status reason" value={lead.statusReasonId ?? ""} onChange={(event) => void quickUpdate({ statusReasonId: Number(event.target.value) }, "Status reason updated")}>
                 {reference.listValues[reasonKey].map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
               </select>
@@ -213,7 +229,7 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
           <div className="detail-owner"><small>OWNER</small><strong>{lead.ownerName}</strong></div>
           <div className="detail-header-actions">{headerActions}</div>
         </header>
-        {lead.recordState !== "archived" && !isClient && (
+        {!readOnly && !isClient && (
           <StageBar lead={lead} canMove={canEdit} onMoved={(message, task, moved) => { void refresh(message); if (!task) offerNextStep("You moved the deal to a new stage.", moved); }} />
         )}
         {(lead.archiveReason || lead.stateReason) && <div className="form-note state-note"><History size={14} /> {[lead.archiveReason, lead.stateReason].filter(Boolean).join(": ")}</div>}
@@ -237,7 +253,7 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
             <section className="deal-block" aria-label="Focus">
               <div className="deal-block-head">
                 <h2>Focus</h2>
-                {can("manage_tasks") && lead.recordState !== "archived" && <button className="button button-outline button-small" onClick={() => setDialog({ kind: "task" })}><Plus size={14} /> Schedule an Activity</button>}
+                {can("manage_tasks") && !readOnly && <button className="button button-outline button-small" onClick={() => setDialog({ kind: "task" })}><Plus size={14} /> Schedule an Activity</button>}
               </div>
               {lead.followUpDate && lead.recordState === "active" && (
                 <p className={`focus-follow-up ${overdue ? "overdue" : lead.followUpDate === reference.today ? "due-today" : ""}`}><CalendarCheck2 size={14} /> Next follow-up {formatDate(lead.followUpDate)}{overdue ? " · overdue" : lead.followUpDate === reference.today ? " · today" : ""}</p>
@@ -269,7 +285,7 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
                 onChange={setTab}
               />
               {tab === "timeline" && <TimelineList activities={detail.activities} />}
-              {tab === "collaboration" && <CollaborationTab leadId={lead.id} attachments={detail.attachments} canPost={can("collaborate") && lead.recordState !== "archived"} onChanged={() => { reload(); bumpData(); }} />}
+              {tab === "collaboration" && <CollaborationTab leadId={lead.id} attachments={detail.attachments} canPost={can("collaborate") && !readOnly} onChanged={() => { reload(); bumpData(); }} />}
               {(tab === "files" || tab === "profiles" || tab === "contracts") && (
                 <FilesTab key={tab} category={tab === "files" ? "document" : tab === "contracts" ? "contract" : "profile"} files={tab === "files" ? documents : tab === "contracts" ? contracts : profiles} leadId={lead.id} onChanged={(message) => refresh(message)} />
               )}
@@ -310,6 +326,14 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
       )}
       {dialog?.kind === "review" && (
         <PromptDialog title={dialog.approve ? `Approve ${lead.clientName}` : `Reject ${lead.clientName}`} eyebrow="QUEUED DEAL" label={dialog.approve ? "Comment (optional)" : "Reason"} required={!dialog.approve} danger={!dialog.approve} confirmLabel={dialog.approve ? "Approve" : "Reject"} onClose={() => setDialog(null)} onConfirm={async (comment) => { await reviewLead(lead.id, dialog.approve, comment); setDialog(null); await refresh(dialog.approve ? "Deal approved" : "Deal rejected"); }} />
+      )}
+      {dialog?.kind === "delete" && (
+        <DeleteConfirmDialog kind="deal" name={lead.clientName} onClose={() => setDialog(null)}
+          onConfirm={async () => { await deleteDeal(lead.id); setDialog(null); await refresh(`${lead.clientName} deleted. Restore it within ${restoreDays} days.`); }} />
+      )}
+      {dialog?.kind === "undelete" && (
+        <RestoreConfirmDialog kind="deal" names={[lead.clientName]} onClose={() => setDialog(null)}
+          onConfirm={async () => { await restoreDeleted("deals", [lead.id]); setDialog(null); await refresh(`${lead.clientName} restored`); }} />
       )}
       {dialog?.kind === "move-back" && (
         <MoveBackDialog
@@ -514,7 +538,7 @@ function Composer({ detail, canEdit, onLogged, onSchedule }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const canLog = can("log_activities") && lead.recordState === "active";
-  const canNote = can("add_notes") && lead.recordState !== "archived";
+  const canNote = can("add_notes") && lead.recordState !== "archived" && lead.recordState !== "deleted";
   const canSuggest = can("manage_tasks") && lead.recordState === "active";
   const canFollowUp = canEdit && can("manage_tasks") && lead.recordState === "active";
   const type = mode && mode !== "emails" ? mode : null;

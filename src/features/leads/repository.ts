@@ -23,7 +23,8 @@ import { sameWebsite, websiteKey } from "@/lib/website-key";
 
 // ---- Row mapping ----
 
-type LeadRow = Omit<LeadSummary, "clientEmails" | "lastActivityAt" | "lastClientEmailAt" | "lastTeamEmailAt" | "createdAt" | "updatedAt" | "statusLabel"> & {
+type LeadRow = Omit<LeadSummary, "clientEmails" | "lastActivityAt" | "lastClientEmailAt" | "lastTeamEmailAt" | "createdAt" | "updatedAt" | "statusLabel" | "deletedAt"> & {
+  deletedAt: string | null;
   clientEmails: string | string[];
   lastActivityAt: string;
   lastClientEmailAt: string | null;
@@ -52,7 +53,7 @@ export const leadSelect = `
     l.record_state AS "recordState", l.state_reason AS "stateReason", l.archive_reason_id AS "archiveReasonId", ar.value AS "archiveReason", l.last_activity_at AS "lastActivityAt",
     l.last_client_email_at AS "lastClientEmailAt", l.last_team_email_at AS "lastTeamEmailAt",
     l.created_at AS "createdAt", l.updated_at AS "updatedAt", l.organization_id AS "organizationId", l.person_id AS "personId",
-    l.deal_value AS "dealValue", l.expected_close_date AS "expectedCloseDate"
+    l.deal_value AS "dealValue", l.expected_close_date AS "expectedCloseDate", l.deleted_at AS "deletedAt"
   FROM leads l
   JOIN users o ON o.id = l.owner_id
   JOIN users c ON c.id = l.created_by
@@ -104,6 +105,7 @@ export function toLead(row: LeadRow): LeadSummary {
     lastActivityAt: fromSqlDateTime(row.lastActivityAt) ?? row.lastActivityAt,
     lastClientEmailAt: fromSqlDateTime(row.lastClientEmailAt),
     lastTeamEmailAt: fromSqlDateTime(row.lastTeamEmailAt),
+    deletedAt: fromSqlDateTime(row.deletedAt),
     createdAt: fromSqlDateTime(row.createdAt) ?? row.createdAt,
     updatedAt: fromSqlDateTime(row.updatedAt) ?? row.updatedAt,
   };
@@ -498,6 +500,7 @@ export async function listMatchableLeads(db: Queryable = getDatabasePool()): Pro
     JOIN users o ON o.id = l.owner_id
     LEFT JOIN list_values sr ON sr.id = l.status_reason_id
     LEFT JOIN list_values ci ON ci.id = l.city_id
+    WHERE l.record_state <> 'deleted'
   `);
   type Row = Omit<MatchableLeadRow, "statusLabel" | "lastActivityAt" | "clientEmails"> & { statusReason: string | null; lastActivityAt: string; clientEmails: unknown };
   return (rows as Row[]).map((row) => ({
@@ -667,7 +670,7 @@ export async function updateLead(id: number, changes: Partial<LeadInput>, actor:
     // "www." or letter case. Deals of the same company share its website and are not duplicates.
     if (changes.companyUrl !== undefined && websiteKey(changes.companyUrl) && websiteKey(changes.companyUrl) !== websiteKey(existing.companyUrl)) {
       const { rows } = await connection.query(
-        "SELECT l.id, l.client_name AS \"clientName\", l.company_url AS \"companyUrl\", l.organization_id AS \"organizationId\", st.code AS \"statusCode\", CONCAT(u.first_name, ' ', u.last_name) AS \"ownerName\" FROM leads l JOIN list_values st ON st.id = l.status_id JOIN users u ON u.id = l.owner_id WHERE l.id <> ? AND l.company_url <> ''",
+        "SELECT l.id, l.client_name AS \"clientName\", l.company_url AS \"companyUrl\", l.organization_id AS \"organizationId\", st.code AS \"statusCode\", CONCAT(u.first_name, ' ', u.last_name) AS \"ownerName\" FROM leads l JOIN list_values st ON st.id = l.status_id JOIN users u ON u.id = l.owner_id WHERE l.id <> ? AND l.company_url <> '' AND l.record_state <> 'deleted'",
         [id],
       );
       const other = (rows as { clientName: string; companyUrl: string; organizationId: number | null; statusCode: string; ownerName: string }[])

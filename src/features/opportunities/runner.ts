@@ -22,7 +22,7 @@ import { listSearches } from "./repository";
 
 export type RunSummary = { runId: number; periodKey: string | null; status: "success" | "partial" | "failed"; listingsFound: number; newCompanies: number; newListings: number; attached: number; details: string[] };
 
-type ExistingRow = ExistingOpportunity & { id: number; companyKey: string; archived: boolean };
+type ExistingRow = ExistingOpportunity & { id: number; companyKey: string; archived: boolean; deleted?: boolean };
 
 const maxTimelineEntriesPerLead = 5;
 
@@ -78,7 +78,7 @@ async function collect(search: { keyword: string; location: string; jobType: str
 async function existingByKey(keys: string[], db: Queryable): Promise<Map<string, ExistingRow>> {
   const map = new Map<string, ExistingRow>();
   if (!keys.length) return map;
-  const { rows } = await db.query('SELECT id, company_key AS "companyKey", status, reason_scope AS "reasonScope", lead_id AS "leadId", matched_lead_id AS "matchedLeadId", archived_at IS NOT NULL AS archived FROM opportunities WHERE company_key = ANY(?)', [keys]);
+  const { rows } = await db.query('SELECT id, company_key AS "companyKey", status, reason_scope AS "reasonScope", lead_id AS "leadId", matched_lead_id AS "matchedLeadId", archived_at IS NOT NULL AS archived, deleted_at IS NOT NULL AS deleted FROM opportunities WHERE company_key = ANY(?)', [keys]);
   for (const row of rows as ExistingRow[]) map.set(row.companyKey, { ...row, id: Number(row.id), leadId: row.leadId === null ? null : Number(row.leadId), matchedLeadId: row.matchedLeadId === null ? null : Number(row.matchedLeadId), archived: Boolean(row.archived) });
   return map;
 }
@@ -197,6 +197,8 @@ export async function runOpportunitySearches(options: { trigger: "scheduled" | "
   const newBySearch = new Map<number, number>();
   for (const group of groups) {
     const current = existing.get(group.key);
+    // A company whose lead was deleted stays deleted until it is restored or removed for good (request of November 20, 2026).
+    if (current?.deleted) continue;
     const match = matchLead({ name: group.company, website: "", phone: "", address: group.location }, leads);
     const matched: LeadState | null = match ? { id: match.lead.id, recordState: match.lead.recordState, statusCode: match.lead.statusCode } : null;
     const linked = leadState(current?.leadId ?? null);

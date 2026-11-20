@@ -5,6 +5,7 @@ import { runDigestJobs } from "@/features/notifications/digests";
 import { runScheduledOpportunities } from "@/features/opportunities/runner";
 import { archiveStaleLeads } from "@/features/opportunities/repository";
 import { runStageReminders } from "@/features/pipeline/stage-reminders";
+import { purgeDeleted } from "@/features/deletion/repository";
 import { runStalledReport } from "@/features/analytics/report-email";
 import { runMailboxWatch } from "@/features/gmail/watch";
 import { runKpiReports } from "@/features/reports/kpi-email";
@@ -30,8 +31,10 @@ export async function POST(request: Request) {
       const leadArchive = await archiveStaleLeads().catch((error: unknown) => { console.error("Lead archive failed.", error instanceof Error ? error.message : error); return null; });
       // Auto reminders per pipeline stage (request of November 20, 2026).
       const stageReminders = await runStageReminders().catch((error: unknown) => { console.error("Stage reminders failed.", error instanceof Error ? error.message : error); return null; });
+      // Deals and leads deleted over 30 days ago are removed for good (request of November 20, 2026).
+      const purged = await purgeDeleted().catch((error: unknown) => { console.error("Purge of deleted records failed.", error instanceof Error ? error.message : error); return null; });
       const mailboxWatch = await runMailboxWatch().catch((error: unknown) => { console.error("Mailbox watch failed.", error instanceof Error ? error.message : error); return null; });
-      return NextResponse.json({ ...digests, ran: [...digests.ran, ...(opportunities ? [{ job: "opportunities" as const, ...opportunities }] : []), ...(stalledReport ? [{ job: "stalled_report" as const, ...stalledReport }] : []), ...kpiReports, ...(mailboxWatch ? [{ job: "mailbox_watch" as const, ...mailboxWatch }] : []), ...(leadArchive?.archived ? [{ job: "lead_archive" as const, ...leadArchive }] : []), ...(stageReminders?.deals ? [{ job: "stage_reminders" as const, ...stageReminders }] : [])] });
+      return NextResponse.json({ ...digests, ran: [...digests.ran, ...(opportunities ? [{ job: "opportunities" as const, ...opportunities }] : []), ...(stalledReport ? [{ job: "stalled_report" as const, ...stalledReport }] : []), ...kpiReports, ...(mailboxWatch ? [{ job: "mailbox_watch" as const, ...mailboxWatch }] : []), ...(leadArchive?.archived ? [{ job: "lead_archive" as const, ...leadArchive }] : []), ...(stageReminders?.deals ? [{ job: "stage_reminders" as const, ...stageReminders }] : []), ...(purged && purged.deals + purged.leads > 0 ? [{ job: "deleted_purge" as const, ...purged }] : [])] });
     }
     requireSameOrigin(request);
     const user = await getRequestUser();
