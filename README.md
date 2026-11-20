@@ -2,7 +2,7 @@
 
 LeadTrailPro (renamed from SalesTrackPro on October 30, 2026) is a sales workspace for a staffing and recruitment business, built from the Sales Tracker BRD/SRS. Deals, interactions, tasks, documents, candidate profiles, targets, reports, users, and the full audit trail live in PostgreSQL behind a Next.js application. Phase 1 (the core workspace), notifications, collaboration threads, the deals board and contacts, and the Google (sign-in, Gmail, Maps) and Indeed (HasData) integrations are implemented; what is still planned is under [Not yet connected](#not-yet-connected). The requirements with their status are in [docs/PRD.md](docs/PRD.md) and the technical design in [docs/SPEC.md](docs/SPEC.md).
 
-> **Installing it?** Follow the short guide, [docs/SETUP.md](docs/SETUP.md): a laptop in five steps, the server in six, with the exact commands. The sections below hold the detail behind it.
+> **Installing it?** Follow the short guide, [docs/SETUP.md](docs/SETUP.md): a laptop in five steps, the server in six, and how to release a change, with the exact commands. The sections below hold the detail behind it.
 
 ## At a glance
 
@@ -286,7 +286,7 @@ The preview and the report are the same as the command-line script's, and the re
 
 ## Production
 
-The steps alone are in [docs/SETUP.md, part B](docs/SETUP.md#b-server).
+The steps alone are in [docs/SETUP.md](docs/SETUP.md): part B for the first install, part C for releasing a change (push, Deploy now, check, undo).
 
 `compose.prod.yaml` overrides the development stack with a standalone Next.js image (about 460 MB), no bind mounts, uploads in the `attachments` volume, and PostgreSQL not published on the host, and adds the `migrate` and `deployer` services described below.
 

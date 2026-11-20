@@ -6,26 +6,30 @@ import ExcelJS from "exceljs";
 import { By, Key, Page, createDriver, outputDir, uiTest, waitForServices } from "./helpers/ui.mjs";
 import { admin, ensureAdmin, runId } from "./helpers/data.mjs";
 
+// Move to Pipeline (request of November 19, 2026): the dialog asks the stage and the status; the deal takes the lead's details.
+// At file level: both suites below use it, each with its own page.
+async function moveToPipeline(page, row, name, stage, status) {
+  await row.findElement(By.xpath('.//button[contains(normalize-space(.), "Move to Pipeline")]')).click();
+  await page.dialogTitle(`Move ${name} to the Pipeline`);
+  await page.fill("Pipeline stage", stage);
+  await page.fill("Status", status);
+  await page.clickButton("Move to Pipeline");
+  await page.toast(`${name} moved to the Pipeline: ${stage}, ${status}`);
+}
+
+/** Opens a deal from the top bar search (both suites below). */
+async function openDeal(page, name) {
+  const search = await page.wait(By.css('input[aria-label="Search all deals"]'));
+  await search.sendKeys(Key.chord(Key.CONTROL, "a"), Key.BACK_SPACE, name, Key.ENTER);
+  await page.heading("All deals");
+  await page.click(By.xpath(`//tr[.//strong[normalize-space()="${name}"]]//button[contains(@class,"client-cell")]`), { global: true });
+  await page.wait(By.css("div.deal-page"));
+}
+
 // Runs on the sample job source (TRIPS_PROVIDER=stub): the keyword "baker" near Mississauga finds three sample companies.
 describe("Leads inbox", () => {
   const company = "Lakeshore Bakery Co.";
   const cardRow = (name) => By.xpath(`//table[contains(@class,"opp-table")]//tr[.//strong[normalize-space()="${name}"]]`);
-  // Move to Pipeline (request of November 19, 2026): the dialog asks the stage and the status; the deal takes the lead's details.
-  const moveToPipeline = async (row, name, stage, status) => {
-    await row.findElement(By.xpath('.//button[contains(normalize-space(.), "Move to Pipeline")]')).click();
-    await page.dialogTitle(`Move ${name} to the Pipeline`);
-    await page.fill("Pipeline stage", stage);
-    await page.fill("Status", status);
-    await page.clickButton("Move to Pipeline");
-    await page.toast(`${name} moved to the Pipeline: ${stage}, ${status}`);
-  };
-  const openDeal = async (name) => {
-    const search = await page.wait(By.css('input[aria-label="Search all deals"]'));
-    await search.sendKeys(Key.chord(Key.CONTROL, "a"), Key.BACK_SPACE, name, Key.ENTER);
-    await page.heading("All deals");
-    await page.click(By.xpath(`//tr[.//strong[normalize-space()="${name}"]]//button[contains(@class,"client-cell")]`), { global: true });
-    await page.wait(By.css("div.deal-page"));
-  };
   let driver;
   let page;
 
@@ -59,7 +63,7 @@ describe("Leads inbox", () => {
 
   uiTest("Move to Pipeline creates the deal at the chosen stage and status, and the card leaves the pool", async () => {
     const row = await page.wait(cardRow(company));
-    await moveToPipeline(row, company, "Qualified", "Warm");
+    await moveToPipeline(page, row, company, "Qualified", "Warm");
     await page.tab("Converted to deals");
     const assigned = await page.wait(cardRow(company));
     assert.match(await assigned.getText(), /Deal:/);
@@ -71,7 +75,7 @@ describe("Leads inbox", () => {
     await page.fill("Company", "Lakeshore Bakery Co");
     await page.saveDeal();
     const notice = await page.wait(By.css(".duplicate-note"));
-    assert.match(await notice.getText(), /already exists as a Cold deal/);
+    assert.match(await notice.getText(), /already exists as a Warm deal/);
     await page.fill("Company", company);
     const open = await page.wait(By.css(".open-deals-note"));
     assert.match(await open.getText(), /already has an open deal/);
@@ -116,8 +120,8 @@ describe("Leads inbox", () => {
     assert.match(await row.getText(), /Nora Hand, Omar Hand/);
     // Leads keeps only its inbox and Not relevant.
     assert.equal((await driver.findElements(By.xpath('//button[@role="tab"][starts-with(normalize-space(.), "Converted to deals")]'))).length, 0);
-    await moveToPipeline(row, manual, "New Deal", "Cold");
-    await openDeal(manual);
+    await moveToPipeline(page, row, manual, "New Deal", "Cold");
+    await openDeal(page, manual);
     await page.waitText(By.css("div.deal-page"), "Referral");
     await page.waitText(By.css("div.deal-page"), "BD Action : First Call");
     await page.waitText(By.css("div.deal-page"), "Other contacts: Omar Hand");
@@ -195,8 +199,8 @@ describe("Leads inbox cards from the sales tracker", () => {
     await page.dialogTitle(`Move ${company} to the Pipeline`);
     assert.equal(await page.selectedText(await page.control("Status")), "Warm");
     await page.closeDialog();
-    await moveToPipeline(await page.wait(cardRow(company)), company, "New Deal", "Warm");
-    await openDeal(company);
+    await moveToPipeline(page, await page.wait(cardRow(company)), company, "New Deal", "Warm");
+    await openDeal(page, company);
     await page.waitText(By.css("div.deal-page"), "Jamie Ortiz");
     await page.waitText(By.css("div.deal-page"), "Oakville");
     await page.tab("Timeline");
