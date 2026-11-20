@@ -1246,6 +1246,11 @@ const migrations = [
     version: 39,
     name: "BD action and Client response move from the deal to the lead (request of November 19, 2026); leads added by hand",
     async run(client) {
+      // Check of November 19, 2026: the deals' comments (changed below) and close dates (filled by migration 41) as they were,
+      // so both can be undone from the remote client without the server:
+      //   UPDATE leads l SET comments = b.comments, expected_close_date = b.expected_close_date FROM leads_before_migration_39 b WHERE b.id = l.id
+      // Drop the table once the release is confirmed.
+      await client.query("CREATE TABLE IF NOT EXISTS leads_before_migration_39 AS SELECT id, comments, expected_close_date FROM leads");
       // The lead (a card of the Leads inbox) carries them now, with a note, and may be added by hand (added_by).
       await client.query("ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS bd_action_id INTEGER NULL REFERENCES list_values(id) ON DELETE SET NULL");
       await client.query("ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS client_response_id INTEGER NULL REFERENCES list_values(id) ON DELETE SET NULL");

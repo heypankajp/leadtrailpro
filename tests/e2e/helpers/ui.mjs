@@ -224,6 +224,16 @@ export class Page {
   leadRow(name) { return By.xpath(`//table[contains(@class,"lead-table")]//tr[.//strong[normalize-space()=${xq(name)}]]`); }
   waitLeadRow(name) { return this.wait(this.leadRow(name)); }
 
+  /**
+   * Clicks a button of the topmost dialog and waits until that dialog has closed. For a dialog opened over another (Add
+   * contact over Add lead): the one underneath is visible all along, so waiting for its title does not wait for the save.
+   */
+  async clickAndClose(text) {
+    const dialog = await this.dialog();
+    await this.clickButton(text);
+    if (dialog) await this.driver.wait(until.stalenessOf(dialog), DEFAULT_TIMEOUT);
+  }
+
   /** Closes the topmost dialog; with no dialog open, leaves the open deal page through its Back button. */
   async closeDialog() {
     const dialog = await this.dialog();

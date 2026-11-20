@@ -6,6 +6,7 @@ import { HttpError } from "@/lib/http";
 import { createMapsMeter, mapsApiKey } from "@/features/maps/repository";
 import { mapPlacesSearch, placesFieldMask } from "@/features/trips/providers/google";
 import { cityInAddress, contactPageLinks, countryOfFormattedAddress, extractWebsiteDetails, normalizeWebsite, pickPlace, type WebsiteDetails } from "./websiteDetails";
+import { isPrivateAddress, readWithin, ReadTimeout } from "./websiteGuards";
 
 /**
  * Add company → Website → Fetch (request of November 19, 2026): the server visits the company's website and reads its
@@ -14,30 +15,14 @@ import { cityInAddress, contactPageLinks, countryOfFormattedAddress, extractWebs
  *
  * The visit is made from the server, so it is guarded: http(s) only, ports 80 and 443, and the address the name resolves
  * to must be a public one: checked at connection time (no private, loopback or link-local network, also after a
- * redirect). Pages are cut at 2 MB and 8 seconds; at most 4 redirects.
+ * redirect). Pages are cut at 2 MB and 8 seconds; at most 4 redirects; each page is read within 2 seconds. The address and
+ * time checks live in `websiteGuards.ts`.
  */
 
 const maxBytes = 2 * 1024 * 1024;
 const timeoutMs = 8000;
 const maxRedirects = 4;
 const userAgent = "Mozilla/5.0 (compatible; LeadTrailPro company lookup)";
-
-/** Whether an IP address is on a private, loopback, link-local, shared or reserved network. */
-export function isPrivateAddress(address: string): boolean {
-  const version = isIP(address);
-  if (version === 4) {
-    const [a, b] = address.split(".").map(Number);
-    return a === 0 || a === 10 || a === 127 || a >= 224 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31)
-      || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || (a === 192 && b === 0) || (a === 198 && (b === 18 || b === 19));
-  }
-  if (version === 6) {
-    const lower = address.toLowerCase();
-    const mapped = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-    if (mapped) return isPrivateAddress(mapped[1]);
-    return lower === "::" || lower === "::1" || /^f[cd]/.test(lower) || /^fe[89ab]/.test(lower) || lower.startsWith("ff") || lower.startsWith("64:ff9b") || lower.startsWith("2001:db8");
-  }
-  return true;
-}
 
 /** DNS lookup that refuses names resolving to a private address, used by the connection itself (no rebinding gap). */
 const publicLookup: LookupFunction = (hostname, options, callback) => {
@@ -121,12 +106,19 @@ export async function lookupCompanyWebsite(value: string): Promise<WebsiteDetail
   const start = normalizeWebsite(value);
   if (!start) throw new HttpError(400, "Enter the company's website, e.g. https://company.com.");
   const home = await fetchPage(start);
-  const details = extractWebsiteDetails(home.html, home.url);
+  // Each page is read within 2 seconds (websiteGuards.ts): a malformed page cannot hold up the server.
+  let details: WebsiteDetails;
+  let linked: string[];
+  try {
+    ({ details, linked } = readWithin(() => ({ details: extractWebsiteDetails(home.html, home.url), linked: contactPageLinks(home.html, home.url) })));
+  } catch (error) {
+    if (error instanceof ReadTimeout) throw new HttpError(422, `${new URL(home.url).hostname}'s page could not be read: it is too large or malformed. Fill in the details by hand.`);
+    throw error;
+  }
   if (details.address) details.addressSource = "website";
   // No address on the home page: its Contact us page, then its locations / offices and about pages (up to four pages),
   // and the usual /contact-us addresses when the home page links none. Stops at the first address, within 20 seconds.
   if (!details.address) {
-    const linked = contactPageLinks(home.html, home.url);
     const base = new URL(home.url);
     const usual = linked.some((link) => /contact/i.test(link)) ? [] : ["/contact-us", "/contact", "/contactus"].map((path) => new URL(path, base).href);
     const candidates = [...new Set([...linked.slice(0, 3), ...usual])].slice(0, 4);
@@ -135,7 +127,7 @@ export async function lookupCompanyWebsite(value: string): Promise<WebsiteDetail
       if (Date.now() > deadline) break;
       try {
         const page = await fetchPage(new URL(link));
-        const more = extractWebsiteDetails(page.html, page.url);
+        const more = readWithin(() => extractWebsiteDetails(page.html, page.url));
         if (more.address) { details.address = more.address; details.city = more.city; details.country = more.country || details.country; details.addressSource = "website"; break; }
       } catch { /* the home page's details are kept */ }
     }
