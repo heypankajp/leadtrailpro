@@ -30,13 +30,13 @@ export default function ChangePasswordDialog({ onClose }: { onClose: () => void 
   };
 
   return (
-    <Dialog title="Change your password" eyebrow="SECURITY" onClose={onClose} size="narrow">
+    <Dialog title="Change Your Password" eyebrow="SECURITY" onClose={onClose} size="narrow">
       <form className="stack-form" onSubmit={submit}>
-        <Field label="Current password" required><input type="password" autoComplete="current-password" value={current} onChange={(event) => setCurrent(event.target.value)} required maxLength={200} autoFocus /></Field>
-        <Field label="New password" required hint="At least 12 characters."><input type="password" autoComplete="new-password" minLength={12} maxLength={200} value={next} onChange={(event) => setNext(event.target.value)} required /></Field>
-        <Field label="Confirm new password" required><input type="password" autoComplete="new-password" minLength={12} maxLength={200} value={confirm} onChange={(event) => setConfirm(event.target.value)} required /></Field>
+        <Field label="Current Password" required><input type="password" autoComplete="current-password" value={current} onChange={(event) => setCurrent(event.target.value)} required maxLength={200} autoFocus /></Field>
+        <Field label="New Password" required hint="At least 12 characters."><input type="password" autoComplete="new-password" minLength={12} maxLength={200} value={next} onChange={(event) => setNext(event.target.value)} required /></Field>
+        <Field label="Confirm New Password" required><input type="password" autoComplete="new-password" minLength={12} maxLength={200} value={confirm} onChange={(event) => setConfirm(event.target.value)} required /></Field>
         <ErrorText message={error} />
-        <div className="modal-actions"><button type="button" className="button button-outline" onClick={onClose}>Cancel</button><button type="submit" className="button button-primary" disabled={busy}>{busy ? "Saving..." : "Change password"}</button></div>
+        <div className="modal-actions"><button type="button" className="button button-outline" onClick={onClose}>Cancel</button><button type="submit" className="button button-primary" disabled={busy}>{busy ? "Saving..." : "Change Password"}</button></div>
       </form>
     </Dialog>
   );

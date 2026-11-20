@@ -1,11 +1,13 @@
 import { api, toQuery } from "@/lib/api";
 import type { LeadEntryInput, Opportunity, OpportunityOrigin, OpportunityPage, OpportunityRun, OpportunitySearch, OpportunitySearchInput, OpportunityStatus } from "./model";
 
-export const fetchOpportunities = (query: { status: OpportunityStatus; page?: number; pageSize?: number; search?: string; origin?: OpportunityOrigin; scope?: "mine" | "everyone" }) => api<OpportunityPage>(`/api/opportunities${toQuery(query)}`);
+export const fetchOpportunities = (query: { status: OpportunityStatus; page?: number; pageSize?: number; search?: string; origin?: OpportunityOrigin; scope?: "mine" | "everyone"; archived?: "1" }) => api<OpportunityPage>(`/api/opportunities${toQuery(query)}`);
 export const fetchOpportunity = (id: number) => api<{ opportunity: Opportunity }>(`/api/opportunities/${id}`);
 export const markOpportunityNotRelevant = (id: number, reasonId: number, note: string) => api<{ opportunity: Opportunity }>(`/api/opportunities/${id}`, { method: "PATCH", json: { action: "not_relevant", reasonId, note } });
 export const createOpportunity = (input: LeadEntryInput) => api<{ opportunity: Opportunity }>("/api/opportunities", { method: "POST", json: input });
 export const editOpportunity = (id: number, input: LeadEntryInput) => api<{ opportunity: Opportunity }>(`/api/opportunities/${id}`, { method: "PATCH", json: { action: "edit", ...input } });
+export const archiveOpportunity = (id: number) => api<{ opportunity: Opportunity }>(`/api/opportunities/${id}`, { method: "PATCH", json: { action: "archive" } });
+export const unarchiveOpportunity = (id: number) => api<{ opportunity: Opportunity }>(`/api/opportunities/${id}`, { method: "PATCH", json: { action: "unarchive" } });
 export const restoreOpportunity = (id: number) => api<{ opportunity: Opportunity }>(`/api/opportunities/${id}`, { method: "PATCH", json: { action: "restore" } });
 export const reopenOpportunity = (id: number, ownerId: number) => api<{ lead: { id: number; clientName: string; ownerName: string } }>(`/api/opportunities/${id}/reopen`, { method: "POST", json: { ownerId } });
 export type SearchDefaults = { titles: string[]; location: string; postedWithinDays: number };

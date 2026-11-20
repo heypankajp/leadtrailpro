@@ -2,7 +2,7 @@ import { getDatabasePool, affectedRows, fromSqlDateTime, insertId, toSqlDateTime
 import { HttpError } from "@/lib/http";
 import { recordAudit } from "@/features/audit/repository";
 import { jobSourceLabels, type JobSourceId } from "@/features/jobs/model";
-import { statusLabel } from "@/features/list-values/model";
+import { listNumber, statusLabel } from "@/features/list-values/model";
 import { assertListValue, getListValue } from "@/features/list-values/repository";
 import { addActivity, findDuplicateLead, getLead, setLeadState, transferLead, updateLead } from "@/features/leads/repository";
 import { normalizeCompanyName } from "@/features/trips/matching";
@@ -93,6 +93,7 @@ type OpportunityRow = {
   draft: unknown;
   leadSourceId: number | null; leadSource: string | null; bdActionId: number | null; bdAction: string | null; clientResponseId: number | null; clientResponse: string | null;
   note: string | null; addedByName: string | null;
+  archivedAt: string | null; archiveKind: "manual" | "auto" | null; archivedByName: string | null;
   organizationId: number | null; contacts: string | { id: number; name: string }[] | null;
 };
 
@@ -107,6 +108,7 @@ const opportunityColumns = `
   (SELECT COALESCE(json_agg(DISTINCT ol.source), '[]'::json) FROM opportunity_listings ol WHERE ol.opportunity_id = o.id) AS sources,
   o.lead_type_id AS "leadSourceId", lsrc.value AS "leadSource", o.bd_action_id AS "bdActionId", oba.value AS "bdAction",
   o.client_response_id AS "clientResponseId", ocr.value AS "clientResponse", o.note, NULLIF(CONCAT(ab.first_name, ' ', ab.last_name), ' ') AS "addedByName", o.organization_id AS "organizationId",
+  o.archived_at AS "archivedAt", o.archive_kind AS "archiveKind", NULLIF(CONCAT(arc.first_name, ' ', arc.last_name), ' ') AS "archivedByName",
   (SELECT COALESCE(json_agg(json_build_object('id', pp.id, 'name', pp.name) ORDER BY ops.position, pp.name), '[]'::json)
      FROM opportunity_persons ops JOIN persons pp ON pp.id = ops.person_id WHERE ops.opportunity_id = o.id) AS contacts`;
 
@@ -125,7 +127,8 @@ const opportunityJoins = `
   LEFT JOIN list_values lsrc ON lsrc.id = o.lead_type_id
   LEFT JOIN list_values oba ON oba.id = o.bd_action_id
   LEFT JOIN list_values ocr ON ocr.id = o.client_response_id
-  LEFT JOIN users ab ON ab.id = o.added_by`;
+  LEFT JOIN users ab ON ab.id = o.added_by
+  LEFT JOIN users arc ON arc.id = o.archived_by`;
 
 const sourceLabel = (source: string) => jobSourceLabels[source as JobSourceId] ?? source;
 
@@ -146,6 +149,7 @@ const toOpportunity = (row: OpportunityRow, listings: OpportunityListing[]): Opp
     revived: Boolean(row.revived),
     reason: row.reason, reasonScope: row.reasonScope, reasonNote: row.reasonNote,
     decidedByName: row.decidedByName, decidedAt: fromSqlDateTime(row.decidedAt),
+    archivedAt: fromSqlDateTime(row.archivedAt), archiveKind: row.archiveKind, archivedByName: row.archivedByName?.trim() || null,
     listings,
     tracker: trackerCard(trackerDraft(row.draft)),
     leadSourceId: row.leadSourceId === null ? null : Number(row.leadSourceId), leadSource: row.leadSource,
@@ -194,19 +198,20 @@ const mineClause = (origin?: OpportunityOrigin) => (origin === "found"
   ? "EXISTS (SELECT 1 FROM opportunity_listings ml JOIN opportunity_searches ms ON ms.id = ml.search_id WHERE ml.opportunity_id = o.id AND ms.created_by = ?)"
   : "o.added_by = ?");
 
-export async function listOpportunities(filter: { status: OpportunityStatus; page: number; pageSize: number; search?: string; origin?: OpportunityOrigin; mineOf?: number | null }, db: Queryable = getDatabasePool()): Promise<OpportunityPage> {
-  const scope = [originClause(filter.origin)];
+export async function listOpportunities(filter: { status: OpportunityStatus; page: number; pageSize: number; search?: string; origin?: OpportunityOrigin; mineOf?: number | null; archived?: boolean }, db: Queryable = getDatabasePool()): Promise<OpportunityPage> {
+  // The Archive lists archived leads whatever their status; every other list leaves them out (request of November 20, 2026).
+  const scope = [originClause(filter.origin), filter.archived ? "o.archived_at IS NOT NULL" : "o.archived_at IS NULL"];
   const scopeParams: unknown[] = [];
   if (filter.mineOf) { scope.push(mineClause(filter.origin)); scopeParams.push(filter.mineOf); }
-  const clauses = ["o.status = ?", ...scope];
-  const params: unknown[] = [filter.status, ...scopeParams];
+  const clauses = filter.archived ? [...scope] : ["o.status = ?", ...scope];
+  const params: unknown[] = filter.archived ? [...scopeParams] : [filter.status, ...scopeParams];
   if (filter.search) {
     clauses.push("(LOWER(o.company_name) LIKE ? OR LOWER(o.latest_title) LIKE ? OR LOWER(o.location) LIKE ? OR LOWER(COALESCE(o.draft->'lead'->>'executive', '')) LIKE ? OR LOWER(o.note) LIKE ?)");
     const like = `%${filter.search.toLowerCase()}%`;
     params.push(like, like, like, like, like);
   }
   const where = `WHERE ${clauses.join(" AND ")}`;
-  const order = filter.status === "new" ? "o.last_seen_at DESC, o.listings_count DESC, o.id DESC" : "o.decided_at DESC NULLS LAST, o.last_seen_at DESC, o.id DESC";
+  const order = filter.archived ? "o.archived_at DESC, o.id DESC" : filter.status === "new" ? "o.last_seen_at DESC, o.listings_count DESC, o.id DESC" : "o.decided_at DESC NULLS LAST, o.last_seen_at DESC, o.id DESC";
   const { rows: countRows } = await db.query(`SELECT o.status, COUNT(*)::int AS count FROM opportunities o WHERE ${scope.join(" AND ")} GROUP BY o.status`, scopeParams);
   const counts: Record<OpportunityStatus, number> = { new: 0, attached: 0, converted: 0, not_relevant: 0 };
   for (const row of countRows as { status: OpportunityStatus; count: number }[]) counts[row.status] = Number(row.count);
@@ -332,11 +337,62 @@ export async function updateOpportunityDetails(id: number, input: LeadEntryInput
 }
 
 export async function countNewOpportunities(db: Queryable = getDatabasePool()): Promise<number> {
-  const { rows } = await db.query("SELECT COUNT(*)::int AS count FROM opportunities WHERE status = 'new'");
+  const { rows } = await db.query("SELECT COUNT(*)::int AS count FROM opportunities WHERE status = 'new' AND archived_at IS NULL");
   return Number((rows as { count: number }[])[0]?.count ?? 0);
 }
 
 /** Hides a card with a reason; a role-level reason lets the company return with its next new role (OPP-13). */
+/** Archive by hand (request of November 20, 2026): a lead in the inbox or marked not relevant moves to the Archive. */
+export async function archiveOpportunity(id: number, actor: UserAccount): Promise<Opportunity> {
+  return withTransaction(async (connection) => {
+    const before = await getOpportunity(id, connection);
+    if (!before) throw new HttpError(404, "Lead not found.");
+    if (before.archivedAt) throw new HttpError(409, `${before.companyName} is already in the Archive.`);
+    if (before.status !== "new" && before.status !== "not_relevant") throw new HttpError(409, `${before.companyName} is already a deal: archive it from the Pipeline.`);
+    await connection.query("UPDATE opportunities SET archived_at = ?, archived_by = ?, archive_kind = 'manual' WHERE id = ? AND archived_at IS NULL", [toSqlDateTime(new Date()), actor.id, id]);
+    await recordAudit(connection, { actorId: actor.id, action: "opportunity.archived", entityType: "opportunity", entityId: id, before: { status: before.status }, after: { archived: true }, details: `${actor.name} moved the lead ${before.companyName} to the Archive` });
+    return (await getOpportunity(id, connection))!;
+  });
+}
+
+/**
+ * Restore from the Archive: the lead goes back to the inbox (a lead restored as not relevant would be archived again by the
+ * days rule), its not-relevant reason cleared.
+ */
+export async function unarchiveOpportunity(id: number, actor: UserAccount): Promise<Opportunity> {
+  return withTransaction(async (connection) => {
+    const before = await getOpportunity(id, connection);
+    if (!before) throw new HttpError(404, "Lead not found.");
+    if (!before.archivedAt) throw new HttpError(409, `${before.companyName} is not in the Archive.`);
+    await connection.query(
+      `UPDATE opportunities SET archived_at = NULL, archived_by = NULL, archive_kind = NULL, revived = FALSE,
+         status = CASE WHEN status = 'not_relevant' THEN 'new' ELSE status END,
+         reason_id = NULL, reason_scope = NULL, reason_note = '', decided_by = CASE WHEN status = 'not_relevant' THEN NULL ELSE decided_by END,
+         decided_at = CASE WHEN status = 'not_relevant' THEN NULL ELSE decided_at END
+       WHERE id = ?`, [id],
+    );
+    await recordAudit(connection, { actorId: actor.id, action: "opportunity.unarchived", entityType: "opportunity", entityId: id, before: { archived: true, status: before.status }, after: { archived: false }, details: `${actor.name} restored the lead ${before.companyName} from the Archive` });
+    return (await getOpportunity(id, connection))!;
+  });
+}
+
+/**
+ * The scheduler's sweep (request of November 20, 2026): leads marked not relevant longer ago than the days in List of Values
+ * (Archive Not Relevant Leads After, 90 to start) move to the Archive.
+ */
+export async function archiveStaleLeads(now = new Date(), db: Queryable = getDatabasePool()): Promise<{ archived: number; days: number }> {
+  const { rows: setting } = await db.query("SELECT value, is_active AS active FROM list_values WHERE list_key = 'lead_archive_days' ORDER BY sort_order, id");
+  const days = listNumber("lead_archive_days", setting as { value: string; active: boolean }[]);
+  const cutoff = toSqlDateTime(new Date(now.getTime() - days * 24 * 60 * 60 * 1000));
+  const result = await db.query(
+    "UPDATE opportunities SET archived_at = ?, archived_by = NULL, archive_kind = 'auto' WHERE status = 'not_relevant' AND archived_at IS NULL AND decided_at IS NOT NULL AND decided_at < ?",
+    [toSqlDateTime(now), cutoff],
+  );
+  const archived = result.rowCount ?? 0;
+  if (archived > 0) await recordAudit(db, { actorId: null, action: "opportunity.auto_archived", entityType: "opportunity", after: { archived, days }, details: `${archived} ${archived === 1 ? "lead" : "leads"} not relevant for over ${days} days moved to the Archive` });
+  return { archived, days };
+}
+
 export async function markNotRelevant(id: number, reasonId: number, note: string, actor: UserAccount): Promise<Opportunity> {
   return withTransaction(async (connection) => {
     const before = await getOpportunity(id, connection);

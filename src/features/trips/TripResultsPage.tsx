@@ -100,7 +100,7 @@ export default function TripResultsPage({ tripId }: { tripId: number }) {
           <p>{trip.address} · within {radiusLabel(trip)} · {trip.businessType ?? "Any business type"} · up to {trip.maxResults} results · last run {formatDateTime(trip.lastRunAt)}</p>
         </div>
         <div className="heading-actions">
-          <button className="button button-outline" onClick={() => void rerun()} disabled={rerunning}><RefreshCw size={15} /> {rerunning ? "Searching..." : "Run again"}</button>
+          <button className="button button-outline" onClick={() => void rerun()} disabled={rerunning}><RefreshCw size={15} /> {rerunning ? "Searching..." : "Run Again"}</button>
           <a className="button button-outline" href={tripExportUrl(tripId, scope, action || null)} download><Download size={15} /> Export Excel</a>
           <a className="button button-outline" href={tripExportUrl(tripId, scope, action || null, "pdf")} download><Download size={15} /> Export PDF</a>
           <button className="button button-primary" onClick={() => window.print()}><Printer size={15} /> Print</button>
@@ -168,7 +168,7 @@ export default function TripResultsPage({ tripId }: { tripId: number }) {
                     </td>
                     <td>
                       <span className={`status-pill ${row.actionCode === "new" ? "status-opportunity" : statusClass(row.actionCode)}`}><i />{row.actionLabel}</span>
-                      {row.matchedLeadId && <button className="text-button print-hide open-lead" onClick={() => openLead(row.matchedLeadId!)}>Open deal</button>}
+                      {row.matchedLeadId && <button className="text-button print-hide open-lead" onClick={() => openLead(row.matchedLeadId!)}>Open Deal</button>}
                     </td>
                     <td>
                       {row.shortlisted
@@ -191,7 +191,7 @@ export default function TripResultsPage({ tripId }: { tripId: number }) {
 }
 
 function BackLink({ onClick }: { onClick: () => void }) {
-  return <button className="text-button back-link print-hide" onClick={onClick}><ArrowLeft size={14} /> All trips</button>;
+  return <button className="text-button back-link print-hide" onClick={onClick}><ArrowLeft size={14} /> All Trips</button>;
 }
 
 /** Job listings behind the Hiring count (TRIP-06). */
@@ -206,7 +206,7 @@ function JobsDialog({ tripId, result, onClose }: { tripId: number; result: TripR
   }, [tripId, result.id]);
   const jobs = state.jobs ?? [];
   return (
-    <Dialog title={`Job listings: ${result.companyName}`} eyebrow="HIRING" onClose={onClose} size="wide">
+    <Dialog title={`Job Listings: ${result.companyName}`} eyebrow="HIRING" onClose={onClose} size="wide">
       <ErrorText message={state.error} />
       {state.loading && !state.jobs && <Loading text="Loading job listings..." />}
       {!state.loading && jobs.length === 0 && <EmptyState icon={<BriefcaseBusiness size={22} />} title="No active listings found" />}
@@ -223,7 +223,7 @@ function JobsDialog({ tripId, result, onClose }: { tripId: number; result: TripR
                   <td>{job.location || "—"}</td>
                   <td>{job.postedAt ? formatDate(job.postedAt) : "—"}</td>
                   <td>{job.employmentType ?? "—"}</td>
-                  <td><a className="button button-outline button-small" href={job.url} target="_blank" rel="noopener noreferrer">View job <ExternalLink size={12} /></a></td>
+                  <td><a className="button button-outline button-small" href={job.url} target="_blank" rel="noopener noreferrer">View Job <ExternalLink size={12} /></a></td>
                 </tr>
               ))}
             </tbody>

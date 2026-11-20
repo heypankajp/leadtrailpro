@@ -2247,3 +2247,87 @@ button.activity-row-icon.is-button:hover, button.activity-row-icon.is-button:foc
 /* A secondary action in the brand colour (Budget on Lead Generation), beside a primary one. */
 .button-soft { border-color: #dfe3fb; color: #4a59c9; background: #eef0ff; }
 .button-soft:hover { border-color: #cfd5f7; background: #e3e7ff; }
+/* The Actions menu of a lead's row (request of November 20, 2026). */
+.opp-row-actions { display: flex; justify-content: flex-end; }
+.opp-row-actions > .button { white-space: nowrap; }
+.opp-actions-menu { min-width: 190px; }
+.opp-actions-menu button { font-size: 12px; }
+/* Each action in the lead's Actions menu has its colour (request of November 20, 2026). */
+.opp-actions-menu button.is-convert { color: #1d7a4e; }
+.opp-actions-menu button.is-convert:hover { color: #16653f; background: #e9f7ef; }
+.opp-actions-menu button.is-edit { color: #4a59c9; }
+.opp-actions-menu button.is-edit:hover { color: #3c4ab5; background: #eef0ff; }
+.opp-actions-menu button.is-dismiss { color: #b8402f; }
+.opp-actions-menu button.is-dismiss:hover { color: #9c3324; background: #fdeeec; }
+.opp-actions-menu button.is-restore { color: #127a86; }
+.opp-actions-menu button.is-restore:hover { color: #0e6670; background: #e6f6f7; }
+.opp-actions-menu button.is-archive { color: #946016; }
+.opp-actions-menu button.is-archive:hover { color: #7c4f10; background: #fdf4e3; }
+/* The heart on a Pipeline card (request of November 20, 2026): outlined, filled red when the deal is the viewer's favourite. */
+.pipeline-fav { margin-left: auto; display: inline-grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: #9aa0b4; cursor: pointer; }
+.pipeline-fav:hover { color: #d6455d; background: #fdecef; }
+.pipeline-fav.is-on { color: #e0395a; }
+/* The Pipeline page's My favourites button: a red heart, filled while the view is open (request of November 20, 2026). */
+.view-switch .view-fav-icon { color: #e0395a; }
+.pipeline-fav-note { display: inline-flex; align-items: center; height: 34px; padding: 0 12px; border-radius: 8px; background: #fdecef; color: #c62f4f; font-size: 12px; font-weight: 600; white-space: nowrap; }
+/* Approve and Reject on Queued for approval (request of November 20, 2026). */
+.review-actions { display: inline-flex; gap: 6px; white-space: nowrap; }
+.review-actions .review-approve { border-color: #bfe3cf; color: #1d7a4e; background: #e9f7ef; }
+.review-actions .review-approve:hover { border-color: #9fd3b6; background: #dcf2e6; }
+.review-actions .review-reject { border-color: #f3cdc7; color: #b8402f; background: #fdeeec; }
+.review-actions .review-reject:hover { border-color: #ebb3aa; background: #fbe1dd; }
+/* Add deals to a sales trip (request of November 20, 2026): Marked To be Visited / All Deals, a search, a list of ticks. */
+.trip-add { display: grid; gap: 12px; padding-top: 14px; }
+.trip-add-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.trip-add .scope-toggle button { padding: 7px 12px; font-size: 12px; }
+.trip-add-count { padding: 4px 10px; border-radius: 999px; background: #eef0ff; color: #4a59c9; font-size: 11.5px; font-weight: 600; }
+.trip-add-search { display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 0 12px; border: 1px solid #e3e6ef; border-radius: 8px; background: #fff; color: #8a90a6; }
+.trip-add-search:focus-within { border-color: #8f9be8; box-shadow: 0 0 0 3px #586be31f; }
+.trip-add-search input { flex: 1; min-width: 0; height: 36px; border: 0; outline: 0; background: transparent; color: #353b52; font-size: 12.5px; }
+.trip-add .field-hint { margin: -4px 0 0; font-size: 11px; }
+.trip-add .trip-pick-list label { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 10px 12px; }
+.trip-add .trip-pick-list label.is-picked { background: #f3f4ff; }
+.trip-add .trip-pick-list input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: #586be3; cursor: pointer; }
+.trip-pick-text { display: grid; gap: 2px; min-width: 0; }
+.trip-pick-tags { display: inline-flex; align-items: center; gap: 6px; }
+.trip-pick-tag { padding: 3px 8px; border-radius: 6px; background: #e8f4f6; color: #127a86; font-size: 10.5px; font-weight: 600; white-space: nowrap; }
+.trip-add .trip-pick-list label .trip-pick-tags { display: inline-flex; align-items: center; gap: 6px; }
+.trip-add .trip-pick-list label .trip-pick-tags .status-pill { display: inline-flex; align-items: center; gap: 5px; }
+.trip-add .trip-pick-list label .trip-pick-tag { display: inline-block; }
+/* The sales trip summary (request of November 20, 2026): companies planned and their cities, between the title and the buttons. */
+.trip-heading > .trip-summary { flex: 1 1 320px; max-width: 560px; align-self: center; display: grid; gap: 8px; padding: 12px 16px; border: 1px solid #dfe3f2; border-radius: 10px; background: #fff; box-shadow: 0 1px 2px #1f24400a; }
+.trip-summary-count { display: flex; align-items: center; gap: 8px; color: #4a59c9; font-size: 13px; }
+.trip-summary-count strong { color: #262b42; font-size: 18px; font-weight: 700; }
+.trip-summary-count span { color: #4d5268; }
+.trip-summary-cities { display: flex; flex-wrap: wrap; gap: 6px; }
+.trip-city { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 999px; background: #eef0ff; color: #3f4cb8; font-size: 11.5px; font-weight: 600; }
+.trip-city b { margin-left: 2px; padding: 0 6px; border-radius: 999px; background: #fff; color: #3f4cb8; font-size: 10.5px; }
+.trip-city.is-none { background: #f1f2f6; color: #62697b; }
+@media (max-width: 900px) { .trip-heading > .trip-summary { order: 3; flex-basis: 100%; max-width: none; } }
+@media (max-width: 900px) { .trip-heading { flex-wrap: wrap; } .trip-heading > .trip-actions { flex-direction: row; flex-wrap: wrap; } }
+/* Sales trip print and PDF (request of November 20, 2026): on paper, a plain heading, the summary line and the visiting order. */
+.sales-trip-print-head, .trip-print-col { display: none; }
+@media print {
+  @page { size: A4 landscape; margin: 12mm; }
+  .sales-trip-page .trip-heading, .sales-trip-page .trip-remove-col { display: none !important; }
+  .sales-trip-print-head { display: block; margin: 0 0 10px; padding-bottom: 8px; border-bottom: 2px solid #222; }
+  .sales-trip-print-brand { color: #555; font-size: 9px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+  .sales-trip-print-head h1 { margin: 2px 0 4px; color: #000; font-size: 20px; }
+  .sales-trip-print-head p { margin: 0; color: #222; font-size: 11px; }
+  .sales-trip-page .leads-panel { border: 0; box-shadow: none; }
+  .sales-trip-page .trip-table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+  .sales-trip-page .trip-table th { padding: 5px 6px; border-bottom: 1.5px solid #222; color: #000; font-size: 9px; text-align: left; }
+  .sales-trip-page .trip-table td { padding: 7px 6px; border-bottom: 1px solid #bbb; color: #000; vertical-align: top; }
+  .sales-trip-page .trip-table tr { break-inside: avoid; }
+  .sales-trip-page .trip-print-col { display: table-cell; width: 24%; }
+  .sales-trip-page .client-cell .avatar, .sales-trip-page .client-cell [class*="avatar"] { display: none; }
+  .sales-trip-page .client-cell { padding: 0; border: 0; background: none; color: #000; text-align: left; }
+  .sales-trip-page .trip-stop { border: 1px solid #000; background: none; color: #000; }
+  .sales-trip-page .muted-cell, .sales-trip-page small { color: #222 !important; }
+  .sales-trip-page .empty-block { padding: 16px 0; }
+}
+.trip-summary.is-empty { place-items: center; min-height: 64px; border-style: dashed; background: #fafbfd; box-shadow: none; }
+.trip-summary-empty { color: #8a90a6; font-size: 12.5px; }
+@media (min-width: 1100px) { .trip-heading > .trip-actions { flex-wrap: nowrap; } .trip-heading > .trip-actions .button { white-space: nowrap; } }
+.trip-icon-button { width: 38px; padding: 0; }
+.trip-delete-button:hover { border-color: #f3cdc7; color: #b8402f; background: #fdeeec; }

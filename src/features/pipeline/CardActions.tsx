@@ -92,7 +92,7 @@ export default function CardActions({ card, stages, canEdit, onMove, onConvert, 
           {canEdit && stages.length > 1 && (
             <>
               <button role="menuitem" aria-expanded={moving} onClick={() => setMoving((current) => !current)}>
-                <ArrowRightLeft size={13} /> Move to stage <span className="card-menu-chevron">{moving ? <ChevronDown size={13} /> : <ChevronRight size={13} />}</span>
+                <ArrowRightLeft size={13} /> Move to Stage <span className="card-menu-chevron">{moving ? <ChevronDown size={13} /> : <ChevronRight size={13} />}</span>
               </button>
               {moving && stages.map((stage) => (
                 <button key={stage.id} role="menuitem" className="card-menu-stage" disabled={stage.id === card.stageId} onClick={() => run(() => onMove(stage.id))}>
@@ -102,7 +102,7 @@ export default function CardActions({ card, stages, canEdit, onMove, onConvert, 
               <div className="card-menu-rule" />
             </>
           )}
-          {canFollowUp && <button role="menuitem" onClick={() => run(() => setDialog("follow-up"))}><CalendarCheck2 size={13} /> Add follow-up</button>}
+          {canFollowUp && <button role="menuitem" onClick={() => run(() => setDialog("follow-up"))}><CalendarCheck2 size={13} /> Add Follow-Up</button>}
           {canEdit && todoLists.length > 0 && (
             <>
               <div className="card-menu-rule" />

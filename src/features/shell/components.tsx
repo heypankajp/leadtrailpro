@@ -162,12 +162,12 @@ export function ConvertToClientDialog({ dealName, onConfirm, onClose }: { dealNa
     try { await onConfirm(); } catch (caught) { setError(caught instanceof Error ? caught.message : "Could not convert the deal."); setBusy(false); }
   };
   return (
-    <Dialog title="Convert to client" eyebrow={dealName.toUpperCase()} size="narrow" onClose={onClose}>
+    <Dialog title="Convert to Client" eyebrow={dealName.toUpperCase()} size="narrow" onClose={onClose}>
       <p className="dialog-description">Do you want to convert this deal to client?</p>
       <ErrorText message={error} />
       <div className="modal-actions">
         <button type="button" className="button button-outline" onClick={onClose} disabled={busy}>No</button>
-        <button type="button" className="button button-primary" onClick={() => void confirm()} disabled={busy} autoFocus>{busy ? "Converting..." : "Yes, convert to client"}</button>
+        <button type="button" className="button button-primary" onClick={() => void confirm()} disabled={busy} autoFocus>{busy ? "Converting..." : "Yes, Convert to Client"}</button>
       </div>
     </Dialog>
   );

@@ -60,11 +60,11 @@ export default function ActionCenter() {
         <div className="heading-actions">
           {can("view_team_reports") && (
             <div className="scope-toggle" role="group" aria-label="Dashboard scope">
-              <button className={scope === "mine" ? "is-active" : ""} onClick={() => setScope("mine")}>My work</button>
-              <button className={scope === "team" ? "is-active" : ""} onClick={() => setScope("team")}>Whole team</button>
+              <button className={scope === "mine" ? "is-active" : ""} onClick={() => setScope("mine")}>My Work</button>
+              <button className={scope === "team" ? "is-active" : ""} onClick={() => setScope("team")}>Whole Team</button>
             </div>
           )}
-          {can("create_leads") && <button className="button button-primary" onClick={openNewLead}><Plus size={17} /> Add a deal</button>}
+          {can("create_leads") && <button className="button button-primary" onClick={openNewLead}><Plus size={17} /> Add a Deal</button>}
         </div>
       </div>
 
@@ -88,8 +88,8 @@ export default function ActionCenter() {
           <div className="dashboard-grid">
             <section className="panel follow-up-panel">
               <div className="panel-heading">
-                <div><h2>Follow-ups</h2><p>{data.teamWide ? "Across the whole team" : "Deals you own"}, by follow-up date</p></div>
-                <button className="text-button" onClick={() => navigate("activities")}>View tasks <ArrowRight size={14} /></button>
+                <div><h2>Follow-Ups</h2><p>{data.teamWide ? "Across the whole team" : "Deals you own"}, by follow-up date</p></div>
+                <button className="text-button" onClick={() => navigate("activities")}>View Tasks <ArrowRight size={14} /></button>
               </div>
               <Tabs
                 tabs={[
@@ -105,13 +105,13 @@ export default function ActionCenter() {
                 {data.followUps[tab].length === 0 && <p className="empty-state">{tab === "overdue" ? "No overdue follow-ups. Nice work!" : tab === "today" ? "You're all caught up for today." : "Nothing scheduled for tomorrow yet."}</p>}
               </div>
               {data.followUps[tab].length > 8 && (
-                <div className="panel-footnote"><span className="footnote-dot" /> {data.followUps[tab].length - 8} more <button onClick={() => navigate("deals", "list", { scope: data.teamWide ? "everyone" : "mine", sort: "follow_up", direction: "asc" })}>Open the list <ArrowRight size={13} /></button></div>
+                <div className="panel-footnote"><span className="footnote-dot" /> {data.followUps[tab].length - 8} more <button onClick={() => navigate("deals", "list", { scope: data.teamWide ? "everyone" : "mine", sort: "follow_up", direction: "asc" })}>Open the List <ArrowRight size={13} /></button></div>
               )}
             </section>
 
             <section className="panel target-panel">
               <div className="panel-heading">
-                <div><h2>Your targets</h2><p>{targets?.template ? `${targets.template.name} template` : "No target template assigned yet"}</p></div>
+                <div><h2>Your Targets</h2><p>{targets?.template ? `${targets.template.name} template` : "No target template assigned yet"}</p></div>
               </div>
               <div className="target-score">
                 <div className="target-ring" style={{ background: `conic-gradient(#5f70df ${percent ?? 0}%, #eef0f7 0)` }}><div><strong>{percent === null ? "—" : percent}<span>{percent === null ? "" : "%"}</span></strong><small>of plan</small></div></div>
@@ -122,14 +122,14 @@ export default function ActionCenter() {
                 </div>
               </div>
               <div className="target-note"><Target size={14} /><span>{percent === null ? "Ask an administrator to assign a target template." : percent >= 100 ? "You have met this period's plan." : `${100 - percent}% of the plan is still open.`}</span></div>
-              <button className="panel-link" onClick={() => navigate("insights")}>View full report <ArrowRight size={14} /></button>
+              <button className="panel-link" onClick={() => navigate("insights")}>View Full Report <ArrowRight size={14} /></button>
             </section>
           </div>
 
           <div className="dashboard-grid reminders-grid">
             <section className="panel reminder-panel">
               <div className="panel-heading">
-                <div><h2>Client replies waiting</h2><p>Clients who emailed after {data.teamWide ? "the team's" : "your"} last email or action on the deal</p></div>
+                <div><h2>Client Replies Waiting</h2><p>Clients who emailed after {data.teamWide ? "the team's" : "your"} last email or action on the deal</p></div>
               </div>
               {data.clientReplies.length === 0 ? <EmptyState title="No client email is waiting for an answer" /> : (
                 <div className="followup-list">
@@ -146,7 +146,7 @@ export default function ActionCenter() {
             </section>
             <section className="panel reminder-panel">
               <div className="panel-heading">
-                <div><h2>Needs attention</h2><p>Active deals quiet for longer than their limit · default {data.inactivityDays} days{data.inactivityRuleCount ? ` · ${data.inactivityRuleCount} ${data.inactivityRuleCount === 1 ? "rule" : "rules"} by status, BD action, or stage` : ""}</p></div>
+                <div><h2>Needs Attention</h2><p>Active deals quiet for longer than their limit · default {data.inactivityDays} days{data.inactivityRuleCount ? ` · ${data.inactivityRuleCount} ${data.inactivityRuleCount === 1 ? "rule" : "rules"} by status, BD action, or stage` : ""}</p></div>
               </div>
               {data.inactiveLeads.length === 0 ? <EmptyState title="Every deal has recent activity" /> : (
                 <div className="followup-list">
@@ -163,7 +163,7 @@ export default function ActionCenter() {
             </section>
             <section className="panel reminder-panel">
               <div className="panel-heading">
-                <div><h2>No next step</h2><p>Active deals with no open task and no upcoming follow-up date{data.noNextStepCount > 6 ? ` · ${data.noNextStepCount} in all` : ""}</p></div>
+                <div><h2>No Next Step</h2><p>Active deals with no open task and no upcoming follow-up date{data.noNextStepCount > 6 ? ` · ${data.noNextStepCount} in all` : ""}</p></div>
               </div>
               {data.noNextStep.length === 0 ? <EmptyState title="Every deal has a next step" /> : (
                 <div className="followup-list">
@@ -180,8 +180,8 @@ export default function ActionCenter() {
             </section>
             <section className="panel reminder-panel">
               <div className="panel-heading">
-                <div><h2>Open tasks</h2><p>{data.overdueTaskCount > 0 ? `${data.overdueTaskCount} overdue` : "Nothing overdue"}</p></div>
-                <button className="text-button" onClick={() => navigate("activities")}>All tasks <ArrowRight size={14} /></button>
+                <div><h2>Open Tasks</h2><p>{data.overdueTaskCount > 0 ? `${data.overdueTaskCount} overdue` : "Nothing overdue"}</p></div>
+                <button className="text-button" onClick={() => navigate("activities")}>All Tasks <ArrowRight size={14} /></button>
               </div>
               {data.openTasks.length === 0 ? <EmptyState icon={<ListTodo size={22} />} title="No open tasks" /> : (
                 <div className="followup-list">
@@ -189,7 +189,7 @@ export default function ActionCenter() {
                     <button className="followup-row" key={task.id} onClick={() => navigate("activities", task.id)}>
                       <span className={`priority priority-${task.priority}`}>{task.priority}</span>
                       <span className="followup-info"><strong>{task.title}</strong><small>{task.leadName ?? "No deal"} · {task.assigneeName}</small></span>
-                      <span className={`followup-time ${task.dueAt && task.dueAt < new Date().toISOString() ? "overdue" : ""}`}><Clock3 size={13} /> {task.dueAt ? formatDateTime(task.dueAt) : "No due date"}</span>
+                      <span className={`followup-time ${task.dueAt && task.dueAt < new Date().toISOString() ? "overdue" : ""}`}><Clock3 size={13} /> {task.dueAt ? formatDateTime(task.dueAt) : "No Due Date"}</span>
                       <ChevronRight className="followup-chevron" size={16} />
                     </button>
                   ))}
@@ -200,8 +200,8 @@ export default function ActionCenter() {
 
           <section className="panel recent-panel">
             <div className="panel-heading recent-heading">
-              <div><h2>Recent deals</h2><p>Latest activity across {data.teamWide ? "the team" : "your"} pipeline</p></div>
-              <button className="text-button" onClick={() => navigate("deals", "list", { scope: data.teamWide ? "everyone" : "mine" })}>View all deals <ArrowRight size={14} /></button>
+              <div><h2>Recent Deals</h2><p>Latest activity across {data.teamWide ? "the team" : "your"} pipeline</p></div>
+              <button className="text-button" onClick={() => navigate("deals", "list", { scope: data.teamWide ? "everyone" : "mine" })}>View All Deals <ArrowRight size={14} /></button>
             </div>
             <div className="table-scroll">
               <table className="lead-table">

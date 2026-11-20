@@ -170,13 +170,13 @@ export default function ListValuesPanel() {
           {listKey === "stage" && (
             <div className="pipelines-bar">
               <div className="scope-toggle" role="group" aria-label="Pipeline">
-                {pipelines.map((item) => <button key={item.id} type="button" className={item.id === pipeline?.id ? "is-active" : ""} aria-pressed={item.id === pipeline?.id} onClick={() => { setPipelineId(item.id); setEditing(null); }}>{item.name}{item.active ? "" : " (off)"}</button>)}
+                {pipelines.map((item) => <button key={item.id} type="button" className={item.id === pipeline?.id ? "is-active" : ""} aria-pressed={item.id === pipeline?.id} onClick={() => { setPipelineId(item.id); setEditing(null); }}>{item.name}{item.active ? "" : " (Off)"}</button>)}
               </div>
               <form className="values-add pipeline-new" onSubmit={addPipeline}><input aria-label="New pipeline name" value={newPipeline} onChange={(event) => setNewPipeline(event.target.value)} maxLength={80} placeholder="New pipeline name" required /><button className="button button-outline button-small" type="submit"><Plus size={13} /> Pipeline</button></form>
               {pipeline && !pipeline.isDefault && (
                 <span className="pipeline-actions">
                   <button type="button" className="text-button" onClick={() => { const name = window.prompt("Pipeline name", pipeline.name); if (name && name.trim() && name.trim() !== pipeline.name) void changePipeline({ name }, "Pipeline renamed"); }}>Rename</button>
-                  <button type="button" className="text-button" onClick={() => void changePipeline({ active: !pipeline.active }, pipeline.active ? `"${pipeline.name}" switched off: its board is hidden, its deals keep their stage` : `"${pipeline.name}" switched on`)}>{pipeline.active ? "Switch off" : "Switch on"}</button>
+                  <button type="button" className="text-button" onClick={() => void changePipeline({ active: !pipeline.active }, pipeline.active ? `"${pipeline.name}" switched off: its board is hidden, its deals keep their stage` : `"${pipeline.name}" switched on`)}>{pipeline.active ? "Switch Off" : "Switch On"}</button>
                 </span>
               )}
             </div>
@@ -187,12 +187,12 @@ export default function ListValuesPanel() {
           {listKey === "bd_action" && (
             <div className="values-stage-note">
               <p className="field-hint">Each BD action lands a deal in a pipeline stage; recording an action from a later stage moves the deal forward. An action with no stage counts as Contact Made.</p>
-              <button className="button button-outline button-small" onClick={() => setRecomputeOpen(true)}><RefreshCw size={13} /> Recompute stages from BD actions</button>
+              <button className="button button-outline button-small" onClick={() => setRecomputeOpen(true)}><RefreshCw size={13} /> Recompute Stages From BD Actions</button>
             </div>
           )}
           {!showList ? null : fixed
             ? <p className="field-hint values-fixed-note">This list holds one value: rename it to change it.</p>
-            : <form className="values-add" onSubmit={add}><input value={newValue} onChange={(event) => setNewValue(event.target.value)} maxLength={120} placeholder={`New ${listKeyLabels[listKey].toLowerCase()} value`} required /><button className="button button-primary button-small" type="submit"><Plus size={14} /> Add value</button></form>}
+            : <form className="values-add" onSubmit={add}><input value={newValue} onChange={(event) => setNewValue(event.target.value)} maxLength={120} placeholder={`New ${listKeyLabels[listKey].toLowerCase()} value`} required /><button className="button button-primary button-small" type="submit"><Plus size={14} /> Add Value</button></form>}
           <ErrorText message={error} />
           {!values && !error && <Loading />}
           {values && showList && (
@@ -237,11 +237,11 @@ export default function ListValuesPanel() {
         />
       )}
       {recomputeOpen && (
-        <Dialog title="Recompute stages from BD actions" eyebrow="PIPELINE" size="narrow" onClose={() => setRecomputeOpen(false)}>
+        <Dialog title="Recompute Stages From BD Actions" eyebrow="PIPELINE" size="narrow" onClose={() => setRecomputeOpen(false)}>
           <p className="dialog-description">Every deal is placed again in the stage of its BD action through the mapping above; a deal with no BD action goes to New Deal. Moves made by hand on the board are replaced. No timeline entries are written.</p>
           <div className="modal-actions">
             <button type="button" className="button button-outline" onClick={() => setRecomputeOpen(false)}>Cancel</button>
-            <button type="button" className="button button-primary" disabled={recomputing} onClick={() => void recompute()}>{recomputing ? "Working..." : "Recompute stages"}</button>
+            <button type="button" className="button button-primary" disabled={recomputing} onClick={() => void recompute()}>{recomputing ? "Working..." : "Recompute Stages"}</button>
           </div>
         </Dialog>
       )}

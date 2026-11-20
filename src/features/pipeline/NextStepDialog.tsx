@@ -54,7 +54,7 @@ export default function NextStepDialog({ lead, reason, onClose, onSaved }: { lea
   };
 
   return (
-    <Dialog title={`What's next for ${lead.clientName}?`} eyebrow="NEXT STEP" size="narrow" onClose={onClose}>
+    <Dialog title={`What's Next for ${lead.clientName}?`} eyebrow="NEXT STEP" size="narrow" onClose={onClose}>
       <form className="stack-form next-step-form" onSubmit={submit}>
         <p className="dialog-description">
           {reason}{" "}
@@ -67,9 +67,9 @@ export default function NextStepDialog({ lead, reason, onClose, onSaved }: { lea
             {stageFollowUpActivities.map((item) => <option key={item} value={item}>{item === "task" ? "Task" : activityTitles[item]}</option>)}
           </select>
         </Field>
-        <Field label="Next step" required><input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={200} required /></Field>
+        <Field label="Next Step" required><input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={200} required /></Field>
         <NaturalDateField label="Type the date" placeholder="tomorrow, next Tuesday at 2pm, in two weeks..." onResolve={(result, resolvedTime) => { setDate(result.date); setTime(resolvedTime); }} />
-        <Field label="Due date" required><input type="date" value={date} min={reference.today} onChange={(event) => setDate(event.target.value)} required /></Field>
+        <Field label="Due Date" required><input type="date" value={date} min={reference.today} onChange={(event) => setDate(event.target.value)} required /></Field>
         <Field label="Time" required><input type="time" value={time} onChange={(event) => setTime(event.target.value)} required /></Field>
         <Field label="Assigned to">
           <select value={assigneeId} onChange={(event) => setAssigneeId(event.target.value)}>
@@ -80,7 +80,7 @@ export default function NextStepDialog({ lead, reason, onClose, onSaved }: { lea
         <ErrorText message={error} />
         <div className="modal-actions">
           <button type="button" className="button button-outline" onClick={onClose}>Skip</button>
-          <button type="submit" className="button button-primary" disabled={busy}><CalendarCheck2 size={14} /> {busy ? "Saving..." : "Save next step"}</button>
+          <button type="submit" className="button button-primary" disabled={busy}><CalendarCheck2 size={14} /> {busy ? "Saving..." : "Save Next Step"}</button>
         </div>
       </form>
     </Dialog>

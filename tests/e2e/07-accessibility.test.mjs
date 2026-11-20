@@ -34,7 +34,7 @@ describe("Accessibility", () => {
 
   uiTest("sign-in screen", async () => {
     await page.goto();
-    await page.heading("Welcome back");
+    await page.heading("Welcome Back");
     await audit("sign-in");
     await page.signIn(admin);
   });

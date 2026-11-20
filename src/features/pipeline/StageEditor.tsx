@@ -59,7 +59,7 @@ function DeleteStageDialog({ stage, others, onClose, onDeleted }: { stage: Pipel
     <Dialog title={`Delete ${stage.value}?`} eyebrow="PIPELINE STAGE" size="narrow" onClose={onClose}>
       <form className="stack-form" onSubmit={submit}>
         <p className="dialog-description">The stage goes from everyone&apos;s board. Its deals, archived ones included, move to the stage you choose, with an entry on each deal&apos;s timeline. BD actions that led to it lead to that stage instead.</p>
-        <Field label="Move its deals to" required>
+        <Field label="Move Its Deals to" required>
           <select value={moveTo} onChange={(event) => setMoveTo(event.target.value)} required>
             {others.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
           </select>
@@ -67,7 +67,7 @@ function DeleteStageDialog({ stage, others, onClose, onDeleted }: { stage: Pipel
         <ErrorText message={error} />
         <div className="modal-actions">
           <button type="button" className="button button-outline" onClick={onClose}>Cancel</button>
-          <button type="submit" className="button button-danger" disabled={busy || !moveTo}>{busy ? "Deleting..." : "Delete stage"}</button>
+          <button type="submit" className="button button-danger" disabled={busy || !moveTo}>{busy ? "Deleting..." : "Delete Stage"}</button>
         </div>
       </form>
     </Dialog>

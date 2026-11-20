@@ -3,6 +3,7 @@ import { handleRouteError, jsonError, readJsonBody, requireSameOrigin } from "@/
 import { hasJobsKey } from "@/lib/jobs-key";
 import { runDigestJobs } from "@/features/notifications/digests";
 import { runScheduledOpportunities } from "@/features/opportunities/runner";
+import { archiveStaleLeads } from "@/features/opportunities/repository";
 import { runStalledReport } from "@/features/analytics/report-email";
 import { runMailboxWatch } from "@/features/gmail/watch";
 import { runKpiReports } from "@/features/reports/kpi-email";
@@ -24,8 +25,10 @@ export async function POST(request: Request) {
       const opportunities = await runScheduledOpportunities().catch((error: unknown) => { console.error("Scheduled lead search failed.", error instanceof Error ? error.message : error); return null; });
       const stalledReport = await runStalledReport().catch((error: unknown) => { console.error("Stalled-leads report failed.", error instanceof Error ? error.message : error); return null; });
       const kpiReports = await runKpiReports().catch((error: unknown) => { console.error("KPI report failed.", error instanceof Error ? error.message : error); return []; });
+      // Leads not relevant for longer than the days in List of Values move to the Archive (request of November 20, 2026).
+      const leadArchive = await archiveStaleLeads().catch((error: unknown) => { console.error("Lead archive failed.", error instanceof Error ? error.message : error); return null; });
       const mailboxWatch = await runMailboxWatch().catch((error: unknown) => { console.error("Mailbox watch failed.", error instanceof Error ? error.message : error); return null; });
-      return NextResponse.json({ ...digests, ran: [...digests.ran, ...(opportunities ? [{ job: "opportunities" as const, ...opportunities }] : []), ...(stalledReport ? [{ job: "stalled_report" as const, ...stalledReport }] : []), ...kpiReports, ...(mailboxWatch ? [{ job: "mailbox_watch" as const, ...mailboxWatch }] : [])] });
+      return NextResponse.json({ ...digests, ran: [...digests.ran, ...(opportunities ? [{ job: "opportunities" as const, ...opportunities }] : []), ...(stalledReport ? [{ job: "stalled_report" as const, ...stalledReport }] : []), ...kpiReports, ...(mailboxWatch ? [{ job: "mailbox_watch" as const, ...mailboxWatch }] : []), ...(leadArchive?.archived ? [{ job: "lead_archive" as const, ...leadArchive }] : [])] });
     }
     requireSameOrigin(request);
     const user = await getRequestUser();

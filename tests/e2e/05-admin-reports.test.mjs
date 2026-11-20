@@ -23,7 +23,7 @@ describe("Administration and reports", () => {
     const value = `Testville ${runId}`;
     const input = await page.wait(By.css("form.values-add input"));
     await input.sendKeys(value);
-    await page.clickButton("Add value", { global: true });
+    await page.clickButton("Add Value", { global: true });
     await page.toast(`Added "${value}" to City`);
     await page.wait(By.xpath(`//table//strong[normalize-space()=${xq(value)}]`));
   });
@@ -36,9 +36,9 @@ describe("Administration and reports", () => {
     await page.toast('"First Call" now lands deals in Qualified');
     await page.setValue(await page.wait(By.css('select[aria-label="Stage for First Call"]')), "Contact Made");
     await page.toast('"First Call" now lands deals in Contact Made');
-    await page.clickButton("Recompute stages from BD actions", { global: true });
-    await page.dialogTitle("Recompute stages from BD actions");
-    await page.clickButton("Recompute stages");
+    await page.clickButton("Recompute Stages From BD Actions", { global: true });
+    await page.dialogTitle("Recompute Stages From BD Actions");
+    await page.clickButton("Recompute Stages");
     await page.toast("placed again from their BD actions");
   });
 
@@ -46,11 +46,11 @@ describe("Administration and reports", () => {
     await page.nav("Settings");
     await page.heading("Settings");
     await page.fill("Admin is shown as", "Owner", { global: true });
-    await page.clickButton("Save settings", { global: true });
+    await page.clickButton("Save Settings", { global: true });
     await page.toast("Settings saved");
     await page.waitText(By.css(".profile-button small"), "Owner");
     await page.fill("Admin is shown as", "Admin", { global: true });
-    await page.clickButton("Save settings", { global: true });
+    await page.clickButton("Save Settings", { global: true });
     await page.toast("Settings saved");
     await page.waitText(By.css(".profile-button small"), "Admin");
   });
@@ -60,17 +60,17 @@ describe("Administration and reports", () => {
     assert.equal(await page.selectedText(await page.wait(By.css('select[aria-label="Rule 1 stage"]'))), "New Deal");
     assert.equal(await page.selectedText(await page.wait(By.css('select[aria-label="Rule 6 stage"]'))), "Negotiations started");
     assert.equal((await driver.findElements(By.css('select[aria-label="Rule 7 stage"]'))).length, 0, "six seeded rules before adding one");
-    await page.clickButton("Add rule", { global: true });
+    await page.clickButton("Add Rule", { global: true });
     await page.setValue(await page.wait(By.css('select[aria-label="Rule 7 status"]')), "Hot");
     await page.setValue(await page.wait(By.css('input[aria-label="Rule 7 days"]')), "3");
-    await page.clickButton("Save settings", { global: true });
+    await page.clickButton("Save Settings", { global: true });
     await page.toast("Settings saved");
     await driver.navigate().refresh();
     await page.heading("Settings");
     assert.equal(await page.selectedText(await page.wait(By.css('select[aria-label="Rule 7 status"]'))), "Hot");
     assert.equal(await (await page.wait(By.css('input[aria-label="Rule 7 days"]'))).getAttribute("value"), "3");
     await page.nav("Action Center");
-    await page.waitText(By.xpath('//section[contains(@class,"reminder-panel")][.//h2[normalize-space()="Needs attention"]]//p'), "7 rules by status, BD action, or stage");
+    await page.waitText(By.xpath('//section[contains(@class,"reminder-panel")][.//h2[normalize-space()="Needs Attention"]]//p'), "7 rules by status, BD action, or stage");
     await page.nav("Settings");
     await page.heading("Settings");
   });
@@ -79,7 +79,7 @@ describe("Administration and reports", () => {
     assert.equal(await page.selectedText(await page.wait(By.css('select[aria-label="Contact Made next step"]'))), "Call");
     await page.setValue(await page.wait(By.css('select[aria-label="Contact Made next step"]')), "Email");
     await page.setValue(await page.wait(By.css('input[aria-label="Contact Made business days"]')), "2");
-    await page.clickButton("Save settings", { global: true });
+    await page.clickButton("Save Settings", { global: true });
     await page.toast("Settings saved");
     await driver.navigate().refresh();
     await page.heading("Settings");
@@ -87,7 +87,7 @@ describe("Administration and reports", () => {
     assert.equal(await (await page.wait(By.css('input[aria-label="Contact Made business days"]'))).getAttribute("value"), "2");
     await page.setValue(await page.wait(By.css('select[aria-label="Contact Made next step"]')), "Call");
     await page.setValue(await page.wait(By.css('input[aria-label="Contact Made business days"]')), "1");
-    await page.clickButton("Save settings", { global: true });
+    await page.clickButton("Save Settings", { global: true });
     await page.toast("Settings saved");
   });
 
@@ -107,18 +107,18 @@ describe("Administration and reports", () => {
     // The reset form is part of the signed-out screen, so sign out before following the link.
     await page.signOut();
     await driver.get(link);
-    await page.heading("Choose a new password");
-    await page.fill("New password", admin.password, { global: true });
-    await page.fill("Confirm password", admin.password, { global: true });
-    await page.clickButton("Set password", { global: true });
-    await page.heading("Welcome back");
+    await page.heading("Choose a New Password");
+    await page.fill("New Password", admin.password, { global: true });
+    await page.fill("Confirm Password", admin.password, { global: true });
+    await page.clickButton("Set Password", { global: true });
+    await page.heading("Welcome Back");
     await page.signIn(admin);
     await page.nav("Settings");
     await page.heading("Settings");
   });
 
   uiTest("sends the daily digest on demand to the outbox and the bell", async () => {
-    await page.clickButton("Send me today's digest", { global: true });
+    await page.clickButton("Send Me Today's Digest", { global: true });
     await page.toast("Daily digest sent");
     await page.wait(By.xpath(`//table[contains(@class,"outbox-table")]//tr[.//strong[starts-with(normalize-space(.), "Your daily LeadTrailPro digest")]]`));
     const bell = await page.wait(By.css("button.notif-button"));
@@ -129,7 +129,7 @@ describe("Administration and reports", () => {
   });
 
   uiTest("sends the daily KPI report on demand to the outbox", async () => {
-    await page.clickButton("Send me the daily KPI report", { global: true });
+    await page.clickButton("Send Me the Daily KPI Report", { global: true });
     await page.toast("Daily KPI report sent");
     const row = await page.wait(By.xpath('//table[contains(@class,"outbox-table")]//tr[.//strong[starts-with(normalize-space(.), "LeadTrailPro KPI report (daily)")]]'));
     assert.ok((await row.getText()).includes(admin.email), "the KPI report is addressed to the administrator");
@@ -146,7 +146,7 @@ describe("Administration and reports", () => {
     await page.waitText(row, "Ready");
     const daily = await page.wait(By.css('input[aria-label="Adzuna daily budget"]'));
     await page.setValue(daily, "150");
-    await page.clickButton("Save settings", { global: true });
+    await page.clickButton("Save Settings", { global: true });
     await page.toast("Settings saved");
     await driver.navigate().refresh();
     await page.heading("Settings");
@@ -157,11 +157,11 @@ describe("Administration and reports", () => {
   uiTest("adds a holiday to the business calendar", async () => {
     const name = `Company holiday ${runId}`;
     const row = By.xpath(`//li[contains(@class,"holiday-row")][.//span[normalize-space()=${xq(name)}]]`);
-    await page.fill("Holiday date", "2026-12-24", { global: true });
-    await page.fill("Holiday name", name, { global: true });
-    await page.clickButton("Add holiday", { global: true });
+    await page.fill("Holiday Date", "2026-12-24", { global: true });
+    await page.fill("Holiday Name", name, { global: true });
+    await page.clickButton("Add Holiday", { global: true });
     await page.wait(row);
-    await page.clickButton("Save settings", { global: true });
+    await page.clickButton("Save Settings", { global: true });
     await page.toast("Settings saved");
     await driver.navigate().refresh();
     await page.heading("Settings");
@@ -171,13 +171,13 @@ describe("Administration and reports", () => {
   uiTest("creates a target template", async () => {
     await page.nav("Targets & Templates");
     await page.heading("Targets & Templates");
-    await page.clickButton("New template", { global: true });
-    await page.dialogTitle("New target template");
+    await page.clickButton("New Template", { global: true });
+    await page.dialogTitle("New Target Template");
     const name = `Ramp-up ${runId}`;
-    await page.fill("Template name", name);
+    await page.fill("Template Name", name);
     await page.fill("Stage", "Training");
     await page.fill("Deals per day", "3");
-    await page.clickButton("Save template");
+    await page.clickButton("Save Template");
     await page.toast("Template created");
     await page.wait(By.xpath(`//table//strong[normalize-space()=${xq(name)}]`));
   });
@@ -195,16 +195,16 @@ describe("Administration and reports", () => {
   });
 
   uiTest("analytics sections render the pipeline, stalled deals, and the leaderboard", async () => {
-    await page.wait(By.xpath("//h2[normalize-space()='Pipeline now']"));
-    await page.wait(By.xpath("//h2[normalize-space()='Stalled deals']"));
+    await page.wait(By.xpath("//h2[normalize-space()='Pipeline Now']"));
+    await page.wait(By.xpath("//h2[normalize-space()='Stalled Deals']"));
     await page.wait(By.xpath("//h2[normalize-space()='Leaderboard']"));
-    await page.wait(By.xpath("//section[contains(@class,'team-board')]//table//th[normalize-space()='Client replies waiting']"));
+    await page.wait(By.xpath("//section[contains(@class,'team-board')]//table//th[normalize-space()='Client Replies Waiting']"));
     await page.click(By.xpath("//div[contains(@class,'report-periods')]//button[normalize-space()='Last 30 days']"), { global: true });
-    await page.wait(By.xpath("//h2[normalize-space()='Status over time']"));
+    await page.wait(By.xpath("//h2[normalize-space()='Status Over Time']"));
     // PIPE-12: the stage sections.
     await page.wait(By.xpath("//h3[normalize-space()='By stage']"));
-    await page.wait(By.xpath("//h2[normalize-space()='Stage over time']"));
-    await page.wait(By.xpath("//h2[normalize-space()='Time in stage']"));
+    await page.wait(By.xpath("//h2[normalize-space()='Stage Over Time']"));
+    await page.wait(By.xpath("//h2[normalize-space()='Time in Stage']"));
   });
 
   uiTest("reports filter by stage and export to PDF and Excel", async () => {
@@ -230,23 +230,23 @@ describe("Administration and reports", () => {
   uiTest("creates an API token, sees it once, and revokes it", async () => {
     await page.nav("API Access");
     await page.heading("API Access");
-    await page.clickButton("Create token", { global: true });
+    await page.clickButton("Create Token", { global: true });
     const name = `Token ${runId}`;
-    await page.fill("Token name", name);
-    await page.clickButton("Create token");
+    await page.fill("Token Name", name);
+    await page.clickButton("Create Token");
     const code = await page.wait(By.css('code[aria-label="API token"]'));
     assert.match(await code.getText(), /^ltp_[A-Za-z0-9_-]{43}$/);
     await page.clickButton("Done");
     await page.wait(By.xpath(`//table//strong[normalize-space()=${xq(name)}]`));
     await page.click(By.css(`button[aria-label="Revoke ${name}"]`), { global: true });
-    await page.clickButton("Revoke token");
+    await page.clickButton("Revoke Token");
     await page.toast(`Token "${name}" revoked`);
   });
 
   uiTest("opens the tracker import page", async () => {
     await page.nav("Tracker Import");
     await page.heading("Tracker Import");
-    await page.wait(By.xpath("//h2[normalize-space()='Sales Managers in the sheet']"));
+    await page.wait(By.xpath("//h2[normalize-space()='Sales Managers in the Sheet']"));
     await page.wait(By.xpath("//button[normalize-space()='Preview']"));
   });
 
@@ -256,12 +256,12 @@ describe("Administration and reports", () => {
     await page.heading("Settings");
     const card = '//section[@aria-label="Releases"]';
     await page.wait(By.xpath(`${card}//strong[normalize-space()="Automatic deploys are on."]`));
-    await page.clickButton("Pause deploys", { global: true });
+    await page.clickButton("Pause Deploys", { global: true });
     await page.toast("Deploys paused: pushes wait until you deploy");
     assert.match(await (await page.wait(By.xpath(`${card}//p[contains(@class,"releases-paused")]`))).getText(), /Deploys are paused since .* by Ada Admin\. Pushed changes wait until someone deploys\./);
     // No deployer runs in the test stack, so there is nothing to ask.
-    assert.equal(await (await page.wait(By.xpath(`${card}//button[normalize-space()="Deploy now"]`))).isEnabled(), false);
-    await page.clickButton("Resume automatic deploys", { global: true });
+    assert.equal(await (await page.wait(By.xpath(`${card}//button[normalize-space()="Deploy Now"]`))).isEnabled(), false);
+    await page.clickButton("Resume Automatic Deploys", { global: true });
     await page.toast("Automatic deploys resumed");
     await page.wait(By.xpath(`${card}//strong[normalize-space()="Automatic deploys are on."]`));
   });

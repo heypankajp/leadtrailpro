@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { asOptionalId, asString, handleRouteError, jsonError, readJsonBody, requireSameOrigin } from "@/lib/http";
-import { getOpportunity, markNotRelevant, restoreOpportunity, updateOpportunityDetails } from "@/features/opportunities/repository";
+import { archiveOpportunity, getOpportunity, markNotRelevant, restoreOpportunity, unarchiveOpportunity, updateOpportunityDetails } from "@/features/opportunities/repository";
 import { parseLeadEntry } from "@/features/opportunities/model";
 import { requirePrivilege, requireUser } from "@/features/users/session";
 
@@ -36,6 +36,9 @@ export async function PATCH(request: Request, context: RouteContext) {
       return NextResponse.json({ opportunity: await markNotRelevant(id, reasonId, asString(body.note, 500), user) });
     }
     if (body.action === "restore") return NextResponse.json({ opportunity: await restoreOpportunity(id, user) });
+    // The Archive (request of November 20, 2026): move a lead there by hand, or bring it back to the inbox.
+    if (body.action === "archive") return NextResponse.json({ opportunity: await archiveOpportunity(id, user) });
+    if (body.action === "unarchive") return NextResponse.json({ opportunity: await unarchiveOpportunity(id, user) });
     // The lead's fields (request of November 19, 2026).
     if (body.action === "edit") {
       const { input, errors } = parseLeadEntry(body);

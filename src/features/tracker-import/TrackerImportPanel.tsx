@@ -79,7 +79,7 @@ export default function TrackerImportPanel() {
       {status && (
         <div className="import-layout">
           <form className="panel settings-panel import-form" onSubmit={submit}>
-            <div className="panel-heading"><div><h2>Upload the export</h2><p>Google Sheets → File → Download → Microsoft Excel (.xlsx). Only the <code>{sheet || defaultTrackerSheet}</code> sheet is read.</p></div></div>
+            <div className="panel-heading"><div><h2>Upload the Export</h2><p>Google Sheets → File → Download → Microsoft Excel (.xlsx). Only the <code>{sheet || defaultTrackerSheet}</code> sheet is read.</p></div></div>
             {needsBaseline && (
               <div className="form-note note-warning"><AlertTriangle size={14} /> <span>{status.unstampedEntries.toLocaleString()} timeline entries come from an import made before row fingerprints existed. For this one run, also upload the <strong>baseline workbook</strong> (the export that import was run from) so those entries can be matched to their rows; later runs need no baseline.</span></div>
             )}
@@ -87,23 +87,23 @@ export default function TrackerImportPanel() {
               <div className="form-note note-warning"><AlertTriangle size={14} /> <span>{refusal.message} Tick &ldquo;Apply anyway&rdquo; below to run it again.</span></div>
             )}
             <div className="lead-form settings-form">
-              <Field label="Tracker export (.xlsx)" required wide>
+              <Field label="Tracker Export (.xlsx)" required wide>
                 <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { setFile(event.target.files?.[0] ?? null); setPreviewedKey(""); setRefusal(null); }} required />
               </Field>
               {needsBaseline && (
-                <Field label="Baseline workbook (.xlsx), once" hint="The export the earlier import was run from." wide>
+                <Field label="Baseline Workbook (.xlsx), Once" hint="The export the earlier import was run from." wide>
                   <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { setBaseline(event.target.files?.[0] ?? null); setPreviewedKey(""); }} />
                 </Field>
               )}
               <Field label="Sheet"><input value={sheet} maxLength={120} onChange={(event) => { setSheet(event.target.value); setPreviewedKey(""); }} required /></Field>
-              <Field label="Companies whose rows name no Sales Manager" hint="In the inbox, salespeople assign them to themselves; the deal is created with the sheet's history at that moment.">
+              <Field label="Companies Whose Rows Name No Sales Manager" hint="In the inbox, salespeople assign them to themselves; the deal is created with the sheet's history at that moment.">
                 <select value={defaultOwner} onChange={(event) => { setDefaultOwner(event.target.value); setPreviewedKey(""); }}>
                   <option value="">Leads inbox (recommended)</option>
                   <option value={String(me.id)}>{me.name} (you)</option>
                   {reference.users.filter((person) => person.active && person.role !== "recruiter" && person.id !== me.id).map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
                 </select>
               </Field>
-              <Field label="Sales Manager accounts" hint={ownersHint} wide>
+              <Field label="Sales Manager Accounts" hint={ownersHint} wide>
                 <textarea rows={5} value={ownersText} onChange={(event) => { setOwners(event.target.value); setPreviewedKey(""); }} />
               </Field>
               <label className="checklist-item"><input type="checkbox" checked={keepActionNames} onChange={(event) => { setKeepActionNames(event.target.checked); setPreviewedKey(""); }} /> Keep the tracker&apos;s &ldquo;Cold Call&rdquo; and &ldquo;Cold Email&rdquo; instead of &ldquo;First Call&rdquo; and &ldquo;First Email&rdquo;</label>
@@ -113,8 +113,8 @@ export default function TrackerImportPanel() {
               <details className="import-section">
                 <summary>Other sheets (optional)</summary>
                 <div className="rule-row">
-                  <Field label="Archive sheet" hint="For example ArchiveSales: one archived deal per company not already present."><input value={archiveSheet} maxLength={120} onChange={(event) => { setArchiveSheet(event.target.value); setPreviewedKey(""); }} /></Field>
-                  <Field label="Clients sheet" hint="For example Clients: companies listed there are set to status Client."><input value={clientsSheet} maxLength={120} onChange={(event) => { setClientsSheet(event.target.value); setPreviewedKey(""); }} /></Field>
+                  <Field label="Archive Sheet" hint="For example ArchiveSales: one archived deal per company not already present."><input value={archiveSheet} maxLength={120} onChange={(event) => { setArchiveSheet(event.target.value); setPreviewedKey(""); }} /></Field>
+                  <Field label="Clients Sheet" hint="For example Clients: companies listed there are set to status Client."><input value={clientsSheet} maxLength={120} onChange={(event) => { setClientsSheet(event.target.value); setPreviewedKey(""); }} /></Field>
                 </div>
               </details>
               <div className="import-actions">
@@ -128,7 +128,7 @@ export default function TrackerImportPanel() {
           <section className="panel settings-panel">
             <div className="panel-heading"><div><h2>Status</h2><p>What the database already holds from the tracker.</p></div></div>
             <div className="form-note"><FileSpreadsheet size={14} /> <span>{status.importedLeads.toLocaleString()} deals with {status.importedEntries.toLocaleString()} timeline entries from <code>{status.sheetName}</code>{status.pooledCards > 0 && <>, and {status.pooledCards.toLocaleString()} {status.pooledCards === 1 ? "company" : "companies"} without a Sales Manager waiting in the leads inbox</>}. Last applied import: {status.lastImport ? `${formatDateTime(status.lastImport.at)} by ${status.lastImport.actorName ?? "unknown"}` : "none yet"}.</span></div>
-            <div className="panel-heading"><div><h2>Sales Managers in the sheet</h2><p>Names in the sheet and the accounts their deals go to.</p></div></div>
+            <div className="panel-heading"><div><h2>Sales Managers in the Sheet</h2><p>Names in the sheet and the accounts their deals go to.</p></div></div>
             <ul className="manager-list">
               {status.managers.map((manager) => (
                 <li key={manager.name}>
@@ -138,7 +138,7 @@ export default function TrackerImportPanel() {
                 </li>
               ))}
             </ul>
-            <div className="panel-heading"><div><h2>Previous runs</h2><p>Previews and applied imports, newest first.</p></div></div>
+            <div className="panel-heading"><div><h2>Previous Runs</h2><p>Previews and applied imports, newest first.</p></div></div>
             {status.history.length === 0 ? <p className="field-hint">No runs yet.</p> : (
               <ul className="import-history">
                 {status.history.map((run) => (
@@ -149,21 +149,21 @@ export default function TrackerImportPanel() {
                 ))}
               </ul>
             )}
-            <div className="panel-heading"><div><h2>From another machine</h2><p>The same import without the browser.</p></div></div>
+            <div className="panel-heading"><div><h2>From Another Machine</h2><p>The same import without the browser.</p></div></div>
             <pre className="token-usage">{`npm run remote -- import "docs/Sales Leads 2026.xlsx"          # preview\nnpm run remote -- import "docs/Sales Leads 2026.xlsx" --apply\n# needs LTP_URL and LTP_TOKEN (Administration → API access) in .env.remote.local`}</pre>
           </section>
         </div>
       )}
 
       {confirming && report && file && (
-        <Dialog title="Apply the import?" eyebrow="TRACKER IMPORT" onClose={() => setConfirming(false)} size="narrow">
+        <Dialog title="Apply the Import?" eyebrow="TRACKER IMPORT" onClose={() => setConfirming(false)} size="narrow">
           <p className="dialog-description">
             {file.name} will be applied as previewed: {report.counts["deals created (new companies)"] ?? 0} new deals, {report.counts["deals updated"] ?? 0} deals updated, {report.counts["companies with no Sales Manager placed in the leads inbox"] ?? 0} companies to the leads inbox, {(report.counts["timeline entries added (new rows)"] ?? 0) + (report.counts["timeline entries written"] ?? 0)} timeline entries added, {report.counts["timeline entries updated (edited rows)"] ?? 0} updated.
             {report.appEdited.length > 0 && ` ${report.appEdited.length} of the deals were changed in the app since the previous import; the sheet's values will replace those fields.`}
           </p>
           <div className="modal-actions">
             <button type="button" className="button button-outline" onClick={() => setConfirming(false)}>Cancel</button>
-            <button type="button" className="button button-primary" disabled={busy !== null} onClick={() => void run("apply")}>{busy === "apply" ? "Importing..." : "Apply import"}</button>
+            <button type="button" className="button button-primary" disabled={busy !== null} onClick={() => void run("apply")}>{busy === "apply" ? "Importing..." : "Apply Import"}</button>
           </div>
         </Dialog>
       )}
@@ -201,7 +201,7 @@ function ReportView({ report }: { report: TrackerImportReport }) {
         <span>{report.seconds.toFixed(1)} s</span>
         <span>previous import {report.previousImportAt ?? "none"}</span>
         <span>{report.warningCount} warning{report.warningCount === 1 ? "" : "s"}</span>
-        <button type="button" className="text-button" onClick={download}><Download size={13} /> Download report</button>
+        <button type="button" className="text-button" onClick={download}><Download size={13} /> Download Report</button>
       </div>
       <div className="import-counts">
         {orderedCounts(report.counts).map(([key, value]) => <div className="import-count" key={key}><strong>{value.toLocaleString()}</strong><span>{key}</span></div>)}

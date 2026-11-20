@@ -90,7 +90,7 @@ export default function NotificationsMenu() {
       </button>
       {open && (
         <div className="menu-dropdown notif-dropdown" role="menu" aria-label="Notifications">
-          <div className="notif-head"><strong>Notifications</strong>{unread > 0 && <button className="text-button" onClick={() => void markAll()}><CheckCheck size={13} /> Mark all read</button>}</div>
+          <div className="notif-head"><strong>Notifications</strong>{unread > 0 && <button className="text-button" onClick={() => void markAll()}><CheckCheck size={13} /> Mark All Read</button>}</div>
           {items === null ? <p className="notif-empty">Loading...</p> : items.length === 0 ? <p className="notif-empty"><Inbox size={16} /> You are all caught up.</p> : (
             <ul className="notif-list">
               {items.map((item) => (

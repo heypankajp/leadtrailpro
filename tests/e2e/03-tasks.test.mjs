@@ -65,7 +65,7 @@ describe("Tasks and reminders", () => {
     await editor.sendKeys("Please review before the call @Ada");
     await page.click(By.xpath('.//div[contains(@class,"mention-menu")]//button[.//strong[normalize-space()="Ada Admin"]]'));
     assert.match(await editor.getAttribute("value"), /@Ada Admin $/, "the picker completes the name");
-    await page.clickButton("Post comment");
+    await page.clickButton("Post Comment");
     await page.toast("Comment posted");
     const comment = By.xpath('//section[contains(@class,"task-comments")]//article[contains(@class,"message")][.//p[contains(normalize-space(.), "Please review before the call")]]');
     await page.wait(comment);
@@ -74,7 +74,7 @@ describe("Tasks and reminders", () => {
     const editBox = await page.wait(By.css('.task-comments textarea[aria-label="Edit comment"]'));
     await editBox.clear();
     await editBox.sendKeys("Reviewed, **all good**.");
-    await page.clickButton("Save changes");
+    await page.clickButton("Save Changes");
     await page.toast("Comment updated");
     await page.wait(By.xpath('//section[contains(@class,"task-comments")]//article[.//strong[normalize-space()="all good"]][.//small[contains(normalize-space(.), "edited")]]'));
     await page.click(By.xpath('//section[contains(@class,"task-comments")]//article//button[normalize-space()="Remove"]'));

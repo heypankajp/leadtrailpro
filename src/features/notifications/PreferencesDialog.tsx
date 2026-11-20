@@ -32,7 +32,7 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
   };
 
   return (
-    <Dialog title="Notification preferences" eyebrow="YOUR ACCOUNT" onClose={onClose} size="narrow">
+    <Dialog title="Notification Preferences" eyebrow="YOUR ACCOUNT" onClose={onClose} size="narrow">
       <form className="stack-form prefs-form" onSubmit={submit}>
         <p className="dialog-description">In-app notifications are always on. Choose what is also sent by email{reference.mailerConfigured ? "" : " (email delivery is not configured yet, so these only apply once it is)"}.</p>
         <label className="checklist-item"><input type="checkbox" checked={prefs.dailyDigest} onChange={() => toggle("dailyDigest")} /><span>Daily digest of overdue and upcoming follow-ups, tasks, and yesterday&apos;s activity</span></label>
@@ -41,7 +41,7 @@ export default function PreferencesDialog({ onClose }: { onClose: () => void }) 
         <ErrorText message={error} />
         <div className="modal-actions">
           <button type="button" className="button button-outline" onClick={onClose}>Cancel</button>
-          <button type="submit" className="button button-primary" disabled={busy}><Save size={15} /> {busy ? "Saving..." : "Save preferences"}</button>
+          <button type="submit" className="button button-primary" disabled={busy}><Save size={15} /> {busy ? "Saving..." : "Save Preferences"}</button>
         </div>
       </form>
     </Dialog>

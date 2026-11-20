@@ -2,10 +2,11 @@ import { contactKey } from "@/features/contacts/model";
 import { applyDealContactChanges, linkNewDeal } from "@/features/contacts/sync";
 import { summarizeTodoCounts, todoMoveSummary, type TodoCounts } from "./todo-model";
 import { getDatabasePool, affectedRows, fromSqlDateTime, insertId, toSqlDateTime, withTransaction, type Queryable } from "@/lib/db";
-import { addDaysYmd, todayYmd } from "@/lib/dates";
+import { todayYmd } from "@/lib/dates";
 import { HttpError } from "@/lib/http";
 import { recordAudit, diffRecords } from "@/features/audit/repository";
-import { reasonListFor, statusLabel } from "@/features/list-values/model";
+import { listNumber, reasonListFor, statusLabel } from "@/features/list-values/model";
+import { canPeerReview, needsPeerApproval } from "./queue-rules";
 import { resolveStageForAction, stageAdvances, type StageValue } from "@/features/pipeline/model";
 import { assertListValue, getListValue } from "@/features/list-values/repository";
 import { notifyUsers } from "@/features/notifications/repository";
@@ -161,6 +162,7 @@ export async function listLeads(filters: LeadFilters, viewer: UserAccount): Prom
   const clauses: string[] = ["l.record_state = ?"];
   const params: unknown[] = [filters.state];
   if (filters.mine) { clauses.push("l.owner_id = ?"); params.push(viewer.id); }
+  if (filters.favorites) { clauses.push("EXISTS (SELECT 1 FROM deal_favorites fav WHERE fav.lead_id = l.id AND fav.user_id = ?)"); params.push(viewer.id); }
   if (filters.ownerId) { clauses.push("l.owner_id = ?"); params.push(filters.ownerId); }
   if (filters.statusCode) { clauses.push("st.code = ?"); params.push(filters.statusCode); }
   if (filters.todo) clauses.push("l.todo_list_id IS NOT NULL");
@@ -535,10 +537,22 @@ const duplicateWording: Record<MatchedOn | "email", string> = {
 /** `organizationId`: the deal is added from that organization's (or one of its people's) page, so its other deals are not duplicates. */
 export type CreateLeadOptions = { allowSimilar?: boolean; opportunityId?: number | null; organizationId?: number | null; personId?: number | null };
 
-/** A first-contact date earlier than yesterday needs Admin approval unless the creator can approve queued leads. */
-export function isHistoricalFirstContact(firstContactDate: string): boolean {
-  return firstContactDate < addDaysYmd(todayYmd(), -1);
+/**
+ * A first-contact date older than the working days set in List of Values (Queue Deals Older Than (Working Days), 1 to start;
+ * weekends and the holidays in Settings skipped, so on a Monday Friday is "yesterday") waits for a colleague's approval
+ * (requests of November 20, 2026).
+ */
+export async function isHistoricalFirstContact(firstContactDate: string, db: Queryable = getDatabasePool()): Promise<boolean> {
+  const { rows: setting } = await db.query("SELECT value, is_active AS active FROM list_values WHERE list_key = 'queue_working_days' ORDER BY sort_order, id");
+  const { rows: holidayRows } = await db.query("SELECT value_json AS value FROM app_settings WHERE setting_key = 'holidays'");
+  const raw = (holidayRows as { value: unknown }[])[0]?.value;
+  const list = typeof raw === "string" ? (JSON.parse(raw) as unknown) : raw;
+  const holidays = Array.isArray(list) ? list.map((item) => (item && typeof item === "object" ? String((item as { date?: unknown }).date ?? "") : String(item))).filter(Boolean) : [];
+  return needsPeerApproval(firstContactDate, todayYmd(), listNumber("queue_working_days", setting as { value: string; active: boolean }[]), holidays);
 }
+
+/** Who may approve or reject a queued deal (peer approval): anyone who may review or edit deals, but not its owner or creator. */
+export const mayReviewQueued = (user: UserAccount) => hasPrivilege(user, "review_queued") || hasPrivilege(user, "edit_leads");
 
 export async function createLead(input: LeadInput, actor: UserAccount, ownerId: number | null, options: CreateLeadOptions = {}): Promise<LeadSummary> {
   return withTransaction(async (connection) => {
@@ -570,7 +584,8 @@ export async function createLead(input: LeadInput, actor: UserAccount, ownerId: 
     }
     // A card from the sales tracker carries the company's real first-contact date (§10.9), so the approval queue for historical dates does not apply.
     const fromTracker = options.opportunityId ? await opportunityHasDraft(connection, options.opportunityId) : false;
-    const queued = isHistoricalFirstContact(input.firstContactDate) && !hasPrivilege(actor, "review_queued") && !fromTracker;
+    // Peer approval (request of November 20, 2026): every back-dated deal waits for a colleague, an administrator's too.
+    const queued = !fromTracker && (await isHistoricalFirstContact(input.firstContactDate, connection));
     // PIPE-02: a chosen stage, else the stage of the BD action, else New Deal.
     const stageId = input.stageId ?? (await stageForAction(connection, input.bdActionId))?.id ?? null;
     // A client added outright (+ Client) gets today as its Closed Date unless one is given (request of November 19, 2026).
@@ -618,11 +633,23 @@ export async function createLead(input: LeadInput, actor: UserAccount, ownerId: 
     }
     await recordAudit(connection, { actorId: actor.id, action: queued ? "lead.queued" : "lead.created", entityType: "lead", entityId: id, after: leadAuditView(lead), details: `${actor.name} created ${lead.clientName}${duplicate ? ` (saved although it resembles ${duplicate.lead.clientName}, deal #${duplicate.lead.id})` : ""}` }, now);
     if (queued) {
-      const reviewers = await listUsersWithPrivilege("review_queued", connection);
+      // Everyone who may approve it: colleagues who may review or edit deals, not the creator or the owner.
+      const reviewers = [...await listUsersWithPrivilege("review_queued", connection), ...await listUsersWithPrivilege("edit_leads", connection)]
+        .filter((user, index, all) => user.active && all.findIndex((item) => item.id === user.id) === index && canPeerReview({ id: user.id, mayReview: true }, { ownerId: lead.ownerId, createdById: actor.id }));
       await notifyUsers(connection, { userIds: reviewers.map((user) => user.id), actorId: actor.id, type: "queued_lead", title: `Queued deal awaiting approval: ${lead.clientName}`, body: `${actor.name} created it with first contact on ${input.firstContactDate}.`, leadId: id });
     }
     return lead;
   });
+}
+
+/** Marks or unmarks a deal as the person's favourite (request of November 20, 2026); each person's favourites are their own. */
+export async function setDealFavorite(leadId: number, favorite: boolean, actor: UserAccount): Promise<{ favorite: boolean }> {
+  const lead = await getLead(leadId);
+  if (!lead) throw new HttpError(404, "Deal not found.");
+  const db = getDatabasePool();
+  if (favorite) await db.query("INSERT INTO deal_favorites (user_id, lead_id) VALUES (?, ?) ON CONFLICT DO NOTHING", [actor.id, leadId]);
+  else await db.query("DELETE FROM deal_favorites WHERE user_id = ? AND lead_id = ?", [actor.id, leadId]);
+  return { favorite };
 }
 
 export async function updateLead(id: number, changes: Partial<LeadInput>, actor: UserAccount): Promise<LeadSummary> {
@@ -762,6 +789,9 @@ export async function reviewQueuedLead(id: number, approve: boolean, comment: st
     const lead = await getLead(id, connection);
     if (!lead) throw new HttpError(404, "Deal not found.");
     if (lead.recordState !== "queued") throw new HttpError(400, "Only queued deals can be approved or rejected.");
+    if (!canPeerReview({ id: actor.id, mayReview: mayReviewQueued(actor) }, lead)) {
+      throw new HttpError(403, actor.id === lead.ownerId || actor.id === lead.createdById ? "A colleague must approve or reject this deal: not its owner or the person who created it." : "You do not have permission to approve or reject queued deals.");
+    }
     const now = new Date();
     const state: LeadRecordState = approve ? "active" : "archived";
     const reason = approve ? null : `Rejected${comment ? `: ${comment}` : ""}`;

@@ -7,7 +7,7 @@ import type { TodoCounts } from "./todo-model";
 import type { QuickFilterKey } from "./quick-filters";
 
 export type LeadQuery = Partial<{
-  state: LeadRecordState; q: string; mine: boolean; statusCode: string; statusId: number; statusReasonId: number; leadTypeId: number; leadCategoryId: number;
+  state: LeadRecordState; q: string; mine: boolean; favorites: boolean; statusCode: string; statusId: number; statusReasonId: number; leadTypeId: number; leadCategoryId: number;
   companySizeId: number; cityId: number; ownerId: number; clientResponseId: number; bdActionId: number; stageId: number; todoListId: number; todo: boolean;
   firstContactFrom: string; firstContactTo: string; followUpFrom: string; followUpTo: string; contractSignedFrom: string; contractSignedTo: string;
   sort: LeadSortKey; direction: "asc" | "desc"; page: number; pageSize: number;
@@ -41,6 +41,7 @@ export const reviewLead = (id: number, approve: boolean, comment: string) => api
 /** `archiveReasonId`: the Archival reason, required when archiving (review of November 18, 2026); `reason` is the notes. */
 export const setLeadState = (id: number, state: "active" | "archived", reason: string, archiveReasonId: number | null = null) => api<{ lead: LeadSummary }>(`/api/leads/${id}/state`, { method: "POST", json: { state, reason, archiveReasonId } });
 /** TODO-02: put the lead on a To Do list, move it to another, or take it off (null). */
+export const setDealFavorite = (id: number, favorite: boolean) => api<{ favorite: boolean }>(`/api/leads/${id}/favorite`, { method: "PUT", json: { favorite } });
 export const setLeadTodo = (id: number, listId: number | null) => api<{ lead: LeadSummary }>(`/api/leads/${id}/todo`, { method: "PATCH", json: { listId } });
 export const fetchTodoCounts = () => api<{ counts: TodoCounts }>("/api/leads/todo").then((result) => result.counts);
 export const bulkLeads = (ids: number[], action: "archive" | "restore" | "reassign" | "stage" | "todo", options: { ownerId?: number; reason?: string; stageId?: number; todoListId?: number | null; archiveReasonId?: number } = {}) =>

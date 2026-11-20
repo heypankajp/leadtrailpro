@@ -60,7 +60,7 @@ export default function StageBar({ lead, canMove, onMoved }: Props) {
                 onClick={() => setTarget({ id: stage.id, value: stage.value })}
               >
                 <span className="stage-step-index">{index + 1}</span>
-                <span className="stage-step-label">{stage.value}{stage.active ? "" : " (inactive)"}</span>
+                <span className="stage-step-label">{stage.value}{stage.active ? "" : " (Inactive)"}</span>
               </button>
             </li>
           );

@@ -31,9 +31,9 @@ describe("To Do lists (TODO-*)", () => {
     await page.waitLeadRow(name);
     await page.click(By.css(`input[aria-label=${JSON.stringify(`Select ${name}`)}]`), { global: true });
     await page.clickButton("Move to To Do", { global: true });
-    await page.dialogTitle("Move deal to a To Do list");
-    await page.setValue(await page.wait(By.css('section[role="dialog"] select[aria-label="To Do list"]')), "To be visited");
-    await page.clickButton("Move deals");
+    await page.dialogTitle("Move Deal to a To Do List");
+    await page.setValue(await page.wait(By.css('section[role="dialog"] select[aria-label="To Do List"]')), "To be visited");
+    await page.clickButton("Move Deals");
     await page.toast("1 deal moved to To Do: To be visited");
     assert.match(await (await page.wait(badge(name))).getText(), /^To Do: To be visited/);
   });
@@ -63,7 +63,7 @@ describe("To Do lists (TODO-*)", () => {
     await page.click(By.xpath('.//nav[contains(@class,"values-nav")]//button[starts-with(normalize-space(.), "To Do List")]'), { global: true });
     const input = await page.wait(By.css("form.values-add input"));
     await input.sendKeys(second);
-    await page.clickButton("Add value", { global: true });
+    await page.clickButton("Add Value", { global: true });
     await page.toast(`Added "${second}" to To Do List`);
 
     await page.deals("all");
@@ -71,9 +71,9 @@ describe("To Do lists (TODO-*)", () => {
     await page.waitLeadRow(name);
     await page.click(By.css(`input[aria-label=${JSON.stringify(`Select ${name}`)}]`), { global: true });
     await page.clickButton("Move to To Do", { global: true });
-    await page.dialogTitle("Move deal to a To Do list");
-    await page.setValue(await page.wait(By.css('section[role="dialog"] select[aria-label="To Do list"]')), second);
-    await page.clickButton("Move deals");
+    await page.dialogTitle("Move Deal to a To Do List");
+    await page.setValue(await page.wait(By.css('section[role="dialog"] select[aria-label="To Do List"]')), second);
+    await page.clickButton("Move Deals");
     await page.toast(`1 deal moved to To Do: ${second}`);
     assert.match(await (await page.wait(badge(name))).getText(), new RegExp(`^To Do: ${second}`));
 

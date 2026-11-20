@@ -101,95 +101,95 @@ export default function AuthScreen({ checking, needsSetup, googleSignIn, initial
         <span className="eyebrow">LEADTRAILPRO WORKSPACE</span>
         {checking ? (
           <>
-            <h1>Checking your session</h1>
+            <h1>Checking Your Session</h1>
             <p>Connecting securely to your LeadTrailPro workspace.</p>
             <div className="login-loading">Verifying session...</div>
           </>
         ) : mode === "login" && googleSignIn ? (
           <>
-            <h1>Welcome back</h1>
+            <h1>Welcome Back</h1>
             <p>Sign in with your Google account to access your deals and team workspace.</p>
             {message && <p className="login-message" role="status">{message}</p>}
             <ErrorText message={error} />
-            <a className="button button-primary login-google" href="/api/auth/google">Sign in with Google</a>
+            <a className="button button-primary login-google" href="/api/auth/google">Sign In With Google</a>
             {needsSetup && (
               <div className="login-links">
-                <button className="login-bootstrap-link" onClick={() => { setMode("setup"); setError(""); setMessage(""); }}>First time setup? Create the initial administrator account</button>
+                <button className="login-bootstrap-link" onClick={() => { setMode("setup"); setError(""); setMessage(""); }}>First Time Setup? Create the Initial Administrator Account</button>
               </div>
             )}
           </>
         ) : mode === "login" ? (
           <>
-            <h1>Welcome back</h1>
+            <h1>Welcome Back</h1>
             <p>Sign in to access your deals and team workspace.</p>
             <form className="login-form" onSubmit={submitLogin}>
-              <label>Email address<input name="email" type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} required maxLength={254} autoFocus /></label>
+              <label>Email Address<input name="email" type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} required maxLength={254} autoFocus /></label>
               <label>Password<input name="password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required maxLength={200} /></label>
               {message && <p className="login-message" role="status">{message}</p>}
               <ErrorText message={error} />
-              <button className="button button-primary" type="submit" disabled={busy}>{busy ? "Signing in..." : "Sign in"}</button>
+              <button className="button button-primary" type="submit" disabled={busy}>{busy ? "Signing in..." : "Sign In"}</button>
             </form>
             <div className="login-links">
-              <button className="login-bootstrap-link" onClick={() => { setMode("forgot"); setError(""); setMessage(""); }}>Forgot your password?</button>
-              {needsSetup && <button className="login-bootstrap-link" onClick={() => { setMode("setup"); setError(""); setMessage(""); }}>First time setup? Create the initial administrator account</button>}
+              <button className="login-bootstrap-link" onClick={() => { setMode("forgot"); setError(""); setMessage(""); }}>Forgot Your Password?</button>
+              {needsSetup && <button className="login-bootstrap-link" onClick={() => { setMode("setup"); setError(""); setMessage(""); }}>First Time Setup? Create the Initial Administrator Account</button>}
             </div>
           </>
         ) : mode === "two-factor" ? (
           <>
-            <h1>Enter your sign-in code</h1>
+            <h1>Enter Your Sign-In Code</h1>
             <p>{message || "Check your email for a 6-digit code."}</p>
             <form className="login-form" onSubmit={submitCode}>
               <label>6-digit code<input className="code-input" inputMode="numeric" pattern="[0-9]{6}" autoComplete="one-time-code" value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} required autoFocus /></label>
               <ErrorText message={error} />
-              <button className="button button-primary" type="submit" disabled={busy || code.length !== 6}>{busy ? "Verifying..." : "Verify and sign in"}</button>
+              <button className="button button-primary" type="submit" disabled={busy || code.length !== 6}>{busy ? "Verifying..." : "Verify and Sign In"}</button>
             </form>
-            <div className="login-links"><button className="login-bootstrap-link" onClick={back}><ArrowLeft size={13} /> Back to sign in (sends a new code)</button></div>
+            <div className="login-links"><button className="login-bootstrap-link" onClick={back}><ArrowLeft size={13} /> Back to Sign In (Sends a New Code)</button></div>
           </>
         ) : mode === "forgot" ? (
           <>
-            <h1>Reset your password</h1>
+            <h1>Reset Your Password</h1>
             <p>Enter the email you sign in with. If it belongs to an active account, we will email a reset link.</p>
             <form className="login-form" onSubmit={submitForgot}>
-              <label>Email address<input type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} required maxLength={254} autoFocus /></label>
+              <label>Email Address<input type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} required maxLength={254} autoFocus /></label>
               {message && <p className="login-message" role="status">{message}</p>}
               <ErrorText message={error} />
-              <button className="button button-primary" type="submit" disabled={busy}>{busy ? "Sending..." : "Send reset link"}</button>
+              <button className="button button-primary" type="submit" disabled={busy}>{busy ? "Sending..." : "Send Reset Link"}</button>
             </form>
-            <div className="login-links"><button className="login-bootstrap-link" onClick={back}><ArrowLeft size={13} /> Back to sign in</button></div>
+            <div className="login-links"><button className="login-bootstrap-link" onClick={back}><ArrowLeft size={13} /> Back to Sign In</button></div>
           </>
         ) : mode === "reset" ? (
           <>
-            <h1>Choose a new password</h1>
+            <h1>Choose a New Password</h1>
             <p>At least 12 characters. Your other sessions will be signed out.</p>
             <form className="login-form" onSubmit={submitReset}>
-              <label>New password<input type="password" autoComplete="new-password" minLength={12} maxLength={200} value={password} onChange={(event) => setPassword(event.target.value)} required autoFocus /></label>
-              <label>Confirm password<input type="password" autoComplete="new-password" minLength={12} maxLength={200} value={confirm} onChange={(event) => setConfirm(event.target.value)} required /></label>
+              <label>New Password<input type="password" autoComplete="new-password" minLength={12} maxLength={200} value={password} onChange={(event) => setPassword(event.target.value)} required autoFocus /></label>
+              <label>Confirm Password<input type="password" autoComplete="new-password" minLength={12} maxLength={200} value={confirm} onChange={(event) => setConfirm(event.target.value)} required /></label>
               <ErrorText message={error} />
-              <button className="button button-primary" type="submit" disabled={busy}>{busy ? "Saving..." : "Set password"}</button>
+              <button className="button button-primary" type="submit" disabled={busy}>{busy ? "Saving..." : "Set Password"}</button>
             </form>
-            <div className="login-links"><button className="login-bootstrap-link" onClick={back}><ArrowLeft size={13} /> Back to sign in</button></div>
+            <div className="login-links"><button className="login-bootstrap-link" onClick={back}><ArrowLeft size={13} /> Back to Sign In</button></div>
           </>
         ) : (
           <>
-            <h1>Create the first administrator</h1>
+            <h1>Create the First Administrator</h1>
             <p>Use the USER_MANAGEMENT_KEY from .env.local. This option disappears once the first account exists.</p>
             <form className="user-create-form" onSubmit={submitSetup}>
               <div className="user-form-grid">
-                <label className="user-form-wide">User-management key
+                <label className="user-form-wide">User-Management Key
                   <span className="user-key-input-wrap">
                     <input type={showKey ? "text" : "password"} autoComplete="off" value={setup.key} onChange={(event) => setSetup({ ...setup, key: event.target.value })} required autoFocus />
                     <button className="user-key-visibility" type="button" aria-label={showKey ? "Hide key" : "Show key"} aria-pressed={showKey} onClick={() => setShowKey((visible) => !visible)}>{showKey ? <EyeOff size={15} /> : <Eye size={15} />}</button>
                   </span>
                 </label>
-                <label>First name<input value={setup.firstName} onChange={(event) => setSetup({ ...setup, firstName: event.target.value })} autoComplete="given-name" required maxLength={80} /></label>
-                <label>Last name<input value={setup.lastName} onChange={(event) => setSetup({ ...setup, lastName: event.target.value })} autoComplete="family-name" required maxLength={80} /></label>
+                <label>First Name<input value={setup.firstName} onChange={(event) => setSetup({ ...setup, firstName: event.target.value })} autoComplete="given-name" required maxLength={80} /></label>
+                <label>Last Name<input value={setup.lastName} onChange={(event) => setSetup({ ...setup, lastName: event.target.value })} autoComplete="family-name" required maxLength={80} /></label>
                 <label>Email<input type="email" value={setup.email} onChange={(event) => setSetup({ ...setup, email: event.target.value })} autoComplete="email" required maxLength={254} /></label>
                 <label>Phone<input type="tel" value={setup.phone} onChange={(event) => setSetup({ ...setup, phone: event.target.value })} autoComplete="tel" maxLength={40} /></label>
                 <label>Password<input type="password" value={setup.password} onChange={(event) => setSetup({ ...setup, password: event.target.value })} autoComplete="new-password" minLength={12} maxLength={200} required /><small>Minimum 12 characters.</small></label>
-                <label>Confirm password<input type="password" value={setup.confirm} onChange={(event) => setSetup({ ...setup, confirm: event.target.value })} autoComplete="new-password" minLength={12} maxLength={200} required /></label>
+                <label>Confirm Password<input type="password" value={setup.confirm} onChange={(event) => setSetup({ ...setup, confirm: event.target.value })} autoComplete="new-password" minLength={12} maxLength={200} required /></label>
               </div>
               <ErrorText message={error} />
-              <div className="user-dialog-actions"><button className="button button-outline" type="button" onClick={back}>Back</button><button className="button button-primary" type="submit" disabled={busy}>{busy ? "Creating..." : "Create administrator"}</button></div>
+              <div className="user-dialog-actions"><button className="button button-outline" type="button" onClick={back}>Back</button><button className="button button-primary" type="submit" disabled={busy}>{busy ? "Creating..." : "Create Administrator"}</button></div>
             </form>
           </>
         )}

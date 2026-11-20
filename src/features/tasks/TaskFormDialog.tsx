@@ -440,7 +440,7 @@ export default function TaskFormDialog({ task, leadId, leadName, defaultAssignee
                   </li>
                 ))}
               </ul>
-                      <button type="button" className="button button-outline button-small" onClick={() => fileInput.current?.click()}><Paperclip size={13} /> Choose files</button>
+                      <button type="button" className="button button-outline button-small" onClick={() => fileInput.current?.click()}><Paperclip size={13} /> Choose Files</button>
                       <small className="field-hint">PDF, Word, Excel, PowerPoint, images or text, up to 15 MB each.</small>
                     </div>
                   )}

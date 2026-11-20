@@ -1,7 +1,8 @@
 "use client";
 
 import { Fragment } from "react";
-import { Clock3, ListChecks, MailOpen, MoreHorizontal } from "lucide-react";
+import { Check, Clock3, ListChecks, MailOpen, MoreHorizontal, X } from "lucide-react";
+import { canPeerReview } from "./queue-rules";
 import { formatDate, relativeTime } from "@/lib/format";
 import { Avatar, StatusPill } from "@/features/shell/components";
 import { replyWaiting } from "@/features/gmail/watch-model";
@@ -15,6 +16,8 @@ export type LeadTableProps = {
   view: string;
   canSelect: boolean;
   canReview: boolean;
+  /** Peer approval: the viewer cannot approve a deal they own or created. */
+  viewerId?: number;
   canRestore: boolean;
   onToggle: (id: number) => void;
   onToggleAll: (checked: boolean) => void;
@@ -25,7 +28,7 @@ export type LeadTableProps = {
   letterAnchors?: string;
 };
 
-export default function LeadTable({ leads, selected, today, view, canSelect, canReview, canRestore, onToggle, onToggleAll, onOpen, onReview, onRestore, letterAnchors }: LeadTableProps) {
+export default function LeadTable({ leads, selected, today, view, canSelect, canReview, viewerId, canRestore, onToggle, onToggleAll, onOpen, onReview, onRestore, letterAnchors }: LeadTableProps) {
   const columns = (canSelect ? 9 : 8) + (view === "archive" ? 1 : 0);
   const heading = (index: number) => {
     if (!letterAnchors) return null;
@@ -81,8 +84,13 @@ export default function LeadTable({ leads, selected, today, view, canSelect, can
                 <td><span className="muted-cell">{formatDate(lead.firstContactDate)}</span></td>
                 <td><span className="owner-cell"><span className="mini-avatar">{lead.ownerName.split(" ").map((part) => part[0]).join("").slice(0, 2)}</span>{lead.ownerName}</span></td>
                 <td>
-                  {view === "queued" && canReview ? (
-                    <span className="review-actions"><button onClick={() => onReview(lead, true)}>Approve</button><button onClick={() => onReview(lead, false)}>Reject</button></span>
+                  {view === "queued" && canReview && viewerId !== undefined && !canPeerReview({ id: viewerId, mayReview: true }, lead) ? (
+                    <span className="muted-cell review-wait" title="A colleague approves it: not its owner or the person who created it.">Waiting for a colleague</span>
+                  ) : view === "queued" && canReview ? (
+                    <span className="review-actions">
+                      <button type="button" className="button button-small review-approve" onClick={() => onReview(lead, true)} aria-label={`Approve ${lead.clientName}`}><Check size={13} /> Approve</button>
+                      <button type="button" className="button button-small review-reject" onClick={() => onReview(lead, false)} aria-label={`Reject ${lead.clientName}`}><X size={13} /> Reject</button>
+                    </span>
                   ) : view === "archive" && canRestore ? (
                     <button className="restore-button" onClick={() => onRestore(lead)}>Restore</button>
                   ) : (

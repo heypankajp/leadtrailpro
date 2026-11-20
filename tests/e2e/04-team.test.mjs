@@ -21,16 +21,16 @@ describe("Team, roles, and deal ownership", () => {
   uiTest("admin creates a sales manager account", async () => {
     await page.nav("User Management");
     await page.heading("User Management");
-    await page.clickButton("Add user", { global: true });
-    await page.dialogTitle("Add user");
-    await page.fill("First name", manager.firstName);
-    await page.fill("Last name", manager.lastName);
+    await page.clickButton("Add User", { global: true });
+    await page.dialogTitle("Add User");
+    await page.fill("First Name", manager.firstName);
+    await page.fill("Last Name", manager.lastName);
     await page.fill("Email", manager.email);
     await page.fill("Phone", manager.phone);
     await page.fill("Role", "Sales Manager");
-    await page.fill("Initial password", manager.password);
-    await page.fill("Confirm password", manager.password);
-    await page.clickButton("Create user");
+    await page.fill("Initial Password", manager.password);
+    await page.fill("Confirm Password", manager.password);
+    await page.clickButton("Create User");
     await page.toast(`Account created for ${manager.name}`);
     await page.wait(By.xpath(`//table//tr[.//strong[normalize-space()=${xq(manager.name)}]]`));
   });
@@ -70,8 +70,8 @@ describe("Team, roles, and deal ownership", () => {
     await page.click(By.css(`button[aria-label="Edit ${manager.name}"]`), { global: true });
     await page.dialogTitle(`Edit ${manager.name}`);
     await page.click(By.xpath('.//label[contains(normalize-space(.), "Automatic daily sign-out")]/input'));
-    await page.fill("Sign out every day at", cutoff);
-    await page.clickButton("Save changes");
+    await page.fill("Sign Out Every Day at", cutoff);
+    await page.clickButton("Save Changes");
     await page.toast(`${manager.name} updated`);
     await page.wait(By.xpath(`//table//tr[.//strong[normalize-space()=${xq(manager.name)}]]//span[contains(@class,"badge") and starts-with(normalize-space(.), "On")]`));
 
@@ -92,7 +92,8 @@ describe("Team, roles, and deal ownership", () => {
     assert.ok(labels.includes("Pipeline") && labels.includes("Leads") && labels.includes("Contacts"), "sales managers see Pipeline, Leads and Contacts");
     assert.ok(!labels.includes("User Management"), "sales managers cannot manage users");
     await page.deals("board");
-    assert.equal((await driver.findElements(By.css('.view-switch button[aria-label="Queued for approval"]'))).length, 0, "sales managers cannot review queued deals");
+    // Peer approval (request of November 20, 2026): sales managers see the queue and approve their colleagues' deals.
+    assert.equal((await driver.findElements(By.css('.view-switch button[aria-label="Queued for approval"]'))).length, 1, "sales managers review queued deals");
   });
 
   uiTest("the assigned task appears as a notification for the sales manager", async () => {
@@ -100,7 +101,7 @@ describe("Team, roles, and deal ownership", () => {
     await driver.wait(async () => /\d+ unread/.test(await bell.getAttribute("aria-label")), 15000, "unread badge");
     await bell.click();
     await page.wait(By.xpath(`//div[contains(@class,"notif-dropdown")]//strong[normalize-space()=${xq(`Task assigned: Welcome call ${runId}`)}]`));
-    await page.clickButton("Mark all read", { global: true });
+    await page.clickButton("Mark All Read", { global: true });
     await driver.wait(async () => (await bell.getAttribute("aria-label")) === "Notifications", 15000, "badge cleared");
     await page.click(By.css("button.notif-button"), { global: true });
   });
@@ -108,10 +109,10 @@ describe("Team, roles, and deal ownership", () => {
   uiTest("a historical first-contact date queues the deal for approval", async () => {
     await page.openAddDeal();
     await page.fill("Company", queuedLead);
-    await page.fill("First contact date", isoDate(-10));
-    await page.wait(By.xpath('//small[contains(@class,"field-hint") and contains(normalize-space(.), "queued for Admin approval")]'));
+    await page.fill("First Contact Date", isoDate(-10));
+    await page.wait(By.xpath('//small[contains(@class,"field-hint") and contains(normalize-space(.), "waits in Queued for approval until a colleague approves it")]'));
     await page.saveDeal();
-    await page.toast(`${queuedLead} saved and queued for Admin approval`);
+    await page.toast(`${queuedLead} saved and queued: a colleague must approve it`);
     await page.eyebrow("QUEUED FOR APPROVAL");
     await page.closeDialog();
   });
@@ -136,10 +137,10 @@ describe("Team, roles, and deal ownership", () => {
     await page.toast(`${transferLead} added to the pipeline`);
     await page.dialogTitle(transferLead);
     await page.clickButton("Transfer");
-    await page.dialogTitle("Transfer deal");
+    await page.dialogTitle("Transfer Deal");
     await page.click(By.xpath(`.//article[contains(@class,"user-directory-row")][.//strong[normalize-space()=${xq(manager.name)}]]//button`));
     await page.dialogTitle(`Transfer to ${manager.name}`);
-    await page.clickButton("Transfer deal");
+    await page.clickButton("Transfer Deal");
     await page.toast(`transferred to ${manager.name}`);
     await page.waitText(By.css(".detail-owner strong"), manager.name);
     await page.tab("Collaboration");
@@ -166,9 +167,9 @@ describe("Team, roles, and deal ownership", () => {
     await page.heading("User Management");
     await page.click(By.css(`button[aria-label="Terminate ${manager.name}"]`), { global: true });
     await page.dialogTitle(`Terminate ${manager.name}`);
-    await page.fill("Reassign deals and tasks to", `${admin.name} (me)`);
-    await page.fill("Reason (optional)", "Left the company.");
-    await page.clickButton("Terminate and reassign");
+    await page.fill("Reassign Deals and Tasks to", `${admin.name} (me)`);
+    await page.fill("Reason (Optional)", "Left the company.");
+    await page.clickButton("Terminate and Reassign");
     const message = await page.toast(`${manager.name} terminated`);
     assert.match(message, /2 deal\(s\)/, "the approved deal and the transferred deal move to the successor");
     await page.wait(By.xpath(`//table//tr[.//strong[normalize-space()=${xq(manager.name)}]][.//span[normalize-space()="Terminated"]]`));
@@ -176,10 +177,10 @@ describe("Team, roles, and deal ownership", () => {
 
   uiTest("a terminated account can no longer sign in", async () => {
     await page.signOut();
-    await page.fill("Email address", manager.email, { global: true });
+    await page.fill("Email Address", manager.email, { global: true });
     await page.fill("Password", manager.password, { global: true });
-    await page.clickButton("Sign in", { global: true });
+    await page.clickButton("Sign In", { global: true });
     assert.ok((await page.alertText()).length > 0);
-    await page.heading("Welcome back");
+    await page.heading("Welcome Back");
   });
 });

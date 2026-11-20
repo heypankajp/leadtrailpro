@@ -16,7 +16,7 @@ export default function TripTable({ trips, today, onOpen, onDelete }: {
     <div className="table-scroll">
       <table className="lead-table trip-table">
         <thead>
-          <tr><th>DATE</th><th>SALES TRIP</th><th>SALESPERSON</th><th>COMPANIES</th><th title="Deals on a To Do trip; companies on a planner trip (its shortlist, or every company found)">STOPS</th>{onDelete && <th><span className="sr-only">Delete</span></th>}</tr>
+          <tr><th>TRIP DATE</th><th>SALES TRIP</th><th>SALESPERSON</th><th>COMPANIES</th><th title="Deals on a To Do trip; companies on a planner trip (its shortlist, or every company found)">STOPS</th>{onDelete && <th><span className="sr-only">Delete</span></th>}</tr>
         </thead>
         <tbody>
           {trips.map((trip) => (

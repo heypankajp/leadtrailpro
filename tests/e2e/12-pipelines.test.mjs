@@ -38,7 +38,7 @@ describe("Several pipelines", () => {
     await page.toast(`Pipeline "${pipeline}" added with its first stage, New`);
     await page.wait(By.xpath('//table[contains(@class,"values-table")]//tr[.//*[normalize-space()="New"]]'));
     await (await page.wait(By.css('form.values-add:not(.pipeline-new) input'))).sendKeys("Qualified");
-    await page.clickButton("Add value", { global: true });
+    await page.clickButton("Add Value", { global: true });
     await page.toast('Added "Qualified" to Pipeline Stage');
     assert.equal((await driver.findElements(By.xpath('//table[contains(@class,"values-table")]//tbody/tr'))).length, 2, "the list shows this pipeline's two stages only");
   });
@@ -65,7 +65,7 @@ describe("Several pipelines", () => {
     assert.deepEqual(await page.boardStages(), ["New", "Qualified"]);
     await page.moveCard(deal, "Qualified");
     await page.toast(`${deal} moved to Qualified`);
-    await page.dialogTitle(`What's next for ${deal}?`);
+    await page.dialogTitle(`What's Next for ${deal}?`);
     await page.clickButton("Skip");
     await page.wait(cardIn("Qualified", deal));
   });

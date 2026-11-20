@@ -62,6 +62,8 @@ export type PipelineFilters = {
   followUpTo: string | null;
   /** PD-30: a ready-made or data cleanup filter; Lost and Won bring their closed deals onto the board. */
   quick: QuickFilterKey | null;
+  /** Only the viewer's favourite deals, whoever owns them (request of November 20, 2026). */
+  favorites: boolean;
 };
 
 export function parsePipelineFilters(params: URLSearchParams): PipelineFilters {
@@ -83,6 +85,7 @@ export function parsePipelineFilters(params: URLSearchParams): PipelineFilters {
     column: id("column"),
     ...parsePipelineDates(params),
     quick: isQuickFilterKey(params.get("quick")) ? (params.get("quick") as QuickFilterKey) : null,
+    favorites: params.get("favorites") === "1" || params.get("favorites") === "true",
   };
 }
 
@@ -117,6 +120,8 @@ export type PipelineCard = {
   quietDays: number;
   quietLimit: number;
   quiet: boolean;
+  /** The viewer marked this deal as a favourite (request of November 20, 2026). */
+  favorite: boolean;
 };
 
 /** `valueTotal`: the sum of the values of every deal in the stage (not only the cards loaded), 0 when none has a value. */

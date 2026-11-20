@@ -28,16 +28,16 @@ describe("Contacts first", () => {
     await page.nav("Contacts");
     await page.wait(By.css('div[aria-label="Contacts list"]'));
     await page.clickButton("Contact", { global: true });
-    await page.dialogTitle("Add contact");
+    await page.dialogTitle("Add Contact");
     // The organization comes first: the name is looked up among its contacts.
     await page.fill("Company", organization);
     await page.fill("Name", person);
     await page.fill("Email(s)", `adam.${runId}@northern.example`);
     await page.fill("Phone", "+1 645 697 5476");
-    await page.clickButton("Save contact");
+    await page.clickButton("Save Contact");
     // PD-17: the organization is new, so it is created only after the confirmation.
     await page.waitText(By.css(".confirm-new-note"), "is not a company yet");
-    await page.clickButton("Create company and save");
+    await page.clickButton("Create Company and Save");
     await page.toast(`${person} added`);
     await page.dialogTitle(person);
     await page.eyebrow("CONTACT");
@@ -47,10 +47,10 @@ describe("Contacts first", () => {
 
   uiTest("a deal is started from the contact: the form carries it, and the deal links back to it", async () => {
     await page.clickButton("Deal");
-    await page.dialogTitle("Add deal");
+    await page.dialogTitle("Add Deal");
     assert.equal(await (await page.control("Company")).getAttribute("value"), organization);
     assert.equal(await (await page.control("Contact")).getAttribute("value"), person);
-    assert.equal(await (await page.control("Contact number")).getAttribute("value"), "+1 645 697 5476");
+    assert.equal(await (await page.control("Contact Number")).getAttribute("value"), "+1 645 697 5476");
     await page.saveDeal();
     await page.toast(`${organization} added to the pipeline`);
     await page.eyebrow("DEAL");
@@ -64,7 +64,7 @@ describe("Contacts first", () => {
     await page.wait(onContact('//summary[contains(normalize-space(.), "Contacts (1)")]'));
     await page.wait(onContact(`//button[contains(@class,"contact-name") and normalize-space()=${xq(person)}]`));
     await page.clickButton("Deal");
-    await page.dialogTitle("Add deal");
+    await page.dialogTitle("Add Deal");
     assert.equal(await (await page.control("Company")).getAttribute("value"), organization);
     await page.fill("Position(s)", "Second site: forklift operators");
     await page.saveDeal();
@@ -79,7 +79,7 @@ describe("Contacts first", () => {
     await page.clickButton("Edit");
     await page.dialogTitle(`Edit ${organization}`);
     await page.fill("Address", "500 Lakeshore Rd, Oakville");
-    await page.clickButton("Save changes");
+    await page.clickButton("Save Changes");
     await page.toast("Company updated");
     await page.click(By.css(".contact-page .contact-deal-row"), { global: true });
     await page.eyebrow("DEAL");
@@ -93,9 +93,9 @@ describe("Contacts first", () => {
     await page.nav("Contacts");
     await page.click(By.xpath('.//div[@aria-label="Contacts list"]/button[normalize-space()="Companies"]'), { global: true });
     await page.clickButton("Company", { global: true });
-    await page.dialogTitle("Add company");
+    await page.dialogTitle("Add Company");
     await page.fill("Name", spare);
-    await page.clickButton("Save company");
+    await page.clickButton("Save Company");
     await page.toast(`${spare} added`);
     await page.eyebrow("COMPANY");
     await page.dialogTitle(spare);
@@ -103,7 +103,7 @@ describe("Contacts first", () => {
     await page.dialogTitle(`Remove ${spare}?`);
     await page.clickButton("Remove company");
     await page.toast(`${spare} removed`);
-    await (await page.wait(By.css('input[aria-label="Search companies"]'))).sendKeys(spare);
+    await (await page.wait(By.css('input[aria-label="Search Companies"]'))).sendKeys(spare);
     await page.wait(By.xpath('//table[contains(@class,"contacts-table")]//td[contains(normalize-space(.), "No companies match this search.")]'));
   });
 
@@ -111,16 +111,16 @@ describe("Contacts first", () => {
   uiTest("a note is written on a contact who has no deal yet", async () => {
     await page.click(By.xpath('.//div[@aria-label="Contacts list"]/button[normalize-space()="Contacts"]'), { global: true });
     await page.clickButton("Contact", { global: true });
-    await page.dialogTitle("Add contact");
+    await page.dialogTitle("Add Contact");
     await page.fill("Company", `Trade Fair Leads ${runId}`);
     await page.fill("Name", newcomer);
-    await page.clickButton("Save contact");
-    await page.clickButton("Create company and save");
+    await page.clickButton("Save Contact");
+    await page.clickButton("Create Company and Save");
     await page.toast(`${newcomer} added`);
     await page.eyebrow("CONTACT");
     await page.clickButton("Add note");
     await page.fill("Note", "Met at the trade fair. Wants a call in January.");
-    await page.clickButton("Save note");
+    await page.clickButton("Save Note");
     await page.toast("Note saved");
     await page.wait(onContact('//article[contains(@class,"timeline-entry")]//div[contains(@class,"timeline-body")][contains(normalize-space(.), "trade fair")]'));
   });
@@ -129,7 +129,7 @@ describe("Contacts first", () => {
     await page.clickButton("Edit");
     await page.dialogTitle(`Edit ${newcomer}`);
     await page.fill("Company", organization);
-    await page.clickButton("Save changes");
+    await page.clickButton("Save Changes");
     await page.toast("Contact updated");
     await page.wait(onContact(`//button[contains(@class,"contact-name") and normalize-space()=${xq(organization)}]`));
   });
@@ -138,9 +138,9 @@ describe("Contacts first", () => {
     await page.nav("Contacts");
     await page.click(By.xpath('.//div[@aria-label="Contacts list"]/button[normalize-space()="Companies"]'), { global: true });
     await page.clickButton("Company", { global: true });
-    await page.dialogTitle("Add company");
+    await page.dialogTitle("Add Company");
     await page.fill("Name", duplicate);
-    await page.clickButton("Save company");
+    await page.clickButton("Save Company");
     await page.toast(`${duplicate} added`);
     await page.eyebrow("COMPANY");
     await page.clickButton("Log call");
@@ -148,18 +148,18 @@ describe("Contacts first", () => {
     await page.clickButton("Save call");
     await page.toast("Activity recorded");
     await page.click(By.xpath('.//div[contains(@class,"side-actions")]/button[normalize-space()="Contact"]'));
-    await page.dialogTitle("Add contact");
+    await page.dialogTitle("Add Contact");
     await page.fill("Name", "Elvis Park");
-    await page.clickButton("Save contact");
+    await page.clickButton("Save Contact");
     await page.toast("Elvis Park added");
     // Open the real organization from the duplicate's person list is not possible, so go through the list.
     await page.nav("Contacts");
     await page.click(By.xpath('.//div[@aria-label="Contacts list"]/button[normalize-space()="Companies"]'), { global: true });
-    await (await page.wait(By.css('input[aria-label="Search companies"]'))).sendKeys(organization);
+    await (await page.wait(By.css('input[aria-label="Search Companies"]'))).sendKeys(organization);
     await page.click(By.xpath(`//table[contains(@class,"contacts-table")]//tr[.//strong[normalize-space()=${xq(organization)}]]//button[contains(@class,"client-cell")]`), { global: true });
     await page.dialogTitle(organization);
     await page.clickButton("Merge");
-    await page.dialogTitle(`Merge a duplicate into ${organization}`);
+    await page.dialogTitle(`Merge a Duplicate Into ${organization}`);
     await page.fill("The duplicate company", duplicate.slice(0, 12));
     await page.click(By.xpath(`.//div[contains(@class,"merge-matches")]//button[.//strong[normalize-space()=${xq(duplicate)}]]`));
     await page.clickButton("Merge");
@@ -168,7 +168,7 @@ describe("Contacts first", () => {
     await page.wait(onContact('//article[contains(@class,"timeline-entry")]//strong[normalize-space()="Reception gave the HR manager\'s name"]'));
     await page.nav("Contacts");
     await page.click(By.xpath('.//div[@aria-label="Contacts list"]/button[normalize-space()="Companies"]'), { global: true });
-    await (await page.wait(By.css('input[aria-label="Search companies"]'))).sendKeys(duplicate);
+    await (await page.wait(By.css('input[aria-label="Search Companies"]'))).sendKeys(duplicate);
     await page.wait(By.xpath('//table[contains(@class,"contacts-table")]//td[contains(normalize-space(.), "No companies match this search.")]'));
   });
 

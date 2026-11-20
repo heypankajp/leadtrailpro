@@ -23,20 +23,20 @@ describe("Sales trip planner", () => {
     // A lead whose website domain matches a stub company, so the Action column can find it.
     await page.openAddDeal();
     await page.fill("Company", `${company} ${runId}`);
-    await page.fill("Company website", "https://www.northgatepackaging.example/");
+    await page.fill("Company Website", "https://www.northgatepackaging.example/");
     await page.saveDeal();
     await page.toast("added to the pipeline");
     await page.closeDialog();
 
     await page.nav("Sales Trip Planner");
     await page.heading("Sales Trip Planner");
-    await page.fill("Trip title", tripTitle);
+    await page.fill("Trip Title", tripTitle);
     await page.fill("Address", "Mississauga, ON");
-    await page.fill("Radius type", "Kilometres");
+    await page.fill("Radius Type", "Kilometres");
     await page.fill("Radius (km)", "25");
-    await page.fill("Business type", "Any");
-    await page.fill("Number of results", "10");
-    await page.clickButton("Search companies");
+    await page.fill("Business Type", "Any");
+    await page.fill("Number of Results", "10");
+    await page.clickButton("Search Companies");
     await page.toast("companies found");
     await page.heading(tripTitle);
     const row = await page.wait(By.xpath(`//table[contains(@class,"trip-table")]//tr[.//strong[normalize-space()=${xq(company)}]]`));
@@ -48,9 +48,9 @@ describe("Sales trip planner", () => {
 
   uiTest("the hiring count opens the job listings", async () => {
     await page.click(By.css(`button[aria-label="Job listings for ${company}"]`), { global: true });
-    await page.dialogTitle(`Job listings: ${company}`);
+    await page.dialogTitle(`Job Listings: ${company}`);
     await page.wait(By.xpath('//section[@role="dialog"]//strong[normalize-space()="Packaging Line Operator"]'));
-    assert.match(await (await page.wait(By.xpath('//section[@role="dialog"]//a[contains(normalize-space(.), "View job")]'))).getAttribute("href"), /^https:\/\/jobs\.example\//);
+    assert.match(await (await page.wait(By.xpath('//section[@role="dialog"]//a[contains(normalize-space(.), "View Job")]'))).getAttribute("href"), /^https:\/\/jobs\.example\//);
     await page.closeDialog();
   });
 

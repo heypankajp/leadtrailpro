@@ -73,7 +73,7 @@ export default function LeadEmails({ leadId, addresses, attachments }: { leadId:
           {connected
             ? <><span className="chip-value"><Mail size={13} /> {status.connectedEmail}</span><button className="button button-outline button-small" onClick={() => void disconnect()}><Unplug size={14} /> Disconnect Gmail</button></>
             : <a className="button button-primary button-small" href={gmailConnectUrl}><Mail size={14} /> Connect Gmail</a>}
-          {connected && <button className="button button-primary button-small" onClick={startCompose}><Send size={14} /> Send email</button>}
+          {connected && <button className="button button-primary button-small" onClick={startCompose}><Send size={14} /> Send Email</button>}
           {status.allMailboxes && <small className="field-hint">You see messages from every connected mailbox.</small>}
         </div>
       )}
@@ -141,7 +141,7 @@ function ComposeDialog({ leadId, initial, attachments, onClose, onSent }: { lead
     }
   };
   return (
-    <Dialog title={form.threadId ? "Reply" : "Send email"} eyebrow="FROM YOUR MAILBOX" onClose={onClose} size="wide">
+    <Dialog title={form.threadId ? "Reply" : "Send Email"} eyebrow="FROM YOUR MAILBOX" onClose={onClose} size="wide">
       <form className="lead-form" onSubmit={submit}>
         <Field label="To" required wide hint="Separate several addresses with commas."><input value={form.to} onChange={set("to")} required placeholder="name@company.com" /></Field>
         <Field label="Cc" wide><input value={form.cc} onChange={set("cc")} placeholder="Optional" /></Field>

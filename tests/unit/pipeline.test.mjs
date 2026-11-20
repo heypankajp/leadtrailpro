@@ -51,11 +51,13 @@ describe("pipeline cards (PIPE-04/06)", () => {
     assert.deepEqual([e, d, c, a, b].sort(compareCards).map((card) => card.id), [2, 1, 3, 5, 4]);
   });
   // Since PD-23 / PD-24 the filters also carry the grouping, the Show more column and the date filter.
-  const plainExtras = { groupBy: "stage", column: null, firstContactFrom: null, firstContactTo: null, followUpFrom: null, followUpTo: null, quick: null };
+  const plainExtras = { groupBy: "stage", column: null, firstContactFrom: null, firstContactTo: null, followUpFrom: null, followUpTo: null, quick: null, favorites: false };
   test("filters parse the scope, ids, text, and the show-more window", () => {
     assert.deepEqual(parsePipelineFilters(new URLSearchParams("scope=team&leadTypeId=3&ownerId=7&statusId=2&q=%20acme%20&stageId=4&offset=50")), { scope: "team", leadTypeId: 3, ownerId: 7, statusId: 2, q: "acme", stageId: 4, pipelineId: null, offset: 50, ...plainExtras });
     assert.deepEqual(parsePipelineFilters(new URLSearchParams("scope=other&leadTypeId=x&offset=-5")), { scope: "mine", leadTypeId: null, ownerId: null, statusId: null, q: "", stageId: null, pipelineId: null, offset: 0, ...plainExtras });
     assert.equal(parsePipelineFilters(new URLSearchParams("pipelineId=2")).pipelineId, 2);
+    // The top heart (request of November 20, 2026): only the viewer's favourites.
+    assert.equal(parsePipelineFilters(new URLSearchParams("favorites=1")).favorites, true);
   });
 });
 

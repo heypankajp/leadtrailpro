@@ -100,7 +100,7 @@ export default function TaskComments({ task }: { task: Task }) {
                   <RichTextArea value={editing.body} onChange={(value) => setEditing({ id: comment.id, body: value })} directory={directory} label="Edit comment" rows={3} maxLength={maxMessageLength} />
                   <div className="message-form-actions">
                     <button type="button" className="button button-outline button-small" onClick={() => setEditing(null)}>Cancel</button>
-                    <button type="button" className="button button-primary button-small" disabled={busy} onClick={saveEdit}>Save changes</button>
+                    <button type="button" className="button button-primary button-small" disabled={busy} onClick={saveEdit}>Save Changes</button>
                   </div>
                 </div>
               ) : (
@@ -141,7 +141,7 @@ export default function TaskComments({ task }: { task: Task }) {
           <ErrorText message={error} />
           <div className="message-form-actions">
             <small>Ctrl+Enter to post</small>
-            <button type="button" className="button button-primary button-small" disabled={busy} onClick={post}>{busy ? "Posting..." : "Post comment"}</button>
+            <button type="button" className="button button-primary button-small" disabled={busy} onClick={post}>{busy ? "Posting..." : "Post Comment"}</button>
           </div>
         </div>
       ) : <ErrorText message={error} />}

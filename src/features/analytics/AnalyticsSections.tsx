@@ -62,14 +62,14 @@ export default function AnalyticsSections({ period, custom, ownerId }: Props) {
         <input aria-label="Industry" placeholder="Industry" value={filters.industry} onChange={(event) => set({ industry: event.target.value })} maxLength={120} />
         <input aria-label="Client" placeholder="Client name" value={filters.client} onChange={(event) => set({ client: event.target.value })} maxLength={120} />
         <input aria-label="Job type" placeholder="Job type (e.g. full time)" value={filters.jobType} onChange={(event) => set({ jobType: event.target.value })} maxLength={60} />
-        {JSON.stringify(filters) !== JSON.stringify(emptyAnalyticsFilters) && <button type="button" className="text-button" onClick={() => setFilters(emptyAnalyticsFilters)}>Clear filters</button>}
+        {JSON.stringify(filters) !== JSON.stringify(emptyAnalyticsFilters) && <button type="button" className="text-button" onClick={() => setFilters(emptyAnalyticsFilters)}>Clear Filters</button>}
       </div>
       <ErrorText message={error} />
       {!data && !error && <Loading text="Building the analytics..." />}
       {data && (
         <>
           <section className="panel analytics-panel">
-            <div className="panel-heading"><div><h2>Pipeline now</h2><p>{data.pipeline.total} active deals by status{data.teamWide ? " and salesperson" : ""}; click a number or a bar for the deals behind it</p></div></div>
+            <div className="panel-heading"><div><h2>Pipeline Now</h2><p>{data.pipeline.total} active deals by status{data.teamWide ? " and salesperson" : ""}; click a number or a bar for the deals behind it</p></div></div>
             <div className="opportunity-stats">
               {data.pipeline.byStatus.map((status, index) => (
                 <button type="button" key={status.code} className="small-stat small-stat-button" onClick={() => void drillTo(`${status.label} deals`, status.code, null)}>
@@ -104,13 +104,13 @@ export default function AnalyticsSections({ period, custom, ownerId }: Props) {
           {data.stages.length > 0 && (
             <div className="analytics-grid">
               <section className="panel analytics-panel">
-                <div className="panel-heading"><div><h2>Stage over time</h2><p>How the board looked at the end of each {data.bucketKind}, from every stage move on the timeline; deals placed by the migration count in their first known stage</p></div></div>
+                <div className="panel-heading"><div><h2>Stage Over Time</h2><p>How the board looked at the end of each {data.bucketKind}, from every stage move on the timeline; deals placed by the migration count in their first known stage</p></div></div>
                 {data.stageOverTime.length === 0 ? <EmptyState title="Nothing in this period" /> : (
                   <StackedBars height={240} xKey="label" series={stageSeries(data)} data={data.stageOverTime.map((point) => ({ label: bucketLabel(data, point.label), ...point.counts }))} />
                 )}
               </section>
               <section className="panel analytics-panel">
-                <div className="panel-heading"><div><h2>Time in stage</h2><p>Median days a deal stayed in a stage before moving on (stays that ended in the period) · {data.stageMovement.total} stage move{data.stageMovement.total === 1 ? "" : "s"} in the period, {data.stageMovement.forward} forward, {data.stageMovement.backwards} back</p></div></div>
+                <div className="panel-heading"><div><h2>Time in Stage</h2><p>Median days a deal stayed in a stage before moving on (stays that ended in the period) · {data.stageMovement.total} stage move{data.stageMovement.total === 1 ? "" : "s"} in the period, {data.stageMovement.forward} forward, {data.stageMovement.backwards} back</p></div></div>
                 {data.timeInStage.every((row) => row.samples === 0) ? <EmptyState title="No completed stays in this period" /> : (
                   <>
                     <CategoryBars labelKey="label" valueKey="medianDays" valueLabel="Median days" colorOf={(_row, index) => stageColor(index)} data={data.timeInStage.map((row) => ({ label: row.label, code: row.code, medianDays: row.medianDays ?? 0 }))} />
@@ -123,7 +123,7 @@ export default function AnalyticsSections({ period, custom, ownerId }: Props) {
           )}
 
           <section className="panel analytics-panel">
-            <div className="panel-heading"><div><h2>Status over time</h2><p>How the pipeline looked at the end of each {data.bucketKind}, from every status change on the timeline</p></div></div>
+            <div className="panel-heading"><div><h2>Status Over Time</h2><p>How the pipeline looked at the end of each {data.bucketKind}, from every status change on the timeline</p></div></div>
             {data.statusOverTime.length === 0 ? <EmptyState title="Nothing in this period" /> : (
               <StackedBars height={260} xKey="label" series={statusSeries(data)} data={data.statusOverTime.map((point) => ({ label: bucketLabel(data, point.label), ...point.counts }))} />
             )}
@@ -131,7 +131,7 @@ export default function AnalyticsSections({ period, custom, ownerId }: Props) {
 
           <div className="analytics-grid">
             <section className="panel analytics-panel">
-              <div className="panel-heading"><div><h2>Movement in the period</h2><p>Status changes recorded between {formatDate(data.range.startYmd)} and {formatDate(data.range.endExclusiveYmd)}</p></div></div>
+              <div className="panel-heading"><div><h2>Movement in the Period</h2><p>Status changes recorded between {formatDate(data.range.startYmd)} and {formatDate(data.range.endExclusiveYmd)}</p></div></div>
               <div className="opportunity-stats">
                 <div className="small-stat"><div className="small-stat-top"><span>Cold → Warm</span></div><strong>{data.movement.funnel.coldToWarm}</strong></div>
                 <div className="small-stat"><div className="small-stat-top"><span>Warm → Hot</span></div><strong>{data.movement.funnel.warmToHot}</strong></div>
@@ -145,7 +145,7 @@ export default function AnalyticsSections({ period, custom, ownerId }: Props) {
               )}
             </section>
             <section className="panel analytics-panel">
-              <div className="panel-heading"><div><h2>Why deals closed</h2><p>Lost and disqualified reasons in the period</p></div></div>
+              <div className="panel-heading"><div><h2>Why Deals Closed</h2><p>Lost and disqualified reasons in the period</p></div></div>
               {Object.keys(data.movement.lostReasons).length + Object.keys(data.movement.disqualifiedReasons).length === 0 ? <EmptyState title="No lost or disqualified deals in this period" /> : (
                 <CategoryBars labelKey="label" valueKey="count" valueLabel="Deals" colorOf={(row) => (row.kind === "lost" ? statusColors.lost : statusColors.disqualified)}
                   data={[...Object.entries(data.movement.lostReasons).map(([label, count]) => ({ label: `Lost: ${label}`, count, kind: "lost" })), ...Object.entries(data.movement.disqualifiedReasons).map(([label, count]) => ({ label: `Disqualified: ${label}`, count, kind: "disqualified" }))].sort((a, b) => b.count - a.count)} />
@@ -155,7 +155,7 @@ export default function AnalyticsSections({ period, custom, ownerId }: Props) {
 
           <div className="analytics-grid">
             <section className="panel analytics-panel">
-              <div className="panel-heading"><div><h2>Time in status</h2><p>Median days a deal stayed in a status before moving on (stays that ended in the period)</p></div></div>
+              <div className="panel-heading"><div><h2>Time in Status</h2><p>Median days a deal stayed in a status before moving on (stays that ended in the period)</p></div></div>
               {data.timeInStatus.every((row) => row.samples === 0) ? <EmptyState title="No completed stays in this period" /> : (
                 <>
                   <CategoryBars labelKey="label" valueKey="medianDays" valueLabel="Median days" colorOf={(row, index) => colorFor(String(row.code), index)} data={data.timeInStatus.map((row) => ({ label: row.label, code: row.code, medianDays: row.medianDays ?? 0 }))} />
@@ -174,7 +174,7 @@ export default function AnalyticsSections({ period, custom, ownerId }: Props) {
 
           <section className="panel analytics-panel">
             <div className="panel-heading">
-              <div><h2>Stalled deals</h2><p>{data.stalled.total} deal{data.stalled.total === 1 ? "" : "s"} longer in a status or quiet for longer than the needs-attention rules allow, or with an overdue follow-up; worst first</p></div>
+              <div><h2>Stalled Deals</h2><p>{data.stalled.total} deal{data.stalled.total === 1 ? "" : "s"} longer in a status or quiet for longer than the needs-attention rules allow, or with an overdue follow-up; worst first</p></div>
               <button type="button" className="button button-outline button-small" disabled={!data.stalled.leads.length} onClick={() => downloadCsv("leadtrailpro-stalled-leads.csv", ["Client", "Status", "Owner", "Days in status", "Allowed", "Days since activity", "Follow-up", "Reasons"], data.stalled.leads.map((lead) => [lead.clientName, lead.statusLabel, lead.ownerName, lead.daysInStatus, lead.allowedDays, lead.daysSinceActivity, lead.followUpDate ?? "", lead.reasons.join("; ")]))}><Download size={13} /> CSV</button>
             </div>
             {data.stalled.leads.length === 0 ? <EmptyState icon={<Users size={22} />} title="Nothing is stalled" text="Every active deal is within its limits." /> : (
@@ -199,12 +199,12 @@ export default function AnalyticsSections({ period, custom, ownerId }: Props) {
 
           {can("view_leads") && (
             <section className="panel analytics-panel">
-              <div className="panel-heading"><div><h2>Leads inbox</h2><p>What the job searches found in the period and what became of it</p></div></div>
+              <div className="panel-heading"><div><h2>Leads Inbox</h2><p>What the job searches found in the period and what became of it</p></div></div>
               <div className="opportunity-stats">
                 <div className="small-stat"><div className="small-stat-top"><span>Listings found</span><span className="small-stat-icon"><Briefcase size={15} /></span></div><strong>{data.pool.totals.found}</strong></div>
                 <div className="small-stat"><div className="small-stat-top"><span>New companies</span></div><strong>{data.pool.totals.newCompanies}</strong></div>
                 <div className="small-stat"><div className="small-stat-top"><span>Assigned as deals</span></div><strong>{data.pool.totals.assigned}</strong></div>
-                <div className="small-stat"><div className="small-stat-top"><span>Not relevant</span></div><strong>{data.pool.totals.notRelevant}</strong></div>
+                <div className="small-stat"><div className="small-stat-top"><span>Not Relevant</span></div><strong>{data.pool.totals.notRelevant}</strong></div>
                 <div className="small-stat"><div className="small-stat-top"><span>Fed existing deals</span></div><strong>{data.pool.totals.attached}</strong></div>
                 <div className="small-stat"><div className="small-stat-top"><span>Median time to assign</span></div><strong>{data.pool.totals.medianHoursToAssign === null ? "—" : data.pool.totals.medianHoursToAssign >= 48 ? `${Math.round(data.pool.totals.medianHoursToAssign / 24)} d` : `${Math.round(data.pool.totals.medianHoursToAssign)} h`}</strong></div>
               </div>
@@ -226,7 +226,7 @@ export default function AnalyticsSections({ period, custom, ownerId }: Props) {
           )}
 
           <section className="panel analytics-panel">
-            <div className="panel-heading"><div><h2>Where the deals are</h2><p>Active deals by industry, city, and deal source, with how many are clients; and the clients worked most in the period</p></div></div>
+            <div className="panel-heading"><div><h2>Where the Deals Are</h2><p>Active deals by industry, city, and deal source, with how many are clients; and the clients worked most in the period</p></div></div>
             <div className="analytics-grid analytics-grid-3">
               {([["Industry", data.breakdown.industries], ["City", data.breakdown.cities], ["Deal source", data.breakdown.leadTypes]] as const).map(([title, rows]) => (
                 <div key={title}>
@@ -273,7 +273,7 @@ function TeamBoardSection({ drill }: { drill: (title: string, load: () => Promis
   );
   return (
     <section className="panel analytics-panel team-board" aria-label="Team board">
-      <div className="panel-heading"><div><h2>Team board</h2><p>Where each salesperson stands right now, the people with the most waiting on them first · activity since Monday {data ? formatDate(data.weekStartYmd) : ""}. Click a number for the deals.</p></div></div>
+      <div className="panel-heading"><div><h2>Team Board</h2><p>Where each salesperson stands right now, the people with the most waiting on them first · activity since Monday {data ? formatDate(data.weekStartYmd) : ""}. Click a number for the deals.</p></div></div>
       <ErrorText message={error} />
       {!data && !error && <Loading />}
       {data && (

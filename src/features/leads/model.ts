@@ -147,6 +147,8 @@ export type LeadFilters = {
   letters: boolean;
   q: string;
   mine: boolean;
+  /** Only the deals the viewer marked as favourite (request of November 20, 2026). */
+  favorites: boolean;
   statusCode: string | null;
   statusId: number | null;
   statusReasonId: number | null;
@@ -325,6 +327,7 @@ export function parseLeadFilters(params: URLSearchParams): LeadFilters {
     state: isRecordState(state) ? state : "active",
     q: (params.get("q") || "").trim().slice(0, 200),
     mine: params.get("mine") === "1" || params.get("mine") === "true",
+    favorites: params.get("favorites") === "1" || params.get("favorites") === "true",
     statusCode: params.get("statusCode")?.trim().slice(0, 60) || null,
     statusId: id("statusId"),
     statusReasonId: id("statusReasonId"),

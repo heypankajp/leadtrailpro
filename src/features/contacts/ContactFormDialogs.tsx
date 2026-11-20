@@ -114,7 +114,7 @@ export function OrganizationFormDialog({ organization, initialName, onUseExistin
   };
 
   return (
-    <Dialog title={organization ? `Edit ${organization.name}` : "Add company"} eyebrow={organization ? "COMPANY" : undefined} onClose={onClose}>
+    <Dialog title={organization ? `Edit ${organization.name}` : "Add Company"} eyebrow={organization ? "COMPANY" : undefined} onClose={onClose}>
       <form className="lead-form" onSubmit={submit}>
         <Field label="Name" required wide hint={organization ? undefined : isNew ? "A new company." : "Start typing: the companies that exist are listed. Pick one to open it, or add the name as a new company."}>
           {organization
@@ -150,7 +150,7 @@ export function OrganizationFormDialog({ organization, initialName, onUseExistin
                 <strong>{abroad.name || "This company"} appears to be outside Canada, in {abroad.country}.</strong>
                 <p>{abroad.address ? `Address found: ${abroad.address}. ` : ""}Are you sure you want to add this company?</p>
                 <div className="website-abroad-actions">
-                  <button type="button" className="button button-primary button-small" onClick={() => { const details = abroad; setAbroad(null); fillFrom(details); }}>Yes, fill in the details</button>
+                  <button type="button" className="button button-primary button-small" onClick={() => { const details = abroad; setAbroad(null); fillFrom(details); }}>Yes, Fill in the Details</button>
                   <button type="button" className="button button-outline button-small" onClick={() => { setAbroad(null); setFetched({ tone: "error", text: `Not filled: the company is in ${abroad.country}.` }); }}>No</button>
                 </div>
               </div>
@@ -158,7 +158,7 @@ export function OrganizationFormDialog({ organization, initialName, onUseExistin
           )}
         </Field>
         <Field label="Industry"><input value={form.industry} onChange={set("industry")} maxLength={120} placeholder="e.g. Healthcare" /></Field>
-        <Field label="Company size">
+        <Field label="Company Size">
           <select value={form.companySizeId} onChange={set("companySizeId")}><option value="">Not set</option>{reference.listValues.company_size.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}</select>
         </Field>
         <Field label="City" wide>
@@ -169,7 +169,7 @@ export function OrganizationFormDialog({ organization, initialName, onUseExistin
         <div className="field-wide"><ErrorText message={error} /></div>
         <div className="modal-actions">
           <button type="button" className="button button-outline" onClick={onClose}>Cancel</button>
-          <button type="submit" className="button button-primary" disabled={saving}>{organization ? <Save size={15} /> : <Plus size={15} />} {saving ? "Saving..." : organization ? "Save changes" : "Save company"}</button>
+          <button type="submit" className="button button-primary" disabled={saving}>{organization ? <Save size={15} /> : <Plus size={15} />} {saving ? "Saving..." : organization ? "Save Changes" : "Save Company"}</button>
         </div>
       </form>
     </Dialog>
@@ -251,7 +251,7 @@ export function PersonFormDialog({ person, organizationName, movable = false, in
   };
 
   return (
-    <Dialog title={person ? `Edit ${person.name}` : "Add contact"} eyebrow={person ? "CONTACT" : undefined} onClose={onClose}>
+    <Dialog title={person ? `Edit ${person.name}` : "Add Contact"} eyebrow={person ? "CONTACT" : undefined} onClose={onClose}>
       <form className="lead-form" onSubmit={submit}>
         <Field label="Company" required wide hint={fixedOrganization ? (person ? "They have deals with this company, so they stay there. Someone who changed employer is added as a new contact at the new company." : undefined) : "Start typing the company's name: the companies that match appear in a list. Pick one, or keep typing a new name (you are asked before it is created)."}>
           {fixedOrganization
@@ -281,7 +281,7 @@ export function PersonFormDialog({ person, organizationName, movable = false, in
         </Field>
         <Field label="Email(s)" wide hint="Separate several addresses with commas."><input value={form.emails} onChange={set("emails")} placeholder="name@company.com" /></Field>
         <Field label="Phone"><input type="tel" value={form.phone} onChange={set("phone")} maxLength={40} placeholder="+1 (555) 123-4567" /></Field>
-        <Field label="Extension or alternate number"><input type="tel" value={form.altPhone} onChange={set("altPhone")} maxLength={40} /></Field>
+        <Field label="Extension or Alternate Number"><input type="tel" value={form.altPhone} onChange={set("altPhone")} maxLength={40} /></Field>
         <Field label="Remark" wide><input value={form.remark} onChange={set("remark")} maxLength={500} placeholder="Best time to call, preferences..." /></Field>
         {person && <p className="dialog-description field-wide">These details are shown on every deal of this contact.</p>}
         {confirmNew && (
@@ -289,14 +289,14 @@ export function PersonFormDialog({ person, organizationName, movable = false, in
             <Building2 size={14} />
             <div>
               <p><strong>{confirmNew}</strong> is not a company yet. Create it and file the contact there?</p>
-              <div className="duplicate-actions"><button type="button" className="button button-primary button-small" disabled={saving} onClick={() => void save(true)}>Create company and save</button></div>
+              <div className="duplicate-actions"><button type="button" className="button button-primary button-small" disabled={saving} onClick={() => void save(true)}>Create Company and Save</button></div>
             </div>
           </div>
         )}
         <div className="field-wide"><ErrorText message={error} /></div>
         <div className="modal-actions">
           <button type="button" className="button button-outline" onClick={onClose}>Cancel</button>
-          <button type="submit" className="button button-primary" disabled={saving}>{person ? <Save size={15} /> : <Plus size={15} />} {saving ? "Saving..." : person ? "Save changes" : "Save contact"}</button>
+          <button type="submit" className="button button-primary" disabled={saving}>{person ? <Save size={15} /> : <Plus size={15} />} {saving ? "Saving..." : person ? "Save Changes" : "Save Contact"}</button>
         </div>
       </form>
       {addingOrg !== null && (

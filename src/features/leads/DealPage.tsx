@@ -4,6 +4,7 @@ import { useMemo, useState, useCallback, useEffect, type FormEvent, type ReactNo
 import {
   Archive, ArrowLeft, Building2, CalendarCheck2, Check, ChevronDown, CircleDollarSign, Download, ExternalLink, FileSignature, FileText, History, Info, Mail, MapPin, MessageSquare, Paperclip, Pencil, Phone, Plus, RotateCcw, Trash2, Undo2, UserRound, Users,
 } from "lucide-react";
+import { canPeerReview } from "./queue-rules";
 import mammoth from "mammoth";
 import { errorMessage } from "@/lib/api";
 import { fileSize, formatDate, formatDateTime, formatTimeOfDay, fromLocalInput, relativeTime, toLocalInput } from "@/lib/format";
@@ -126,12 +127,12 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
     <>
       {can("upload_files") && lead.recordState !== "archived" && (
         <button className="button button-outline button-small" onClick={() => { setTab("contracts"); window.setTimeout(() => document.getElementById("deal-history")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); }}>
-          <FileSignature size={14} /> Upload contract
+          <FileSignature size={14} /> Upload Contract
         </button>
       )}
       {canEdit && lead.recordState !== "archived" && <button className="button button-outline button-small" onClick={() => setEditing(true)}><Pencil size={14} /> Edit</button>}
       {canTransfer && lead.recordState === "active" && <button className="button button-outline button-small" onClick={() => setDialog({ kind: "transfer-pick" })}><UserRound size={14} /> Transfer</button>}
-      {can("review_queued") && lead.recordState === "queued" && (
+      {lead.recordState === "queued" && canPeerReview({ id: user.id, mayReview: can("review_queued") || can("edit_leads") }, lead) && (
         <>
           <button className="button button-primary button-small" onClick={() => setDialog({ kind: "review", approve: true })}><Check size={14} /> Approve</button>
           <button className="button button-outline button-small" onClick={() => setDialog({ kind: "review", approve: false })}>Reject</button>
@@ -192,7 +193,7 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
             {isClient ? (
               <>
                 <StatusPill status={lead.statusLabel} code={lead.statusCode} />
-                {canEdit && lead.recordState === "active" && <button type="button" className="button button-outline button-small" onClick={() => setDialog({ kind: "move-back" })}><Undo2 size={14} /> Move back to pipeline</button>}
+                {canEdit && lead.recordState === "active" && <button type="button" className="button button-outline button-small" onClick={() => setDialog({ kind: "move-back" })}><Undo2 size={14} /> Move Back to Pipeline</button>}
               </>
             ) : canEdit && lead.recordState !== "archived" ? (
               <label className={`status-pill status-${lead.statusCode} status-select-pill`}>
@@ -296,7 +297,7 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
 
       {editing && <LeadFormDialog lead={lead} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); void refresh("Deal updated"); }} />}
       {dialog?.kind === "transfer-pick" && (
-        <UserDirectoryDialog title="Transfer deal" description={`Choose who will own ${lead.clientName}. Open tasks on this deal move with it.`} users={owners} excludeIds={[lead.ownerId]} confirmLabel="Transfer" onClose={() => setDialog(null)} onPick={(picked) => setDialog({ kind: "transfer-reason", user: picked })} />
+        <UserDirectoryDialog title="Transfer Deal" description={`Choose who will own ${lead.clientName}. Open tasks on this deal move with it.`} users={owners} excludeIds={[lead.ownerId]} confirmLabel="Transfer" onClose={() => setDialog(null)} onPick={(picked) => setDialog({ kind: "transfer-reason", user: picked })} />
       )}
       {dialog?.kind === "transfer-reason" && (
         <PromptDialog title={`Transfer to ${dialog.user.name}`} eyebrow="OWNERSHIP" label="Reason (optional)" confirmLabel="Transfer deal" onClose={() => setDialog(null)} onConfirm={async (reason) => { await transferLead(lead.id, dialog.user.id, reason); setDialog(null); await refresh(`${lead.clientName} transferred to ${dialog.user.name}`); }} />
@@ -305,7 +306,7 @@ export default function DealPage({ leadId, backLabel, onClose }: { leadId: numbe
         <ArchiveDialog title={`Archive ${lead.clientName}`} onClose={() => setDialog(null)} onConfirm={async (reasonId, notes) => { await setLeadState(lead.id, "archived", notes, reasonId); setDialog(null); await refresh("Deal archived"); }} />
       )}
       {dialog?.kind === "restore" && (
-        <PromptDialog title={`Restore ${lead.clientName}`} eyebrow="ARCHIVE" label="Note (optional)" confirmLabel="Restore deal" onClose={() => setDialog(null)} onConfirm={async (reason) => { await setLeadState(lead.id, "active", reason); setDialog(null); await refresh("Deal restored"); }} />
+        <PromptDialog title={`Restore ${lead.clientName}`} eyebrow="ARCHIVE" label="Note (optional)" confirmLabel="Restore Deal" onClose={() => setDialog(null)} onConfirm={async (reason) => { await setLeadState(lead.id, "active", reason); setDialog(null); await refresh("Deal restored"); }} />
       )}
       {dialog?.kind === "review" && (
         <PromptDialog title={dialog.approve ? `Approve ${lead.clientName}` : `Reject ${lead.clientName}`} eyebrow="QUEUED DEAL" label={dialog.approve ? "Comment (optional)" : "Reason"} required={!dialog.approve} danger={!dialog.approve} confirmLabel={dialog.approve ? "Approve" : "Reject"} onClose={() => setDialog(null)} onConfirm={async (comment) => { await reviewLead(lead.id, dialog.approve, comment); setDialog(null); await refresh(dialog.approve ? "Deal approved" : "Deal rejected"); }} />
@@ -368,10 +369,10 @@ function MoveBackDialog({ lead, onConfirm, onClose }: { lead: LeadSummary; onCon
     try { await onConfirm(Number(statusId), Number(stageId)); } catch (caught) { setError(errorMessage(caught, "Could not move the client back.")); setBusy(false); }
   };
   return (
-    <Dialog title={`Move ${lead.clientName} back to the pipeline`} eyebrow="CLIENT" size="narrow" onClose={onClose}>
+    <Dialog title={`Move ${lead.clientName} Back to the Pipeline`} eyebrow="CLIENT" size="narrow" onClose={onClose}>
       <form className="lead-form" onSubmit={submit}>
         <p className="dialog-description field-wide">Converted to a client by mistake? It goes back to the pipeline at the stage you choose.</p>
-        <Field label="Pipeline stage" required wide>
+        <Field label="Pipeline Stage" required wide>
           <select value={stageId} onChange={(event) => setStageId(event.target.value)} required autoFocus>
             <option value="">Choose a stage...</option>
             {stages.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
@@ -385,7 +386,7 @@ function MoveBackDialog({ lead, onConfirm, onClose }: { lead: LeadSummary; onCon
         <div className="field-wide"><ErrorText message={error} /></div>
         <div className="modal-actions">
           <button type="button" className="button button-outline" onClick={onClose}>Cancel</button>
-          <button type="submit" className="button button-primary" disabled={busy}><Undo2 size={14} /> {busy ? "Moving..." : "Move back to pipeline"}</button>
+          <button type="submit" className="button button-primary" disabled={busy}><Undo2 size={14} /> {busy ? "Moving..." : "Move Back to Pipeline"}</button>
         </div>
       </form>
     </Dialog>
@@ -407,7 +408,7 @@ export function StatusReasonDialog({ leadName, statusName, options, onConfirm, o
     <Dialog title={`Mark ${leadName} as ${statusName}`} eyebrow="DEAL STATUS" onClose={onClose} size="narrow">
       <form className="stack-form" onSubmit={submit}>
         <p className="dialog-description">The reason is shown with the status everywhere as &ldquo;{statusName} &ndash; reason&rdquo;.</p>
-        <Field label="Status reason" required>
+        <Field label="Status Reason" required>
           <select value={reasonId} onChange={(event) => setReasonId(event.target.value)} autoFocus>
             <option value="">Choose a reason</option>
             {options.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
@@ -416,7 +417,7 @@ export function StatusReasonDialog({ leadName, statusName, options, onConfirm, o
         <ErrorText message={error} />
         <div className="modal-actions">
           <button type="button" className="button button-outline" onClick={onClose}>Cancel</button>
-          <button type="submit" className="button button-primary" disabled={busy}>{busy ? "Saving..." : "Set status"}</button>
+          <button type="submit" className="button button-primary" disabled={busy}>{busy ? "Saving..." : "Set Status"}</button>
         </div>
       </form>
     </Dialog>
@@ -572,14 +573,14 @@ function Composer({ detail, canEdit, onLogged, onSchedule }: {
       {!mode && <p className="composer-hint">Choose what to add: a note, a call or a visit you had{canFollowUp ? ", or the next follow-up" : ""}. Emails shows the mail with every contact of {lead.clientName}.</p>}
       {mode === "emails" && (
         <div className="composer-emails">
-          {canLog && <div className="composer-emails-head"><button type="button" className="button button-outline button-small" onClick={() => open("email")}><Mail size={14} /> Log an email by hand</button><small className="field-hint">For mail sent from outside a connected mailbox.</small></div>}
+          {canLog && <div className="composer-emails-head"><button type="button" className="button button-outline button-small" onClick={() => open("email")}><Mail size={14} /> Log an Email by Hand</button><small className="field-hint">For mail sent from outside a connected mailbox.</small></div>}
           <LeadEmails leadId={lead.id} addresses={emailAddresses} attachments={detail.attachments} />
         </div>
       )}
       {type && (
         <form className="lead-form activity-form" onSubmit={submit}>
           {type !== "note" && <Field label="Summary" wide><input value={summary} onChange={(event) => setSummary(event.target.value)} maxLength={500} placeholder={type === "call" ? "Spoke with HR about the Q1 hiring plan" : type === "email" ? "Sent the introduction email" : "On-site meeting with the plant manager"} autoFocus /></Field>}
-          <Field label={type === "note" ? "Interaction note" : "Notes (optional)"} wide required={type === "note"} hint={canSuggest ? "Mention the next step with a date (\u201cfollow up next Tuesday\u201d, \u201csend the proposal by Friday\u201d) and a task will be offered. Use the toolbar or the microphone; **bold**, _italic_, lists, and links are kept." : undefined}><RichTextArea value={body} onChange={setBody} rows={4} maxLength={10000} placeholder="What was discussed, commitments, next steps..." autoFocus={type === "note"} required={type === "note"} /></Field>
+          <Field label={type === "note" ? "Interaction Note" : "Notes (Optional)"} wide required={type === "note"} hint={canSuggest ? "Mention the next step with a date (\u201cfollow up next Tuesday\u201d, \u201csend the proposal by Friday\u201d) and a task will be offered. Use the toolbar or the microphone; **bold**, _italic_, lists, and links are kept." : undefined}><RichTextArea value={body} onChange={setBody} rows={4} maxLength={10000} placeholder="What was discussed, commitments, next steps..." autoFocus={type === "note"} required={type === "note"} /></Field>
           <Field label="When"><input type="datetime-local" value={occurredAt} max={toLocalInput(new Date().toISOString())} onChange={(event) => setOccurredAt(event.target.value)} required /></Field>
           {draft && suggestion && (
             <div className="form-note follow-up-suggestion field-wide">
@@ -600,7 +601,7 @@ function Composer({ detail, canEdit, onLogged, onSchedule }: {
             </div>
           )}
           <ErrorText message={error} />
-          <div className="modal-actions"><button type="button" className="button button-outline" onClick={() => setMode(null)}>Cancel</button><button type="submit" className="button button-primary" disabled={busy}>{busy ? "Saving..." : type === "note" ? "Save note" : `Save ${type}`}</button></div>
+          <div className="modal-actions"><button type="button" className="button button-outline" onClick={() => setMode(null)}>Cancel</button><button type="submit" className="button button-primary" disabled={busy}>{busy ? "Saving..." : type === "note" ? "Save Note" : `Save ${type}`}</button></div>
         </form>
       )}
       {/* PD-29: Schedule an activity, in place of the old date-and-note follow-up form. */}
@@ -707,7 +708,7 @@ function FilesTab({ category, files, leadId, onChanged }: { category: "document"
     return (
       <section className="attachment-preview">
         <div className="attachment-preview-toolbar">
-          <button className="button button-outline button-small" onClick={() => { setPreview(null); setDocxText(null); }}><ArrowLeft size={14} /> All files</button>
+          <button className="button button-outline button-small" onClick={() => { setPreview(null); setDocxText(null); }}><ArrowLeft size={14} /> All Files</button>
           <span>{preview.label} · v{preview.version} · {fileSize(preview.sizeBytes)}</span>
           <a className="button button-outline button-small" href={attachmentUrl(preview.id, true)}><Download size={14} /> Download</a>
         </div>
@@ -724,17 +725,17 @@ function FilesTab({ category, files, leadId, onChanged }: { category: "document"
     <section className="lead-attachments">
       {can("upload_files") && (
         <form className="attachment-form" onSubmit={upload}>
-          <Field label={category === "profile" ? "Profile name" : category === "contract" ? "Contract name" : "Document type"}>
+          <Field label={category === "profile" ? "Profile Name" : category === "contract" ? "Contract Name" : "Document Type"}>
             {category === "profile" || category === "contract"
               ? <input value={label} onChange={(event) => setLabel(event.target.value)} maxLength={120} placeholder={category === "contract" ? "e.g. Service agreement 2026" : "Candidate name or role"} />
               : <select value={label} onChange={(event) => setLabel(event.target.value)}>{documentLabels.map((option) => <option key={option}>{option}</option>)}</select>}
           </Field>
-          {category === "document" && label === "Other" && <Field label="Specify name"><input value={customLabel} onChange={(event) => setCustomLabel(event.target.value)} maxLength={120} required placeholder="Enter document name" /></Field>}
-          <Field label="Choose file" hint="PDF, Word, Excel, PowerPoint, image, or text · 15 MB max. Re-uploading the same file name creates a new version.">
+          {category === "document" && label === "Other" && <Field label="Specify Name"><input value={customLabel} onChange={(event) => setCustomLabel(event.target.value)} maxLength={120} required placeholder="Enter document name" /></Field>}
+          <Field label="Choose File" hint="PDF, Word, Excel, PowerPoint, image, or text · 15 MB max. Re-uploading the same file name creates a new version.">
             <input key={inputKey} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp,.txt" onChange={(event) => setFile(event.target.files?.[0] ?? null)} required />
           </Field>
           <ErrorText message={error} />
-          <div className="attachment-submit"><button className="button button-outline" type="submit" disabled={busy}><Paperclip size={14} /> {busy ? "Uploading..." : category === "profile" ? "Share profile" : category === "contract" ? "Upload contract" : "Add document"}</button></div>
+          <div className="attachment-submit"><button className="button button-outline" type="submit" disabled={busy}><Paperclip size={14} /> {busy ? "Uploading..." : category === "profile" ? "Share Profile" : category === "contract" ? "Upload Contract" : "Add Document"}</button></div>
         </form>
       )}
       <div className="attachment-list">

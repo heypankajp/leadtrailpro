@@ -88,7 +88,7 @@ export default function ReportsPage() {
           <span className="custom-range">
             <input type="date" aria-label="From date" value={customDraft.from} max={customDraft.to} onChange={(event) => setCustomDraft((current) => ({ ...current, from: event.target.value }))} />
             <input type="date" aria-label="To date" value={customDraft.to} min={customDraft.from} onChange={(event) => setCustomDraft((current) => ({ ...current, to: event.target.value }))} />
-            <button className={period === "custom" ? "active-period" : ""} disabled={!customDraft.from || !customDraft.to} onClick={() => { setCustom({ ...customDraft }); setPeriod("custom"); }}>Apply range</button>
+            <button className={period === "custom" ? "active-period" : ""} disabled={!customDraft.from || !customDraft.to} onClick={() => { setCustom({ ...customDraft }); setPeriod("custom"); }}>Apply Range</button>
           </span>
         </div>
         {teamWide && (
@@ -129,7 +129,7 @@ export default function ReportsPage() {
           </div>
 
           <div className="panel report-chart-panel">
-            <div className="panel-heading"><div><h2>Activity over time</h2><p>Calls, emails, and visits per business day</p></div></div>
+            <div className="panel-heading"><div><h2>Activity Over Time</h2><p>Calls, emails, and visits per business day</p></div></div>
             {report.series.length === 0 ? <EmptyState title="No activity in this period" /> : (
               <StackedBars height={240} xKey="date" series={[{ key: "calls", label: "Calls", color: seriesColors[0] }, { key: "emails", label: "Emails", color: seriesColors[1] }, { key: "visits", label: "Visits", color: seriesColors[2] }]}
                 data={report.series.map((point) => ({ date: formatShortDate(point.date), calls: point.calls, emails: point.emails, visits: point.visits }))} />
@@ -137,7 +137,7 @@ export default function ReportsPage() {
           </div>
 
           <section className="panel team-panel">
-            <div className="panel-heading"><div><h2>{teamWide ? "Sales manager performance" : "Your numbers"}</h2><p>Click a number to see the records behind it</p></div></div>
+            <div className="panel-heading"><div><h2>{teamWide ? "Sales Manager Performance" : "Your Numbers"}</h2><p>Click a number to see the records behind it</p></div></div>
             <div className="table-scroll">
               <table className="lead-table team-table report-table">
                 <thead><tr><th>TEAM MEMBER</th><th>STAGE</th>{metricColumns.map((column) => <th key={column.key}>{column.label.toUpperCase()}</th>)}<th>TARGET</th></tr></thead>

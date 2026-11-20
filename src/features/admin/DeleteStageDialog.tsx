@@ -69,7 +69,7 @@ export default function DeleteStageDialog({ stage, others, onClose, onDeleted }:
               </label>
             </fieldset>
             {choice === "move" && (
-              <Field label="Move the deals to" required>
+              <Field label="Move the Deals to" required>
                 <select value={moveTo} onChange={(event) => setMoveTo(event.target.value)} required>
                   <option value="">Choose a stage</option>
                   {others.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
@@ -81,12 +81,12 @@ export default function DeleteStageDialog({ stage, others, onClose, onDeleted }:
         <ErrorText message={error} />
         <div className="modal-actions">
           <button type="button" className="button button-outline" onClick={onClose}>Cancel</button>
-          {deals && total === 0 && <button type="button" className="button button-danger" disabled={busy} onClick={() => void remove(null)}>{busy ? "Deleting..." : "Delete stage"}</button>}
+          {deals && total === 0 && <button type="button" className="button button-danger" disabled={busy} onClick={() => void remove(null)}>{busy ? "Deleting..." : "Delete Stage"}</button>}
           {deals && total > 0 && choice === "move" && (
-            <button type="button" className="button button-danger" disabled={busy || !moveTo} onClick={() => void remove(Number(moveTo))}>{busy ? "Moving..." : `Move ${count(total)} and delete`}</button>
+            <button type="button" className="button button-danger" disabled={busy || !moveTo} onClick={() => void remove(Number(moveTo))}>{busy ? "Moving..." : `Move ${count(total)} and Delete`}</button>
           )}
           {deals && total > 0 && choice === "manual" && (
-            <button type="button" className="button button-primary" onClick={() => { onClose(); navigate("deals", "list", { stageId: String(stage.id), scope: "everyone" }); }}><List size={15} /> Open the deals</button>
+            <button type="button" className="button button-primary" onClick={() => { onClose(); navigate("deals", "list", { stageId: String(stage.id), scope: "everyone" }); }}><List size={15} /> Open the Deals</button>
           )}
         </div>
       </div>

@@ -49,9 +49,9 @@ export default function ReleasesCard() {
           {status.request && <p className="field-hint">Deploy asked for by {status.request.requestedByName} at {formatDateTime(status.request.requestedAt)}; the deployer checks every minute.</p>}
           <div className="releases-actions">
             {status.paused
-              ? <button type="button" className="button button-outline" disabled={busy} onClick={() => void act(() => setDeployPaused(false), "Automatic deploys resumed")}><Play size={14} /> Resume automatic deploys</button>
-              : <button type="button" className="button button-outline" disabled={busy} onClick={() => void act(() => setDeployPaused(true), "Deploys paused: pushes wait until you deploy")}><Pause size={14} /> Pause deploys</button>}
-            <button type="button" className="button button-primary" disabled={busy || !status.agentOnline} title={status.agentOnline ? undefined : "No deployer is running on this installation"} onClick={() => void act(requestDeployNow, "Deploy requested; the deployer checks every minute")}><Rocket size={14} /> Deploy now</button>
+              ? <button type="button" className="button button-outline" disabled={busy} onClick={() => void act(() => setDeployPaused(false), "Automatic deploys resumed")}><Play size={14} /> Resume Automatic Deploys</button>
+              : <button type="button" className="button button-outline" disabled={busy} onClick={() => void act(() => setDeployPaused(true), "Deploys paused: pushes wait until you deploy")}><Pause size={14} /> Pause Deploys</button>}
+            <button type="button" className="button button-primary" disabled={busy || !status.agentOnline} title={status.agentOnline ? undefined : "No deployer is running on this installation"} onClick={() => void act(requestDeployNow, "Deploy requested; the deployer checks every minute")}><Rocket size={14} /> Deploy Now</button>
           </div>
         </>
       )}

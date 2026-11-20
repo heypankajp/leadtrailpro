@@ -22,7 +22,7 @@ import { listSearches } from "./repository";
 
 export type RunSummary = { runId: number; periodKey: string | null; status: "success" | "partial" | "failed"; listingsFound: number; newCompanies: number; newListings: number; attached: number; details: string[] };
 
-type ExistingRow = ExistingOpportunity & { id: number; companyKey: string };
+type ExistingRow = ExistingOpportunity & { id: number; companyKey: string; archived: boolean };
 
 const maxTimelineEntriesPerLead = 5;
 
@@ -78,8 +78,8 @@ async function collect(search: { keyword: string; location: string; jobType: str
 async function existingByKey(keys: string[], db: Queryable): Promise<Map<string, ExistingRow>> {
   const map = new Map<string, ExistingRow>();
   if (!keys.length) return map;
-  const { rows } = await db.query('SELECT id, company_key AS "companyKey", status, reason_scope AS "reasonScope", lead_id AS "leadId", matched_lead_id AS "matchedLeadId" FROM opportunities WHERE company_key = ANY(?)', [keys]);
-  for (const row of rows as ExistingRow[]) map.set(row.companyKey, { ...row, id: Number(row.id), leadId: row.leadId === null ? null : Number(row.leadId), matchedLeadId: row.matchedLeadId === null ? null : Number(row.matchedLeadId) });
+  const { rows } = await db.query('SELECT id, company_key AS "companyKey", status, reason_scope AS "reasonScope", lead_id AS "leadId", matched_lead_id AS "matchedLeadId", archived_at IS NOT NULL AS archived FROM opportunities WHERE company_key = ANY(?)', [keys]);
+  for (const row of rows as ExistingRow[]) map.set(row.companyKey, { ...row, id: Number(row.id), leadId: row.leadId === null ? null : Number(row.leadId), matchedLeadId: row.matchedLeadId === null ? null : Number(row.matchedLeadId), archived: Boolean(row.archived) });
   return map;
 }
 
@@ -118,6 +118,8 @@ async function applyGroup(group: CompanyGroup, searchIds: Map<string, number>, e
   }
   // A role-level "not relevant" only comes back when a listing nobody has seen before appears.
   if (existing?.status === "not_relevant" && decision.action === "pool" && newListings === 0) decision = { action: "silent" };
+  // An archived lead (request of November 20, 2026) stays in the Archive unless a listing nobody has seen before appears.
+  if (existing?.archived && newListings === 0) decision = { action: "silent" };
   // A card that became a lead stays "converted" while its listings keep feeding that lead.
   const attachedStatus = existing?.status === "converted" && existing.leadId === leadId ? "converted" : "attached";
   if (existing) {
@@ -126,7 +128,7 @@ async function applyGroup(group: CompanyGroup, searchIds: Map<string, number>, e
     } else {
       await db.query(
         `UPDATE opportunities SET company_name = ?, location = CASE WHEN location = '' THEN ? ELSE location END, status = ?, lead_id = ?, matched_lead_id = ?, revived = ?, last_seen_at = ?,
-           reason_id = NULL, reason_scope = NULL, reason_note = '', decided_by = NULL, decided_at = NULL
+           reason_id = NULL, reason_scope = NULL, reason_note = '', decided_by = NULL, decided_at = NULL, archived_at = NULL, archived_by = NULL, archive_kind = NULL
          WHERE id = ?`,
         [group.company.slice(0, 200), group.location.slice(0, 160), decision.action === "attach" ? attachedStatus : "new", leadId, decision.action === "pool" ? decision.matchedLeadId : null, decision.action === "pool" && decision.revived, nowSql, opportunityId],
       );

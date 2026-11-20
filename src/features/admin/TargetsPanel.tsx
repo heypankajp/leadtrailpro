@@ -48,7 +48,7 @@ export default function TargetsPanel() {
     <>
       <div className="page-heading">
         <div><div className="eyebrow">ADMINISTRATION</div><h1>Targets & Templates</h1><p>Daily and weekly deal targets, minimum road visits, and monthly conversions per productivity stage.</p></div>
-        <button className="button button-primary" onClick={() => setDialog({})}><Plus size={17} /> New template</button>
+        <button className="button button-primary" onClick={() => setDialog({})}><Plus size={17} /> New Template</button>
       </div>
       <ErrorText message={error} />
       {!templates && !error && <Loading />}
@@ -73,7 +73,7 @@ export default function TargetsPanel() {
             </div>
           </section>
           <section className="panel assign-panel">
-            <div className="panel-heading"><div><h2>Assign a template</h2><p>People without an explicit assignment use the first template for their stage.</p></div></div>
+            <div className="panel-heading"><div><h2>Assign a Template</h2><p>People without an explicit assignment use the first template for their stage.</p></div></div>
             <form className="assign-form" onSubmit={assign}>
               <Field label="Template"><select value={assignTemplate} onChange={(event) => setAssignTemplate(event.target.value)} required><option value="">Choose a template</option>{templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select></Field>
               <fieldset className="user-privileges"><legend>People</legend>
@@ -108,13 +108,13 @@ function TemplateDialog({ template, onClose, onSaved }: { template?: TargetTempl
     }
   };
   return (
-    <Dialog title={template ? `Edit ${template.name}` : "New target template"} eyebrow="TARGETS" onClose={onClose}>
+    <Dialog title={template ? `Edit ${template.name}` : "New Target Template"} eyebrow="TARGETS" onClose={onClose}>
       <form className="lead-form" onSubmit={submit}>
-        <Field label="Template name" required><input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required maxLength={80} autoFocus /></Field>
+        <Field label="Template Name" required><input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required maxLength={80} autoFocus /></Field>
         <Field label="Stage" required><select value={form.stage} onChange={(event) => setForm({ ...form, stage: event.target.value as UserStage })}>{userStages.map((stage) => <option key={stage} value={stage}>{stageLabels[stage]}</option>)}</select></Field>
         {numberFields.map((field) => <Field key={field.key} label={field.label}><input type="number" min={0} max={100000} value={form[field.key]} onChange={(event) => setForm({ ...form, [field.key]: Number(event.target.value) })} required /></Field>)}
         <ErrorText message={error} />
-        <div className="modal-actions"><button type="button" className="button button-outline" onClick={onClose}>Cancel</button><button type="submit" className="button button-primary" disabled={busy}>{busy ? "Saving..." : "Save template"}</button></div>
+        <div className="modal-actions"><button type="button" className="button button-outline" onClick={onClose}>Cancel</button><button type="submit" className="button button-primary" disabled={busy}>{busy ? "Saving..." : "Save Template"}</button></div>
       </form>
     </Dialog>
   );

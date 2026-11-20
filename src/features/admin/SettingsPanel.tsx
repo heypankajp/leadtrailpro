@@ -119,12 +119,12 @@ export default function SettingsPanel() {
       {settings && (
         <div className="settings-layout">
           <form className="panel settings-panel" onSubmit={submit}>
-            <div className="panel-heading"><div><h2>Role display names</h2><p>Rename how each system role appears. Permissions do not change.</p></div></div>
+            <div className="panel-heading"><div><h2>Role Display Names</h2><p>Rename how each system role appears. Permissions do not change.</p></div></div>
             <div className="lead-form settings-form">
               {systemRoles.map((role) => (
                 <Field key={role} label={`${defaultRoleLabels[role]} is shown as`}><input value={settings.roleLabels[role]} onChange={(event) => setSettings({ ...settings, roleLabels: { ...settings.roleLabels, [role]: event.target.value } })} maxLength={40} required /></Field>
               ))}
-              <Field label="Inactivity reminder after (days)" hint="Default: deals with no recorded activity for this long appear under Needs attention."><input type="number" min={1} max={90} value={settings.reminders.inactivityDays} onChange={(event) => setSettings({ ...settings, reminders: { ...settings.reminders, inactivityDays: Number(event.target.value) } })} required /></Field>
+              <Field label="Inactivity Reminder After (Days)" hint="Default: deals with no recorded activity for this long appear under Needs attention."><input type="number" min={1} max={90} value={settings.reminders.inactivityDays} onChange={(event) => setSettings({ ...settings, reminders: { ...settings.reminders, inactivityDays: Number(event.target.value) } })} required /></Field>
               <fieldset className="user-privileges rules-editor">
                 <legend><AlertTriangle size={12} /> Needs-attention rules by status, BD action, or stage</legend>
                 <p className="field-hint">Override the default for particular statuses, BD actions, or pipeline stages. The most specific rule wins: status and BD action together, then BD action, then status and stage, then stage, then status.</p>
@@ -148,7 +148,7 @@ export default function SettingsPanel() {
                   </div>
                 ))}
                 {settings.reminders.rules.length < maxInactivityRules && (
-                  <button type="button" className="button button-outline button-small" onClick={() => setRules([...settings.reminders.rules, { statusId: null, bdActionId: null, stageId: null, days: settings.reminders.inactivityDays }])}><Plus size={13} /> Add rule</button>
+                  <button type="button" className="button button-outline button-small" onClick={() => setRules([...settings.reminders.rules, { statusId: null, bdActionId: null, stageId: null, days: settings.reminders.inactivityDays }])}><Plus size={13} /> Add Rule</button>
                 )}
                 <small className="field-hint">A rule needs a status, a BD action, a stage, or a combination. Rules apply when you save settings.</small>
               </fieldset>
@@ -176,13 +176,13 @@ export default function SettingsPanel() {
                 <p className="field-hint">Each person gets a summary of overdue and upcoming follow-ups, tasks, and their numbers, as an in-app notification and by email when delivery is configured. People can opt out under Notification preferences. Times are in the business timezone.</p>
                 <label className="checklist-item"><input type="checkbox" checked={settings.digests.enabled} onChange={(event) => setSettings({ ...settings, digests: { ...settings.digests, enabled: event.target.checked } })} /><span>Send digests on schedule</span></label>
                 <div className="rule-row">
-                  <Field label="Daily digest at"><input type="time" value={settings.digests.dailyTime} onChange={(event) => setSettings({ ...settings, digests: { ...settings.digests, dailyTime: event.target.value } })} required /></Field>
-                  <Field label="Weekly digest on"><select value={settings.digests.weeklyDay} onChange={(event) => setSettings({ ...settings, digests: { ...settings.digests, weeklyDay: Number(event.target.value) } })}>{weekdayNames.map((name, index) => <option key={name} value={index}>{name}</option>)}</select></Field>
-                  <Field label="Weekly digest at"><input type="time" value={settings.digests.weeklyTime} onChange={(event) => setSettings({ ...settings, digests: { ...settings.digests, weeklyTime: event.target.value } })} required /></Field>
+                  <Field label="Daily Digest at"><input type="time" value={settings.digests.dailyTime} onChange={(event) => setSettings({ ...settings, digests: { ...settings.digests, dailyTime: event.target.value } })} required /></Field>
+                  <Field label="Weekly Digest on"><select value={settings.digests.weeklyDay} onChange={(event) => setSettings({ ...settings, digests: { ...settings.digests, weeklyDay: Number(event.target.value) } })}>{weekdayNames.map((name, index) => <option key={name} value={index}>{name}</option>)}</select></Field>
+                  <Field label="Weekly Digest at"><input type="time" value={settings.digests.weeklyTime} onChange={(event) => setSettings({ ...settings, digests: { ...settings.digests, weeklyTime: event.target.value } })} required /></Field>
                 </div>
                 <div className="digest-actions">
-                  <button type="button" className="button button-outline button-small" disabled={sending !== null} onClick={() => void sendDigest("daily")}><Send size={13} /> {sending === "daily" ? "Sending..." : "Send me today's digest"}</button>
-                  <button type="button" className="button button-outline button-small" disabled={sending !== null} onClick={() => void sendDigest("weekly")}><Send size={13} /> {sending === "weekly" ? "Sending..." : "Send me the weekly digest"}</button>
+                  <button type="button" className="button button-outline button-small" disabled={sending !== null} onClick={() => void sendDigest("daily")}><Send size={13} /> {sending === "daily" ? "Sending..." : "Send Me Today's Digest"}</button>
+                  <button type="button" className="button button-outline button-small" disabled={sending !== null} onClick={() => void sendDigest("weekly")}><Send size={13} /> {sending === "weekly" ? "Sending..." : "Send Me the Weekly Digest"}</button>
                 </div>
                 <small className="field-hint">The schedule applies when you save settings; the buttons send at once.</small>
               </fieldset>
@@ -190,7 +190,7 @@ export default function SettingsPanel() {
                 <legend><Mail size={12} /> Email delivery</legend>
                 <p className="field-hint">The app sends through the Google account chosen here: notifications, summary emails, and anything else it emails. People who have signed in with Google appear in the list. Report emails stay off until switched on.</p>
                 <div className="rule-row">
-                  <Field label="Send from" hint={meta.mail.senders.length ? "A user whose Google mailbox is connected." : "Nobody has signed in with Google yet."}>
+                  <Field label="Send From" hint={meta.mail.senders.length ? "A user whose Google mailbox is connected." : "Nobody has signed in with Google yet."}>
                     <select value={settings.email.senderUserId ?? ""} onChange={(event) => setSettings({ ...settings, email: { ...settings.email, senderUserId: event.target.value ? Number(event.target.value) : null } })}>
                       <option value="">Not chosen (nothing is sent)</option>
                       {meta.mail.senders.map((sender) => <option key={sender.userId} value={sender.userId}>{sender.name} · {sender.email}</option>)}
@@ -199,14 +199,14 @@ export default function SettingsPanel() {
                 </div>
                 <label className="checklist-item"><input type="checkbox" checked={settings.email.reportEmails} onChange={(event) => setSettings({ ...settings, email: { ...settings.email, reportEmails: event.target.checked } })} /> Send report emails (the weekly stalled-leads report to administrators)</label>
                 <div className="kpi-reports">
-                  <span className="field-label">KPI reports to administrators</span>
+                  <span className="field-label">KPI Reports to Administrators</span>
                   <small className="field-hint">Where every Sales Manager&apos;s deals stand when the email is sent: how many, split by status, and what is waiting on the person (overdue follow-ups, stalled deals, client replies), with the totals and the pipeline by stage. Daily on business days at the daily digest time. The weekly report (on the digest day) and the monthly one (on the first of the month) add what was recorded last week or last month.</small>
                   {kpiReportKinds.map((kind) => (
                     <label key={kind} className="checklist-item"><input type="checkbox" checked={settings.email.kpiReports[kind]} onChange={(event) => setSettings({ ...settings, email: { ...settings.email, kpiReports: { ...settings.email.kpiReports, [kind]: event.target.checked } } })} /> {kpiReportLabels[kind]} KPI report</label>
                   ))}
                   <div className="digest-actions">
                     {kpiReportKinds.map((kind) => (
-                      <button key={kind} type="button" className="button button-outline button-small" disabled={sendingKpi !== null} onClick={() => void sendKpiReport(kind)}><Send size={13} /> {sendingKpi === kind ? "Sending..." : `Send me the ${kind} KPI report`}</button>
+                      <button key={kind} type="button" className="button button-outline button-small" disabled={sendingKpi !== null} onClick={() => void sendKpiReport(kind)}><Send size={13} /> {sendingKpi === kind ? "Sending..." : `Send Me the ${kind.charAt(0).toUpperCase()}${kind.slice(1)} KPI Report`}</button>
                     ))}
                   </div>
                 </div>
@@ -245,9 +245,9 @@ export default function SettingsPanel() {
                   })}
                 </div>
                 <div className="digest-grid">
-                  <Field label="Warn administrators at (%)" hint="Of a source's monthly call budget; a second alert goes out when it is spent."><input type="number" min={1} max={100} value={settings.jobSources.warnAtPercent} onChange={(event) => setSettings({ ...settings, jobSources: { ...settings.jobSources, warnAtPercent: Number(event.target.value) } })} /></Field>
-                  <Field label="Keep listings for (hours)" hint={`1 to ${maxCacheHours}. A company is not asked about again within this time.`}><input type="number" min={1} max={maxCacheHours} value={settings.jobSources.cacheHours} onChange={(event) => setSettings({ ...settings, jobSources: { ...settings.jobSources, cacheHours: Number(event.target.value) } })} required /></Field>
-                  <Field label="Companies checked per trip" hint={`0 to ${maxPrefetch}. The nearest ones are checked when a trip is created; the rest on demand.`}><input type="number" min={0} max={maxPrefetch} value={settings.jobSources.prefetch} onChange={(event) => setSettings({ ...settings, jobSources: { ...settings.jobSources, prefetch: Number(event.target.value) } })} required /></Field>
+                  <Field label="Warn Administrators at (%)" hint="Of a source's monthly call budget; a second alert goes out when it is spent."><input type="number" min={1} max={100} value={settings.jobSources.warnAtPercent} onChange={(event) => setSettings({ ...settings, jobSources: { ...settings.jobSources, warnAtPercent: Number(event.target.value) } })} /></Field>
+                  <Field label="Keep Listings for (Hours)" hint={`1 to ${maxCacheHours}. A company is not asked about again within this time.`}><input type="number" min={1} max={maxCacheHours} value={settings.jobSources.cacheHours} onChange={(event) => setSettings({ ...settings, jobSources: { ...settings.jobSources, cacheHours: Number(event.target.value) } })} required /></Field>
+                  <Field label="Companies Checked per Trip" hint={`0 to ${maxPrefetch}. The nearest ones are checked when a trip is created; the rest on demand.`}><input type="number" min={0} max={maxPrefetch} value={settings.jobSources.prefetch} onChange={(event) => setSettings({ ...settings, jobSources: { ...settings.jobSources, prefetch: Number(event.target.value) } })} required /></Field>
                 </div>
               </fieldset>
               <fieldset className="user-privileges maps-usage-editor">
@@ -280,7 +280,7 @@ export default function SettingsPanel() {
                   })}
                 </div>
                 <div className="digest-grid">
-                  <Field label="Warn administrators at (%)" hint="One in-app notification (and an email to those who opted in) per allowance and month at this level, and again when the budget is spent."><input type="number" min={1} max={100} value={settings.maps.warnAtPercent} onChange={(event) => setSettings({ ...settings, maps: { ...settings.maps, warnAtPercent: Number(event.target.value) } })} required /></Field>
+                  <Field label="Warn Administrators at (%)" hint="One in-app notification (and an email to those who opted in) per allowance and month at this level, and again when the budget is spent."><input type="number" min={1} max={100} value={settings.maps.warnAtPercent} onChange={(event) => setSettings({ ...settings, maps: { ...settings.maps, warnAtPercent: Number(event.target.value) } })} required /></Field>
                 </div>
                 <small className="field-hint">The surest guard is on Google&apos;s side: cap each API&apos;s requests per day in the Cloud console (APIs &amp; Services → Quotas &amp; System Limits) and set a Cloud Billing budget alert. The app&apos;s counters are a second line and can trail Google&apos;s by a little.</small>
               </fieldset>
@@ -297,12 +297,12 @@ export default function SettingsPanel() {
                 </div>
                 <div className="rule-row">
                   <Field label="Run at"><input type="time" value={settings.opportunities.time} onChange={(event) => setSettings({ ...settings, opportunities: { ...settings.opportunities, time: event.target.value } })} /></Field>
-                  <Field label="Listings per search and source" hint={`${minMaxListings} to ${maxMaxListings}; a search can set its own cap.`}><input type="number" min={minMaxListings} max={maxMaxListings} value={settings.opportunities.maxListings} onChange={(event) => setSettings({ ...settings, opportunities: { ...settings.opportunities, maxListings: Number(event.target.value) } })} /></Field>
+                  <Field label="Listings per Search and Source" hint={`${minMaxListings} to ${maxMaxListings}; a search can set its own cap.`}><input type="number" min={minMaxListings} max={maxMaxListings} value={settings.opportunities.maxListings} onChange={(event) => setSettings({ ...settings, opportunities: { ...settings.opportunities, maxListings: Number(event.target.value) } })} /></Field>
                 </div>
                 <div className="rule-row">
-                  <Field label="Default job titles" hint={`One per line, up to ${maxSearchTitles}. Pre-filled on a new search; a search sends its titles to Indeed as one query, so a group costs one call per page.`}><textarea rows={4} value={settings.opportunities.defaultTitles.join("\n")} onChange={(event) => setSettings({ ...settings, opportunities: { ...settings.opportunities, defaultTitles: event.target.value.split("\n") } })} /></Field>
-                  <Field label="Default location" hint="One city, region, or province per search, for example Ontario."><input value={settings.opportunities.defaultLocation} maxLength={160} onChange={(event) => setSettings({ ...settings, opportunities: { ...settings.opportunities, defaultLocation: event.target.value } })} /></Field>
-                  <Field label="Posted within (days)" hint={`${minPostedWithinDays} to ${maxPostedWithinDays}; how far back each search looks. Indeed via HasData looks back at most 14 days.`}><input type="number" min={minPostedWithinDays} max={maxPostedWithinDays} value={settings.opportunities.postedWithinDays} onChange={(event) => setSettings({ ...settings, opportunities: { ...settings.opportunities, postedWithinDays: Number(event.target.value) } })} /></Field>
+                  <Field label="Default Job Titles" hint={`One per line, up to ${maxSearchTitles}. Pre-filled on a new search; a search sends its titles to Indeed as one query, so a group costs one call per page.`}><textarea rows={4} value={settings.opportunities.defaultTitles.join("\n")} onChange={(event) => setSettings({ ...settings, opportunities: { ...settings.opportunities, defaultTitles: event.target.value.split("\n") } })} /></Field>
+                  <Field label="Default Location" hint="One city, region, or province per search, for example Ontario."><input value={settings.opportunities.defaultLocation} maxLength={160} onChange={(event) => setSettings({ ...settings, opportunities: { ...settings.opportunities, defaultLocation: event.target.value } })} /></Field>
+                  <Field label="Posted Within (Days)" hint={`${minPostedWithinDays} to ${maxPostedWithinDays}; how far back each search looks. Indeed via HasData looks back at most 14 days.`}><input type="number" min={minPostedWithinDays} max={maxPostedWithinDays} value={settings.opportunities.postedWithinDays} onChange={(event) => setSettings({ ...settings, opportunities: { ...settings.opportunities, postedWithinDays: Number(event.target.value) } })} /></Field>
                 </div>
                 <div className="weekday-picks" aria-label="Job sources for the searches">
                   {opportunitySourceIds.map((id) => (
@@ -329,19 +329,19 @@ export default function SettingsPanel() {
                   </ul>
                 )}
                 <div className="holiday-add">
-                  <Field label="Holiday date"><input type="date" value={holidayDate} onChange={(event) => setHolidayDate(event.target.value)} /></Field>
-                  <Field label="Holiday name"><input value={holidayName} maxLength={maxHolidayNameLength} placeholder="Canada Day" onChange={(event) => setHolidayName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addHoliday(); } }} /></Field>
-                  <button type="button" className="button button-outline button-small" onClick={addHoliday}><Plus size={13} /> Add holiday</button>
+                  <Field label="Holiday Date"><input type="date" value={holidayDate} onChange={(event) => setHolidayDate(event.target.value)} /></Field>
+                  <Field label="Holiday Name"><input value={holidayName} maxLength={maxHolidayNameLength} placeholder="Canada Day" onChange={(event) => setHolidayName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addHoliday(); } }} /></Field>
+                  <button type="button" className="button button-outline button-small" onClick={addHoliday}><Plus size={13} /> Add Holiday</button>
                 </div>
                 <ErrorText message={holidayError} />
                 <small className="field-hint">Additions and removals apply when you save settings.</small>
               </fieldset>
-              <div className="modal-actions"><button className="button button-primary" type="submit" disabled={busy}><Save size={15} /> {busy ? "Saving..." : "Save settings"}</button></div>
+              <div className="modal-actions"><button className="button button-primary" type="submit" disabled={busy}><Save size={15} /> {busy ? "Saving..." : "Save Settings"}</button></div>
             </div>
           </form>
           <ReleasesCard />
           <section className="panel settings-panel">
-            <div className="panel-heading"><div><h2>Email log</h2><p>What the app sent, or recorded in stub mode.</p></div><button type="button" className="text-button" onClick={load}><RefreshCw size={13} /> Refresh</button></div>
+            <div className="panel-heading"><div><h2>Email Log</h2><p>What the app sent, or recorded in stub mode.</p></div><button type="button" className="text-button" onClick={load}><RefreshCw size={13} /> Refresh</button></div>
             <div className={`form-note ${meta.mailerConfigured ? "" : "note-warning"}`}><Mail size={14} /> {
               meta.mail.provider === "gmail" ? (settings.email.senderUserId ? `Sending through Gmail from ${meta.mail.senders.find((sender) => sender.userId === settings.email.senderUserId)?.email ?? "the chosen mailbox"}.` : "Gmail delivery: choose a sending mailbox above and save settings; until then nothing is sent.")
                 : meta.mail.provider === "stub" ? "Stub mode (MAIL_PROVIDER=stub): nothing is sent; every message is recorded below so it can be checked."
@@ -365,7 +365,7 @@ export default function SettingsPanel() {
                 </table>
               </div>
             )}
-            <div className="panel-heading"><div><h2>Business timezone</h2><p>Follow-up days, weekly targets, and each account&apos;s daily sign-out time use this zone.</p></div></div>
+            <div className="panel-heading"><div><h2>Business Timezone</h2><p>Follow-up days, weekly targets, and each account&apos;s daily sign-out time use this zone.</p></div></div>
             <div className="form-note">{meta.timeZone} · change with BUSINESS_TIMEZONE in .env.local</div>
           </section>
         </div>

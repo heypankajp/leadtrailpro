@@ -1,13 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type DragEvent } from "react";
-import { CalendarRange, CircleDashed, Clock3, Filter, Kanban, List, MailOpen, MoreHorizontal, Pencil, Plus, Search, Undo2, X } from "lucide-react";
+import { CalendarRange, CircleDashed, Clock3, Filter, Kanban, List, MailOpen, MoreHorizontal, Pencil, Plus, Search, Undo2, X, Heart } from "lucide-react";
 import { errorMessage } from "@/lib/api";
 import { formatShortDate, initials, relativeTime } from "@/lib/format";
 import { useAsyncData } from "@/lib/useAsyncData";
 import { replyWaiting } from "@/features/gmail/watch-model";
 import { reasonListFor } from "@/features/list-values/model";
-import { updateLead } from "@/features/leads/client";
+import { updateLead, setDealFavorite } from "@/features/leads/client";
 import { StatusReasonDialog } from "@/features/leads/DealPage";
 import QuickFilterMenu from "@/features/leads/QuickFilterMenu";
 import type { QuickFilterKey } from "@/features/leads/quick-filters";
@@ -34,7 +34,7 @@ type LastMove = { leadId: number; clientName: string; toName: string } & ({ kind
  * "Edit pipeline" (PD-21) lets Sales Managers and Admins rename, reorder, delete and add stages. The page heading, the
  * view switch and the "+ Deal" button belong to DealsPage, which renders this board.
  */
-export default function PipelinePage({ groupBy = "stage" }: { groupBy?: PipelineGroupBy }) {
+export default function PipelinePage({ groupBy = "stage", favoritesOnly = false }: { groupBy?: PipelineGroupBy; favoritesOnly?: boolean }) {
   const { reference, refreshReference, can, user, navigate, openLead, openNewLeadIn, openNewLeadFor, notify, dataVersion, bumpData } = useApp();
   const byStatus = groupBy === "status";
   const [scope, setScope] = useState<PipelineScope>(user.role === "admin" ? "team" : "mine");
@@ -68,11 +68,12 @@ export default function PipelinePage({ groupBy = "stage" }: { groupBy?: Pipeline
     const firstContact = filters.dateField === "first_contact";
     return {
       scope, leadTypeId: numeric(filters.leadTypeId), ownerId: scope === "team" ? numeric(filters.ownerId) : undefined, q: debouncedQ, quick: filters.quick ?? undefined,
+      favorites: favoritesOnly || undefined,
       pipelineId: chosen && !chosen.isDefault ? chosen.id : undefined,
       ...(byStatus ? { groupBy: "status" as const, stageId: numeric(filters.stageId) } : { statusId: numeric(filters.statusId) }),
       ...(firstContact ? { firstContactFrom: filters.dateFrom || undefined, firstContactTo: filters.dateTo || undefined } : { followUpFrom: filters.dateFrom || undefined, followUpTo: filters.dateTo || undefined }),
     };
-  }, [scope, filters.leadTypeId, filters.ownerId, filters.statusId, filters.stageId, filters.dateField, filters.dateFrom, filters.dateTo, filters.quick, debouncedQ, pipelineId, reference.pipelines, byStatus]);
+  }, [scope, filters.leadTypeId, filters.ownerId, filters.statusId, filters.stageId, filters.dateField, filters.dateFrom, filters.dateTo, filters.quick, debouncedQ, pipelineId, reference.pipelines, byStatus, favoritesOnly]);
   const fetcher = useCallback(() => fetchPipeline(query), [query]);
   const { data, error, loading } = useAsyncData<PipelineBoard>(fetcher, dataVersion);
   const board = local && local.base === data ? local.board : data;
@@ -90,6 +91,20 @@ export default function PipelinePage({ groupBy = "stage" }: { groupBy?: Pipeline
     return () => window.clearTimeout(timer);
   }, [lastMove]);
 
+  // Favourites (request of November 20, 2026): the heart on a card marks the deal for the signed-in person only; the change shows at once.
+  const [favorites, setFavorites] = useState<Record<number, boolean>>({});
+  const isFavorite = (card: PipelineCard) => favorites[card.id] ?? card.favorite;
+  const toggleFavorite = async (card: PipelineCard) => {
+    const next = !isFavorite(card);
+    setFavorites((current) => ({ ...current, [card.id]: next }));
+    try {
+      await setDealFavorite(card.id, next);
+      notify(next ? `${card.clientName} added to your favourites` : `${card.clientName} removed from your favourites`);
+    } catch (caught) {
+      setFavorites((current) => ({ ...current, [card.id]: !next }));
+      notify(caught instanceof Error ? caught.message : "The favourite could not be saved.", "error");
+    }
+  };
   const canMove = (card: PipelineCard) => can("edit_any_lead") || (can("edit_leads") && card.ownerId === user.id);
   const columnOf = (card: PipelineCard) => (byStatus ? card.statusId : card.stageId);
   const columnName = (columnId: number) => board?.stages.find((column) => column.id === columnId)?.value ?? "";
@@ -227,10 +242,13 @@ export default function PipelinePage({ groupBy = "stage" }: { groupBy?: Pipeline
     <>
       <section className="panel pipeline-panel">
         <div className="pipeline-toolbar">
+          {/* With the heart on, the board shows the person's favourites whoever owns them: the scope does not apply. */}
+          {favoritesOnly ? <span className="pipeline-fav-note">Your favourites</span> : (
           <div className="scope-toggle" role="group" aria-label="Pipeline scope">
-            <button className={scope === "mine" ? "is-active" : ""} aria-pressed={scope === "mine"} onClick={() => setScope("mine")}>My deals</button>
+            <button className={scope === "mine" ? "is-active" : ""} aria-pressed={scope === "mine"} onClick={() => setScope("mine")}>My Deals</button>
             <button className={scope === "team" ? "is-active" : ""} aria-pressed={scope === "team"} onClick={() => setScope("team")}>Everyone</button>
           </div>
+          )}
           {pipelines.length > 1 && (
             <label className="select-filter pipeline-picker">
               <Kanban size={15} />
@@ -252,7 +270,7 @@ export default function PipelinePage({ groupBy = "stage" }: { groupBy?: Pipeline
           </button>
           {!byStatus && can("manage_stages") && (
             <button className={`button button-outline button-small ${editing ? "is-active" : ""}`} aria-pressed={editing} onClick={() => { setEditing((open) => !open); setLastMove(null); }}>
-              <Pencil size={14} /> {editing ? "Done editing" : "Edit pipeline"}
+              <Pencil size={14} /> {editing ? "Done Editing" : "Edit Pipeline"}
             </button>
           )}
           <span className="board-total" role="status">{board ? `${board.total} ${board.total === 1 ? "deal" : "deals"}` : ""}</span>
@@ -265,7 +283,7 @@ export default function PipelinePage({ groupBy = "stage" }: { groupBy?: Pipeline
               onChange: (from, to) => update(from ? { dateField: "follow_up", dateFrom: from, dateTo: to } : { dateFrom: "", dateTo: "" }),
             }}
           />
-          {filters.quick && <button className="text-button quick-filter-list" onClick={() => navigate("deals", "list", { quick: filters.quick!, scope: scope === "team" ? "everyone" : "mine" })}><List size={13} /> Open in the list</button>}
+          {filters.quick && <button className="text-button quick-filter-list" onClick={() => navigate("deals", "list", { quick: filters.quick!, scope: scope === "team" ? "everyone" : "mine" })}><List size={13} /> Open in the List</button>}
         </div>
         {showFilters && (
           <div className="filters-panel">
@@ -290,7 +308,7 @@ export default function PipelinePage({ groupBy = "stage" }: { groupBy?: Pipeline
               <input type="date" aria-label="To" value={filters.dateTo} min={filters.dateFrom || undefined} onChange={(event) => update({ dateTo: event.target.value })} />
               <button type="button" className="text-button" onClick={() => update({ dateFrom: reference.today, dateTo: reference.today })}>Today</button>
             </div>
-            <div className="filter-actions"><button className="text-button" onClick={() => setFilters((current) => ({ ...emptyFilters, q: current.q }))}>Clear filters</button></div>
+            <div className="filter-actions"><button className="text-button" onClick={() => setFilters((current) => ({ ...emptyFilters, q: current.q }))}>Clear Filters</button></div>
           </div>
         )}
         {editable && <p className="form-note stage-edit-note"><Pencil size={14} /> Rename a stage in its box, move it with the arrows, or delete it; add one at the end. Changes apply to everyone&apos;s board.</p>}
@@ -322,7 +340,7 @@ export default function PipelinePage({ groupBy = "stage" }: { groupBy?: Pipeline
                   ? <EditableStageHead key={`${column.id}:${column.value}`} stage={column} first={index === 0} last={index === columns.length - 1} others={columns.filter((item) => item.id !== column.id && item.active)} onChanged={stagesChanged} />
                   : (
                     <header className="pipeline-column-head">
-                      <h2>{column.value}{column.active ? "" : " (inactive)"}</h2>
+                      <h2>{column.value}{column.active ? "" : " (Inactive)"}</h2>
                       <span>{column.valueTotal > 0 ? `${formatDealValue(column.valueTotal)} · ` : ""}{column.count} {column.count === 1 ? "deal" : "deals"}</span>
                       {/* PD-28: the column's own menu. */}
                       <ColumnMenu
@@ -381,13 +399,23 @@ export default function PipelinePage({ groupBy = "stage" }: { groupBy?: Pipeline
                             : <span className="pipeline-next pipeline-none"><CircleDashed size={12} /> No next step</span>}
                           {replyWaiting(card) && <span className="pipeline-reply" title="The client wrote and is waiting for a reply"><MailOpen size={12} /></span>}
                           {card.quiet && <span className="pipeline-quiet" title={`No activity for ${card.quietDays} days; the limit is ${card.quietLimit}`}>Quiet {card.quietDays}d</span>}
+                          <button
+                            type="button"
+                            className={`pipeline-fav ${isFavorite(card) ? "is-on" : ""}`}
+                            aria-pressed={isFavorite(card)}
+                            aria-label={isFavorite(card) ? `Remove ${card.clientName} from favourites` : `Mark ${card.clientName} as favourite`}
+                            title={isFavorite(card) ? "Favourite: click to remove" : "Mark as favourite"}
+                            onClick={() => void toggleFavorite(card)}
+                          >
+                            <Heart size={14} fill={isFavorite(card) ? "currentColor" : "none"} />
+                          </button>
                         </div>
                       </article>
                     );
                   })}
                   {column.leads.length < column.count && (
                     <button className="text-button pipeline-more" disabled={loadingMore === column.id} onClick={() => void loadMore(column)}>
-                      {loadingMore === column.id ? "Loading..." : `Show ${Math.min(column.count - column.leads.length, 50)} more`}
+                      {loadingMore === column.id ? "Loading..." : `Show ${Math.min(column.count - column.leads.length, 50)} More`}
                     </button>
                   )}
                   {!column.leads.length && <p className="pipeline-column-empty">{dragging !== null ? "Drop here" : "No deals"}</p>}

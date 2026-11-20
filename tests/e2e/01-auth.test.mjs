@@ -16,8 +16,8 @@ describe("Sign-in and first-time setup", () => {
 
   uiTest("shows the sign-in screen", async () => {
     await page.goto();
-    await page.heading("Welcome back");
-    assert.ok(await page.control("Email address", true));
+    await page.heading("Welcome Back");
+    assert.ok(await page.control("Email Address", true));
   });
 
   uiTest("creates the first administrator from the setup link", async (t) => {
@@ -26,16 +26,16 @@ describe("Sign-in and first-time setup", () => {
       t.skip("an account already exists");
       return;
     }
-    await page.clickButton("First time setup? Create the initial administrator account", { global: true });
-    await page.heading("Create the first administrator");
-    await page.fill("User-management key", managementKey, { global: true });
-    await page.fill("First name", admin.firstName, { global: true });
-    await page.fill("Last name", admin.lastName, { global: true });
+    await page.clickButton("First Time Setup? Create the Initial Administrator Account", { global: true });
+    await page.heading("Create the First Administrator");
+    await page.fill("User-Management Key", managementKey, { global: true });
+    await page.fill("First Name", admin.firstName, { global: true });
+    await page.fill("Last Name", admin.lastName, { global: true });
     await page.fill("Email", admin.email, { global: true });
     await page.fill("Phone", admin.phone, { global: true });
     await page.fill("Password", admin.password, { global: true });
-    await page.fill("Confirm password", admin.password, { global: true });
-    await page.clickButton("Create administrator", { global: true });
+    await page.fill("Confirm Password", admin.password, { global: true });
+    await page.clickButton("Create Administrator", { global: true });
     await page.wait(By.css("nav.side-nav"));
     const greeting = await (await page.wait(By.css(".welcome-row h1"))).getText();
     assert.match(greeting, new RegExp(admin.firstName));
@@ -49,26 +49,26 @@ describe("Sign-in and first-time setup", () => {
   });
 
   uiTest("rejects a wrong password", async () => {
-    await page.fill("Email address", admin.email, { global: true });
+    await page.fill("Email Address", admin.email, { global: true });
     await page.fill("Password", "definitely-not-the-password", { global: true });
-    await page.clickButton("Sign in", { global: true });
+    await page.clickButton("Sign In", { global: true });
     assert.equal(await page.alertText(), "Email or password is incorrect.");
   });
 
   uiTest("accepts a password reset request (stub mail mode records it in the outbox)", async () => {
-    await page.clickButton("Forgot your password?", { global: true });
-    await page.heading("Reset your password");
-    await page.fill("Email address", admin.email, { global: true });
-    await page.clickButton("Send reset link", { global: true });
+    await page.clickButton("Forgot Your Password?", { global: true });
+    await page.heading("Reset Your Password");
+    await page.fill("Email Address", admin.email, { global: true });
+    await page.clickButton("Send Reset Link", { global: true });
     await page.waitText(By.css("p.login-message"), "on its way");
-    await page.clickButton("Back to sign in", { global: true });
-    await page.heading("Welcome back");
+    await page.clickButton("Back to Sign In", { global: true });
+    await page.heading("Welcome Back");
   });
 
   uiTest("signs in with the right password", async () => {
-    await page.fill("Email address", admin.email, { global: true });
+    await page.fill("Email Address", admin.email, { global: true });
     await page.fill("Password", admin.password, { global: true });
-    await page.clickButton("Sign in", { global: true });
+    await page.clickButton("Sign In", { global: true });
     await page.wait(By.css("nav.side-nav"));
     // The account menu in the top bar names the signed-in person and their email address.
     await page.click("button.topbar-user", { global: true });
@@ -80,12 +80,12 @@ describe("Sign-in and first-time setup", () => {
   uiTest("changes the password and signs back in with it", async () => {
     const changeTo = async (current, next) => {
       await page.click("button.topbar-user", { global: true });
-      await page.click(By.xpath('.//div[@role="menu"]//button[normalize-space()="Change password"]'), { global: true });
-      await page.dialogTitle("Change your password");
-      await page.fill("Current password", current);
-      await page.fill("New password", next);
-      await page.fill("Confirm new password", next);
-      await page.clickButton("Change password");
+      await page.click(By.xpath('.//div[@role="menu"]//button[normalize-space()="Change Password"]'), { global: true });
+      await page.dialogTitle("Change Your Password");
+      await page.fill("Current Password", current);
+      await page.fill("New Password", next);
+      await page.fill("Confirm New Password", next);
+      await page.clickButton("Change Password");
       await page.toast("Password changed");
     };
     await changeTo(admin.password, admin.altPassword);

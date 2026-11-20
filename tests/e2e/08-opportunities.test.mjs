@@ -6,28 +6,34 @@ import ExcelJS from "exceljs";
 import { By, Key, Page, createDriver, outputDir, uiTest, waitForServices } from "./helpers/ui.mjs";
 import { admin, ensureAdmin, runId } from "./helpers/data.mjs";
 
-// Move to Pipeline (request of November 19, 2026): the dialog asks the stage and the status; the deal takes the lead's details.
+/** A lead's actions are in its row's Actions menu (request of November 20, 2026). */
+async function rowAction(row, label) {
+  await row.findElement(By.xpath('.//button[starts-with(@aria-label, "Actions for")]')).click();
+  await row.findElement(By.xpath(`.//div[@role="menu"]//button[normalize-space()="${label}"]`)).click();
+}
+
+// Convert to Deal (requests of November 19 and 20, 2026): the dialog asks the stage and the status; the deal takes the lead's details.
 // At file level: both suites below use it, each with its own page.
 async function moveToPipeline(page, row, name, stage, status) {
-  await row.findElement(By.xpath('.//button[contains(normalize-space(.), "Move to Pipeline")]')).click();
-  await page.dialogTitle(`Move ${name} to the Pipeline`);
-  await page.fill("Pipeline stage", stage);
+  await rowAction(row, "Convert to Deal");
+  await page.dialogTitle(`Convert ${name} to a Deal`);
+  await page.fill("Pipeline Stage", stage);
   await page.fill("Status", status);
-  await page.clickButton("Move to Pipeline");
-  await page.toast(`${name} moved to the Pipeline: ${stage}, ${status}`);
+  await page.clickButton("Convert to Deal");
+  await page.toast(`${name} converted to a deal: ${stage}, ${status}`);
 }
 
 /** Opens a deal from the top bar search (both suites below). */
 async function openDeal(page, name) {
   const search = await page.wait(By.css('input[aria-label="Search all deals"]'));
   await search.sendKeys(Key.chord(Key.CONTROL, "a"), Key.BACK_SPACE, name, Key.ENTER);
-  await page.heading("All deals");
+  await page.heading("All Deals");
   await page.click(By.xpath(`//tr[.//strong[normalize-space()="${name}"]]//button[contains(@class,"client-cell")]`), { global: true });
   await page.wait(By.css("div.deal-page"));
 }
 
 // Runs on the sample job source (TRIPS_PROVIDER=stub): the keyword "baker" near Mississauga finds three sample companies.
-describe("Leads inbox", () => {
+describe("Leads Inbox", () => {
   const company = "Lakeshore Bakery Co.";
   const cardRow = (name) => By.xpath(`//table[contains(@class,"opp-table")]//tr[.//strong[normalize-space()="${name}"]]`);
   let driver;
@@ -46,12 +52,12 @@ describe("Leads inbox", () => {
     await page.nav("Lead Generation");
     await page.heading("Lead Generation");
     await page.tab("Searches & runs");
-    await page.clickButton("Add search");
-    await page.dialogTitle("Add a search");
+    await page.clickButton("Add Search");
+    await page.dialogTitle("Add a Search");
     await page.fill("Name", `Bakery staff ${runId}`);
-    await page.fill("Job titles", "baker");
+    await page.fill("Job Titles", "baker");
     await page.fill("Location", "Mississauga, ON");
-    await page.clickButton("Save search");
+    await page.clickButton("Save Search");
     await page.toast("saved");
     await page.clickButton("Execute", { global: true });
     await page.toast("new companies");
@@ -61,12 +67,15 @@ describe("Leads inbox", () => {
     assert.match(await row.getText(), /Sample listings/);
   });
 
-  uiTest("Move to Pipeline creates the deal at the chosen stage and status, and the card leaves the pool", async () => {
+  uiTest("Convert to Deal creates the deal at the chosen stage and status, and the card leaves the pool", async () => {
     const row = await page.wait(cardRow(company));
     await moveToPipeline(page, row, company, "Qualified", "Warm");
-    await page.tab("Converted to deals");
-    const assigned = await page.wait(cardRow(company));
-    assert.match(await assigned.getText(), /Deal:/);
+    // No Converted tab (request of November 20, 2026): the card leaves the inbox and the deal is in the Pipeline.
+    assert.equal((await driver.findElements(By.xpath('//button[@role="tab"][starts-with(normalize-space(.), "Converted to deals")]'))).length, 0);
+    await driver.wait(async () => (await driver.findElements(cardRow(company))).length === 0, 10000, "the converted card leaves the inbox");
+    await openDeal(page, company);
+    await page.waitText(By.css("div.deal-page"), "Qualified");
+    await page.waitText(By.css("div.deal-page"), "Warm");
   });
 
   uiTest("Add deal: a near-match name meets the duplicate guard, and the exact company shows its open deals (PD-15)", async () => {
@@ -89,36 +98,35 @@ describe("Leads inbox", () => {
   uiTest("a lead added by hand carries its source, BD action and client response into the deal (request of November 19, 2026)", async () => {
     const manual = `Hand Added Lead ${runId}`;
     await page.nav("Leads");
-    await page.clickButton("Add lead", { global: true });
-    await page.dialogTitle("Add lead");
+    await page.clickButton("Add Lead", { global: true });
+    await page.dialogTitle("Add Lead");
     // Company and contacts as in Add deal: "+ Add ... as new company" opens Add company with the name; a new contact opens
     // Add contact. The second contact is typed after a comma.
     const pickOption = (label) => page.click(By.xpath(`//ul[contains(@class,"suggest-list")]//li[@role="option"][contains(normalize-space(.), ${JSON.stringify(label)})]`), { global: true });
     await page.fill("Company", manual);
     await pickOption(`Add '${manual}' as new company`);
-    await page.dialogTitle("Add company");
+    await page.dialogTitle("Add Company");
     assert.equal(await (await page.control("Name")).getAttribute("value"), manual);
-    await page.clickAndClose("Save company");
-    await page.dialogTitle("Add lead");
+    await page.clickAndClose("Save Company");
+    await page.dialogTitle("Add Lead");
     await page.fillNamed("Contact", "Nora Hand");
     await pickOption("Add 'Nora Hand' as new contact");
-    await page.dialogTitle("Add contact");
-    await page.clickAndClose("Save contact");
-    await page.dialogTitle("Add lead");
+    await page.dialogTitle("Add Contact");
+    await page.clickAndClose("Save Contact");
+    await page.dialogTitle("Add Lead");
     await page.fillNamed("Contact", "Omar Hand,");
-    await page.dialogTitle("Add contact");
-    await page.clickAndClose("Save contact");
-    await page.dialogTitle("Add lead");
-    await page.setValue(await page.control("Lead source"), "Referral");
-    await page.setValue(await page.control("BD action"), "First Call");
-    await page.setValue(await page.control("Client response"), "Approach Later");
-    await page.clickButton("Add lead");
+    await page.dialogTitle("Add Contact");
+    await page.clickAndClose("Save Contact");
+    await page.dialogTitle("Add Lead");
+    await page.setValue(await page.control("Lead Source"), "Referral");
+    await page.setValue(await page.control("BD Action"), "First Call");
+    await page.setValue(await page.control("Client Response"), "Approach Later");
+    await page.clickButton("Add Lead");
     await page.toast(`${manual} added to the leads inbox`);
     const row = await page.wait(cardRow(manual));
     assert.match(await row.getText(), /Lead source: Referral/);
     assert.match(await row.getText(), /First Call/);
     assert.match(await row.getText(), /Nora Hand, Omar Hand/);
-    // Leads keeps only its inbox and Not relevant.
     assert.equal((await driver.findElements(By.xpath('//button[@role="tab"][starts-with(normalize-space(.), "Converted to deals")]'))).length, 0);
     await moveToPipeline(page, row, manual, "New Deal", "Cold");
     await openDeal(page, manual);
@@ -132,16 +140,32 @@ describe("Leads inbox", () => {
     await page.heading("Lead Generation");
     await page.tab("Inbox");
     const row = await page.wait(cardRow("Streetsville Pastry Kitchen"));
-    await row.findElement(By.xpath('.//button[contains(normalize-space(.), "Not relevant")]')).click();
-    await page.dialogTitle("Not relevant: Streetsville Pastry Kitchen");
+    await rowAction(row, "Not Relevant");
+    await page.dialogTitle("Not Relevant: Streetsville Pastry Kitchen");
     await page.fill("Reason", "Role not relevant");
-    await page.clickButton("Mark not relevant");
+    await page.clickButton("Mark Not Relevant");
     await page.toast("marked not relevant");
-    await page.tab("Not relevant");
+    await page.tab("Not Relevant");
     const hidden = await page.wait(cardRow("Streetsville Pastry Kitchen"));
     assert.match(await hidden.getText(), /Role not relevant/);
-    await hidden.findElement(By.xpath('.//button[contains(normalize-space(.), "Back to the inbox")]')).click();
+    await rowAction(hidden, "Back to the Inbox");
     await page.toast("back in the inbox");
+    await page.tab("Inbox");
+    await page.wait(cardRow("Streetsville Pastry Kitchen"));
+  });
+
+  // Request of November 20, 2026: a lead archived by hand is listed on Archive → Leads and restored to the inbox from there.
+  uiTest("a lead can be archived by hand and restored from the Archive", async () => {
+    const row = await page.wait(cardRow("Streetsville Pastry Kitchen"));
+    await rowAction(row, "Archive");
+    await page.toast("Streetsville Pastry Kitchen moved to the Archive");
+    await page.nav("Archive");
+    await page.heading("Archive");
+    const archived = await page.wait(cardRow("Streetsville Pastry Kitchen"));
+    assert.match(await archived.getText(), /Generated/);
+    await archived.findElement(By.xpath('.//button[@aria-label="Restore Streetsville Pastry Kitchen"]')).click();
+    await page.toast("Streetsville Pastry Kitchen is back in the inbox of Lead Generation");
+    await page.nav("Lead Generation");
     await page.tab("Inbox");
     await page.wait(cardRow("Streetsville Pastry Kitchen"));
   });
@@ -181,8 +205,8 @@ describe("Leads inbox cards from the sales tracker", () => {
     await page.toast("Preview ready");
     await page.wait(By.xpath('//div[contains(@class,"import-count")][.//span[normalize-space()="companies with no Sales Manager placed in the leads inbox"]][.//strong[normalize-space()="1"]]'));
     await page.clickButton("Apply", { global: true });
-    await page.dialogTitle("Apply the import?");
-    await page.clickButton("Apply import");
+    await page.dialogTitle("Apply the Import?");
+    await page.clickButton("Apply Import");
     await page.toast("Sales tracker imported");
   });
 
@@ -195,8 +219,8 @@ describe("Leads inbox cards from the sales tracker", () => {
     assert.match(text, /2 tracker entries/);
     assert.match(text, /Jamie Ortiz/);
     // The sheet's status is the dialog's starting status.
-    await row.findElement(By.xpath('.//button[contains(normalize-space(.), "Move to Pipeline")]')).click();
-    await page.dialogTitle(`Move ${company} to the Pipeline`);
+    await rowAction(row, "Convert to Deal");
+    await page.dialogTitle(`Convert ${company} to a Deal`);
     assert.equal(await page.selectedText(await page.control("Status")), "Warm");
     await page.closeDialog();
     await moveToPipeline(page, await page.wait(cardRow(company)), company, "New Deal", "Warm");

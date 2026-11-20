@@ -6,7 +6,7 @@ import type { QuickFilterKey } from "@/features/leads/quick-filters";
 import type { PipelineBoard, PipelineGroupBy, PipelineScope } from "./model";
 
 export type PipelineQuery = Partial<{
-  scope: PipelineScope; leadTypeId: number; ownerId: number; statusId: number; q: string; stageId: number; pipelineId: number; offset: number;
+  scope: PipelineScope; leadTypeId: number; ownerId: number; statusId: number; q: string; stageId: number; pipelineId: number; offset: number; favorites: boolean;
   /** PD-24: the board by status; `column` is the status column of Show more there. */
   groupBy: PipelineGroupBy; column: number;
   /** PD-23: the date filter. */

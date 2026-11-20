@@ -12,7 +12,7 @@ type CardRow = {
   id: number; clientName: string; clientExecutive: string; city: string | null; leadTypeId: number; leadType: string;
   statusId: number; statusCode: string; status: string; statusReason: string | null; statusReasonId: number | null; bdActionId: number | null; bdAction: string | null;
   ownerId: number; ownerName: string; stageId: number; columnId: number; dealValue: string | number | null; followUpDate: string | null; nextTaskDueAt: string | null; nextTaskTitle: string | null;
-  lastActivityAt: string; lastClientEmailAt: string | null; lastTeamEmailAt: string | null; todoListId: number | null; rn: number;
+  lastActivityAt: string; lastClientEmailAt: string | null; lastTeamEmailAt: string | null; todoListId: number | null; favorite: boolean; rn: number;
 };
 
 const likePattern = (term: string) => `%${term.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
@@ -45,7 +45,9 @@ export async function listPipeline(filters: PipelineFilters, viewer: UserAccount
     clauses.push(quick.clause);
     params.push(...quick.params);
   }
-  if (filters.scope === "mine") { clauses.push("l.owner_id = ?"); params.push(viewer.id); }
+  // Favourites (request of November 20, 2026): the viewer's own marks, on anyone's deals, so My deals does not hide them.
+  if (filters.favorites) { clauses.push("EXISTS (SELECT 1 FROM deal_favorites fav WHERE fav.lead_id = l.id AND fav.user_id = ?)"); params.push(viewer.id); }
+  else if (filters.scope === "mine") { clauses.push("l.owner_id = ?"); params.push(viewer.id); }
   else if (filters.ownerId) { clauses.push("l.owner_id = ?"); params.push(filters.ownerId); }
   if (filters.leadTypeId) { clauses.push("l.lead_type_id = ?"); params.push(filters.leadTypeId); }
   if (filters.statusId && !byStatus) { clauses.push("l.status_id = ?"); params.push(filters.statusId); }
@@ -83,6 +85,7 @@ export async function listPipeline(filters: PipelineFilters, viewer: UserAccount
           l.owner_id AS "ownerId", CONCAT(o.first_name, ' ', o.last_name) AS "ownerName", COALESCE(l.stage_id, ?) AS "stageId", ${columnSql} AS "columnId",
           l.follow_up_date AS "followUpDate", l.deal_value AS "dealValue", nt.due_at AS "nextTaskDueAt", nt.title AS "nextTaskTitle",
           l.last_activity_at AS "lastActivityAt", l.last_client_email_at AS "lastClientEmailAt", l.last_team_email_at AS "lastTeamEmailAt", l.todo_list_id AS "todoListId",
+          EXISTS (SELECT 1 FROM deal_favorites fav WHERE fav.lead_id = l.id AND fav.user_id = ${Number(viewer.id)}) AS favorite,
           LEAST(nt.due_at, l.follow_up_date::timestamp) AS next_step
         ${from.replace("FROM leads l", "FROM leads l LEFT JOIN LATERAL (SELECT t.due_at, t.title FROM tasks t WHERE t.lead_id = l.id AND t.status = 'open' ORDER BY t.due_at ASC NULLS LAST, t.id LIMIT 1) nt ON TRUE")}
       ), ranked AS (
@@ -109,7 +112,7 @@ export async function listPipeline(filters: PipelineFilters, viewer: UserAccount
       bdActionId: row.bdActionId === null ? null : Number(row.bdActionId), bdAction: row.bdAction, ownerId: Number(row.ownerId), ownerName: row.ownerName, stageId: Number(row.stageId),
       followUpDate: row.followUpDate, dealValue: row.dealValue === null || row.dealValue === undefined ? null : Number(row.dealValue), nextTaskDueAt: fromSqlDateTime(row.nextTaskDueAt), nextTaskTitle: row.nextTaskTitle,
       lastActivityAt, lastClientEmailAt: fromSqlDateTime(row.lastClientEmailAt), lastTeamEmailAt: fromSqlDateTime(row.lastTeamEmailAt), todoListId: row.todoListId === null ? null : Number(row.todoListId),
-      quietDays, quietLimit, quiet: quietDays > quietLimit,
+      quietDays, quietLimit, quiet: quietDays > quietLimit, favorite: Boolean(row.favorite),
     } };
   });
   const columnValues: StageValue[] = byStatus

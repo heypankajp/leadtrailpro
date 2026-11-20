@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
-  AlertCircle, BellRing, Building2, CalendarCheck2, Check, ChevronDown, CircleDollarSign, Compass, Contact, FileSpreadsheet, Handshake, MapPinned, KeyRound, LayoutDashboard, ListChecks, LogOut, Map, Menu,
+  AlertCircle, Archive as ArchiveIcon, BellRing, Building2, CalendarCheck2, Check, ChevronDown, CircleDollarSign, Compass, Contact, FileSpreadsheet, Handshake, MapPinned, KeyRound, LayoutDashboard, ListChecks, LogOut, Map, Menu,
   PanelLeftClose, PanelLeftOpen, Plus, Radar, ScanSearch, Search, Settings2, ShieldCheck, SlidersHorizontal, Target, TrendingUp, UsersRound,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -23,6 +23,7 @@ import { fetchOpportunities } from "@/features/opportunities/client";
 import PreferencesDialog from "@/features/notifications/PreferencesDialog";
 import AdminPage, { adminTabs, type AdminTab } from "@/features/admin/AdminPage";
 import LeadDiscoveryPage from "@/features/preview/LeadDiscoveryPage";
+import ArchivePage from "@/features/archive/ArchivePage";
 import PlannerPage from "@/features/preview/PlannerPage";
 import ReportsPage from "@/features/reports/ReportsPage";
 import { fetchTasks } from "@/features/tasks/client";
@@ -64,6 +65,8 @@ const navigation: { title: string; items: NavItem[] }[] = [
       { id: "trips", label: "Sales Trip Planner", icon: Compass, privilege: "plan_trips" },
       // Request of November 19, 2026: the companies the job searches find, apart from the leads added by hand.
       { id: "lead-generation", label: "Lead Generation", icon: ScanSearch, privilege: "view_leads", count: "found", hideForRecruiter: true },
+      // Request of November 20, 2026: archived leads and deals, each in a tab, restored from here.
+      { id: "archives", label: "Archive", icon: ArchiveIcon, privilege: "view_leads" },
     ],
   },
   {
@@ -90,7 +93,7 @@ const navigation: { title: string; items: NavItem[] }[] = [
 
 const pageTitles: Record<string, string> = {
   home: "Action Center", deals: "Pipeline", leads: "Leads", contacts: "Contacts", activities: "Activities", clients: "Clients", insights: "Insights", todo: "To Do",
-  "sales-trips": "Sales Trips", "lead-generation": "Lead Generation", "lead-discovery": "Lead Discovery", trips: "Sales Trip Planner", planner: "Road Visit Planner",
+  "sales-trips": "Sales Trips", "lead-generation": "Lead Generation", archives: "Archive", "lead-discovery": "Lead Discovery", trips: "Sales Trip Planner", planner: "Road Visit Planner",
   targets: "Targets & Templates", admin: "User Management", values: "List of Values", devices: "Device Authorization", settings: "Settings",
   import: "Tracker Import", api: "API Access",
 };
@@ -150,7 +153,7 @@ export default function AppShell({ user, setUser, signOut, passwordSignIn }: { u
 
   const countsFetcher = useCallback(async () => {
     const [queued, tasks, leads, found, todo] = await Promise.all([
-      can("review_queued") ? fetchLeads({ state: "queued", pageSize: 1 }).then((page) => page.total).catch(() => 0) : Promise.resolve(0),
+      can("review_queued") || can("edit_leads") ? fetchLeads({ state: "queued", pageSize: 1 }).then((page) => page.total).catch(() => 0) : Promise.resolve(0),
       fetchTasks({ status: "open" }).then((result) => result.tasks.length).catch(() => 0),
       can("create_leads") ? fetchOpportunities({ status: "new", pageSize: 1, origin: "manual" }).then((page) => page.counts.new).catch(() => 0) : Promise.resolve(0),
       can("create_leads") ? fetchOpportunities({ status: "new", pageSize: 1, origin: "found" }).then((page) => page.counts.new).catch(() => 0) : Promise.resolve(0),
@@ -249,9 +252,9 @@ export default function AppShell({ user, setUser, signOut, passwordSignIn }: { u
       <main className="login-shell">
         <section className="login-card">
           <span className="eyebrow">SALES WORKSPACE</span>
-          <h1>{referenceError ? "Could not load the workspace" : "Loading your workspace"}</h1>
+          <h1>{referenceError ? "Could Not Load the Workspace" : "Loading Your Workspace"}</h1>
           <p>{referenceError || "Fetching dropdown values, your team, and settings."}</p>
-          {referenceError && <div className="login-form"><button className="button button-primary" onClick={reloadReference}>Try again</button><button className="button button-outline" onClick={() => void signOut()}>Sign out</button></div>}
+          {referenceError && <div className="login-form"><button className="button button-primary" onClick={reloadReference}>Try Again</button><button className="button button-outline" onClick={() => void signOut()}>Sign Out</button></div>}
         </section>
       </main>
     );
@@ -263,6 +266,7 @@ export default function AppShell({ user, setUser, signOut, passwordSignIn }: { u
     if (view === "sales-trips") return can("view_leads") ? (base.param && /^\d+$/.test(base.param) ? <SalesTripPage key={base.param} tripId={Number(base.param)} /> : <SalesTripsPage />) : <NoAccess />;
     if (view === "leads") return can("view_leads") ? <OpportunitiesPage key="manual" origin="manual" /> : <NoAccess />;
     if (view === "lead-generation") return can("view_leads") ? <OpportunitiesPage key="found" origin="found" /> : <NoAccess />;
+    if (view === "archives") return can("view_leads") ? <ArchivePage key={base.param ?? "leads"} tab={base.param === "deals" ? "deals" : "leads"} /> : <NoAccess />;
     if (view === "contacts") return can("view_leads") ? <ContactsPage key={base.param === "companies" ? "organizations" : base.param ?? "people"} tab={base.param === "organizations" || base.param === "companies" ? "organizations" : base.param === "timeline" ? "timeline" : "people"} /> : <NoAccess />;
     if (view === "activities") return <TasksPage />;
     if (view === "clients") return can("view_leads") ? <LeadListPage key={base.query.toString()} view="client" /> : <NoAccess />;
@@ -359,9 +363,9 @@ export default function AppShell({ user, setUser, signOut, passwordSignIn }: { u
                 {menuOpen && (
                   <div className="menu-dropdown" role="menu">
                     <div className="menu-heading"><strong>{user.name}</strong><small>{roleLabel(user.role)}</small><small className="menu-email">{user.email}</small></div>
-                    {passwordSignIn && (<button role="menuitem" onClick={() => { setMenuOpen(false); setPasswordOpen(true); }}><KeyRound size={14} /> Change password</button>)}
-                    <button role="menuitem" onClick={() => { setMenuOpen(false); setPrefsOpen(true); }}><BellRing size={14} /> Notification preferences</button>
-                    <button role="menuitem" onClick={() => void signOut()}><LogOut size={14} /> Sign out</button>
+                    {passwordSignIn && (<button role="menuitem" onClick={() => { setMenuOpen(false); setPasswordOpen(true); }}><KeyRound size={14} /> Change Password</button>)}
+                    <button role="menuitem" onClick={() => { setMenuOpen(false); setPrefsOpen(true); }}><BellRing size={14} /> Notification Preferences</button>
+                    <button role="menuitem" onClick={() => void signOut()}><LogOut size={14} /> Sign Out</button>
                   </div>
                 )}
               </div>
@@ -383,7 +387,7 @@ export default function AppShell({ user, setUser, signOut, passwordSignIn }: { u
             onSaved={(lead) => {
               setNewDeal(null);
               bumpData();
-              notify(lead.recordState === "queued" ? `${lead.clientName} saved and queued for Admin approval` : lead.statusCode === "client" ? `${lead.clientName} added to Clients` : `${lead.clientName} added to the pipeline`);
+              notify(lead.recordState === "queued" ? `${lead.clientName} saved and queued: a colleague must approve it` : lead.statusCode === "client" ? `${lead.clientName} added to Clients` : `${lead.clientName} added to the pipeline`);
               if (lead.recordState === "queued" && can("review_queued")) navigate("deals", "queued");
               else openLead(lead.id);
             }}

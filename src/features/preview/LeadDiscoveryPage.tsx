@@ -26,12 +26,12 @@ export default function LeadDiscoveryPage() {
     <>
       <div className="page-heading"><div><div className="eyebrow">DISCOVER YOUR NEXT CLIENT <span className="eyebrow-dot">·</span> PREVIEW</div><h1>Lead Discovery</h1><p>Explore a company and find a thoughtful way to start a conversation.</p></div></div>
       <div className="panel generation-panel">
-        <div className="generation-intro"><div className="generation-icon"><Sparkles size={20} /></div><div><h2>Research a company</h2><p>Company overview, open positions, hiring challenges, review summary, and a suggested introduction.</p></div></div>
+        <div className="generation-intro"><div className="generation-icon"><Sparkles size={20} /></div><div><h2>Research a Company</h2><p>Company overview, open positions, hiring challenges, review summary, and a suggested introduction.</p></div></div>
         <form className="generation-form" onSubmit={generate}>
-          <label>Company name<input required placeholder="e.g. Acme Industries" value={company} onChange={(event) => setCompany(event.target.value)} /></label>
-          <label>Company website<input type="url" placeholder="https://company.com" value={website} onChange={(event) => setWebsite(event.target.value)} /></label>
-          <label>Search radius<span className="input-with-suffix"><input type="number" defaultValue="25" min="1" /><span>km</span></span></label>
-          <button className="button button-primary" type="submit"><Sparkles size={16} /> Generate company brief</button>
+          <label>Company Name<input required placeholder="e.g. Acme Industries" value={company} onChange={(event) => setCompany(event.target.value)} /></label>
+          <label>Company Website<input type="url" placeholder="https://company.com" value={website} onChange={(event) => setWebsite(event.target.value)} /></label>
+          <label>Search Radius<span className="input-with-suffix"><input type="number" defaultValue="25" min="1" /><span>km</span></span></label>
+          <button className="button button-primary" type="submit"><Sparkles size={16} /> Generate Company Brief</button>
         </form>
         {generated && (
           <div className="generated-brief">
@@ -39,7 +39,7 @@ export default function LeadDiscoveryPage() {
             <p>Sample content. Once job-board, careers-page, review, and company-data sources are connected, this brief will show the real overview, open positions, hiring challenges, interview and review summaries, a suggested engagement approach, and similar companies within the radius.</p>
             <div className="brief-pills"><span><BriefcaseBusiness size={13} /> Open roles</span><span><MapPin size={13} /> Within 25 km</span><span><Building2 size={13} /> Industry</span></div>
             <div className="brief-actions">
-              {can("create_leads") && <button className="button button-primary" onClick={createDeal}>Create a deal <ArrowRight size={14} /></button>}
+              {can("create_leads") && <button className="button button-primary" onClick={createDeal}>Create a Deal <ArrowRight size={14} /></button>}
             </div>
           </div>
         )}

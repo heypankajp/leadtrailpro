@@ -46,16 +46,16 @@ export default function UserFormDialog({ user, onClose, onSaved }: Props) {
   };
 
   return (
-    <Dialog title={user ? `Edit ${user.name}` : "Add user"} eyebrow="TEAM ACCESS" onClose={onClose} size="wide">
+    <Dialog title={user ? `Edit ${user.name}` : "Add User"} eyebrow="TEAM ACCESS" onClose={onClose} size="wide">
       <form className="user-create-form" onSubmit={submit}>
         <div className="user-form-grid">
-          <label>First name<input value={form.firstName} onChange={(event) => set("firstName", event.target.value)} autoComplete="given-name" required maxLength={80} /></label>
-          <label>Last name<input value={form.lastName} onChange={(event) => set("lastName", event.target.value)} autoComplete="family-name" required maxLength={80} /></label>
+          <label>First Name<input value={form.firstName} onChange={(event) => set("firstName", event.target.value)} autoComplete="given-name" required maxLength={80} /></label>
+          <label>Last Name<input value={form.lastName} onChange={(event) => set("lastName", event.target.value)} autoComplete="family-name" required maxLength={80} /></label>
           <label>Email<input type="email" value={form.email} onChange={(event) => set("email", event.target.value)} autoComplete="email" required maxLength={254} /></label>
           <label>Phone<input type="tel" value={form.phone} onChange={(event) => set("phone", event.target.value)} autoComplete="tel" maxLength={40} /></label>
           <label>Role<select value={form.role} onChange={(event) => set("role", event.target.value as SystemRole)}>{systemRoles.map((role) => <option key={role} value={role}>{roleLabel(role)}</option>)}</select></label>
-          <label>Productivity stage<select value={form.stage} onChange={(event) => set("stage", event.target.value as UserStage)}>{userStages.map((stage) => <option key={stage} value={stage}>{stageLabels[stage]}</option>)}</select></label>
-          <label className="user-form-wide">Target template
+          <label>Productivity Stage<select value={form.stage} onChange={(event) => set("stage", event.target.value as UserStage)}>{userStages.map((stage) => <option key={stage} value={stage}>{stageLabels[stage]}</option>)}</select></label>
+          <label className="user-form-wide">Target Template
             <select value={form.targetTemplateId} onChange={(event) => set("targetTemplateId", event.target.value)}>
               <option value="">Use the stage default</option>
               {reference.targetTemplates.map((template) => <option key={template.id} value={template.id}>{template.name} ({stageLabels[template.stage]})</option>)}
@@ -64,14 +64,14 @@ export default function UserFormDialog({ user, onClose, onSaved }: Props) {
           {!user && !reference.passwordSignIn && <p className="user-form-wide field-hint">The person signs in with Google using this email address; no password is stored.</p>}
           {!user && reference.passwordSignIn && (
             <>
-              <label className="user-form-wide">Initial password
+              <label className="user-form-wide">Initial Password
                 <span className="user-password-input-wrap">
                   <input type={showPassword ? "text" : "password"} value={form.password} onChange={(event) => set("password", event.target.value)} autoComplete="new-password" minLength={12} maxLength={200} required />
                   <button className="user-key-visibility" type="button" aria-label={showPassword ? "Hide password" : "Show password"} aria-pressed={showPassword} onClick={() => setShowPassword((visible) => !visible)}>{showPassword ? <EyeOff size={15} /> : <Eye size={15} />}</button>
                 </span>
                 <small>Minimum 12 characters. {reference.mailerConfigured ? "You can also email a set-password link after creating the account." : "Share it directly; email delivery is not configured yet."}</small>
               </label>
-              <label className="user-form-wide">Confirm password<input type="password" value={form.confirmPassword} onChange={(event) => set("confirmPassword", event.target.value)} autoComplete="new-password" minLength={12} maxLength={200} required /></label>
+              <label className="user-form-wide">Confirm Password<input type="password" value={form.confirmPassword} onChange={(event) => set("confirmPassword", event.target.value)} autoComplete="new-password" minLength={12} maxLength={200} required /></label>
             </>
           )}
         </div>
@@ -79,7 +79,7 @@ export default function UserFormDialog({ user, onClose, onSaved }: Props) {
           <legend>Security</legend>
           {reference.passwordSignIn && <label><input type="checkbox" checked={form.twoFactorEnabled} disabled={!reference.mailerConfigured && !form.twoFactorEnabled} onChange={(event) => set("twoFactorEnabled", event.target.checked)} />Two-factor sign-in by email code{!reference.mailerConfigured && <small> (needs SMTP settings)</small>}</label>}
           <label><input type="checkbox" checked={form.autoLogoutEnabled} onChange={(event) => set("autoLogoutEnabled", event.target.checked)} />Automatic daily sign-out</label>
-          <label className="inline-time">Sign out every day at<input type="time" value={form.autoLogoutTime} disabled={!form.autoLogoutEnabled} required={form.autoLogoutEnabled} onChange={(event) => set("autoLogoutTime", event.target.value)} /><small>{reference.timeZone}. Sessions started before this time end; the next sign-in needs the password{form.twoFactorEnabled ? " and the two-factor code" : ""}.</small></label>
+          <label className="inline-time">Sign Out Every Day at<input type="time" value={form.autoLogoutTime} disabled={!form.autoLogoutEnabled} required={form.autoLogoutEnabled} onChange={(event) => set("autoLogoutTime", event.target.value)} /><small>{reference.timeZone}. Sessions started before this time end; the next sign-in needs the password{form.twoFactorEnabled ? " and the two-factor code" : ""}.</small></label>
         </fieldset>
         <fieldset className="user-privileges">
           <legend>Privileges · {roleLabel(form.role)} defaults are included; tick extras to grant more</legend>
@@ -94,7 +94,7 @@ export default function UserFormDialog({ user, onClose, onSaved }: Props) {
           })}
         </fieldset>
         <ErrorText message={error} />
-        <div className="user-dialog-actions"><button className="button button-outline" type="button" onClick={onClose}>Cancel</button><button className="button button-primary" type="submit" disabled={busy}>{busy ? "Saving..." : user ? "Save changes" : "Create user"}</button></div>
+        <div className="user-dialog-actions"><button className="button button-outline" type="button" onClick={onClose}>Cancel</button><button className="button button-primary" type="submit" disabled={busy}>{busy ? "Saving..." : user ? "Save Changes" : "Create User"}</button></div>
       </form>
     </Dialog>
   );

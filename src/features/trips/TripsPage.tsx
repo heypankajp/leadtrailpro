@@ -66,22 +66,22 @@ export default function TripsPage() {
       {provider?.name === "google" && <JobsUsageCard compact />}
 
       <section className="panel trip-panel">
-        <div className="panel-heading"><div><h2>New trip</h2><p>Up to {limits.results} companies within {limits.radiusKm} km or a driving time of the address.</p></div></div>
+        <div className="panel-heading"><div><h2>New Trip</h2><p>Up to {limits.results} companies within {limits.radiusKm} km or a driving time of the address.</p></div></div>
         <form className="lead-form trip-form" onSubmit={submit}>
-          <Field label="Trip title" required><input value={form.title} onChange={set("title")} required maxLength={120} placeholder="e.g. Mississauga industrial park, Thursday" autoFocus /></Field>
+          <Field label="Trip Title" required><input value={form.title} onChange={set("title")} required maxLength={120} placeholder="e.g. Mississauga industrial park, Thursday" autoFocus /></Field>
           <Field label="Address" required wide><input value={form.address} onChange={set("address")} required maxLength={500} placeholder="Starting or target address or neighbourhood" /></Field>
-          <Field label="Radius type" required>
+          <Field label="Radius Type" required>
             <select value={form.radiusType} onChange={(event) => setForm((current) => ({ ...current, radiusType: event.target.value === "minutes" ? "minutes" : "km", radius: event.target.value === "minutes" ? "20" : "15" }))}>
               <option value="km">Kilometres</option>
               <option value="minutes">Driving minutes</option>
             </select>
           </Field>
-          <Field label={form.radiusType === "km" ? "Radius (km)" : "Radius (minutes)"} required><input type="number" min={1} max={maxRadiusFor(form.radiusType, limits)} value={form.radius} onChange={set("radius")} required /></Field>
-          <Field label="Business type"><select value={form.businessTypeId} onChange={set("businessTypeId")}>{businessTypes.map((type) => <option key={type.id} value={type.id}>{type.value}</option>)}</select></Field>
-          <Field label="Number of results" required hint={`Whole number, maximum ${limits.results}.`}><input type="number" min={1} max={limits.results} step={1} value={form.maxResults} onChange={set("maxResults")} required /></Field>
+          <Field label={form.radiusType === "km" ? "Radius (km)" : "Radius (Minutes)"} required><input type="number" min={1} max={maxRadiusFor(form.radiusType, limits)} value={form.radius} onChange={set("radius")} required /></Field>
+          <Field label="Business Type"><select value={form.businessTypeId} onChange={set("businessTypeId")}>{businessTypes.map((type) => <option key={type.id} value={type.id}>{type.value}</option>)}</select></Field>
+          <Field label="Number of Results" required hint={`Whole number, maximum ${limits.results}.`}><input type="number" min={1} max={limits.results} step={1} value={form.maxResults} onChange={set("maxResults")} required /></Field>
           <ErrorText message={formError} />
           <div className="modal-actions field-wide">
-            <button type="submit" className="button button-primary" disabled={busy || (provider ? !provider.configured : false)}><Search size={15} /> {busy ? "Searching..." : "Search companies"}</button>
+            <button type="submit" className="button button-primary" disabled={busy || (provider ? !provider.configured : false)}><Search size={15} /> {busy ? "Searching..." : "Search Companies"}</button>
           </div>
         </form>
       </section>

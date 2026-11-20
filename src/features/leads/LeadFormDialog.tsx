@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { AlertTriangle, Building2, Mail, Plus, Save, ShieldCheck, UserRound } from "lucide-react";
 import { ApiError, errorMessage } from "@/lib/api";
-import { entryStageCode, reasonListFor } from "@/features/list-values/model";
+import { entryStageCode, listNumber, reasonListFor } from "@/features/list-values/model";
+import { formatDate } from "@/lib/format";
+import { needsPeerApproval, queueCutoff } from "./queue-rules";
 import { useApp } from "@/features/shell/AppContext";
 import { Dialog, ErrorText, Field, ConvertToClientDialog } from "@/features/shell/components";
 import SuggestInput from "@/features/shell/SuggestInput";
@@ -194,8 +196,9 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
   };
   const set = (key: keyof FormState) => (event: { target: { value: string } }) => setForm((current) => ({ ...current, [key]: event.target.value }));
   const idOrNull = (value: string) => (value ? Number(value) : null);
-  const yesterday = (() => { const [y, m, d] = reference.today.split("-").map(Number); const date = new Date(Date.UTC(y, m - 1, d - 1)); return date.toISOString().slice(0, 10); })();
-  const historical = Boolean(form.firstContactDate && form.firstContactDate < yesterday) && !importedHistory;
+  // Older than the working days in List of Values (Friday is "yesterday" on a Monday): a colleague approves the deal (November 20, 2026).
+  const queueDays = listNumber("queue_working_days", reference.listValues.queue_working_days);
+  const historical = Boolean(form.firstContactDate && needsPeerApproval(form.firstContactDate, reference.today, queueDays, reference.holidays)) && !importedHistory;
   const owners = reference.users.filter((item) => item.role !== "recruiter");
   // LEAD-06: Lost Lead and Disqualified need a reason from their own list; other statuses clear it.
   const reasonKey = reasonListFor(values.status.find((item) => String(item.id) === form.statusId)?.code);
@@ -250,7 +253,7 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
   );
 
   return (
-    <Dialog title={lead ? `Edit ${lead.clientName}` : addingClient ? "Add client" : "Add deal"} eyebrow={lead ? (editingClient ? "CLIENT DETAILS" : "DEAL DETAILS") : undefined} onClose={onClose} size="wide">
+    <Dialog title={lead ? `Edit ${lead.clientName}` : addingClient ? "Add Client" : "Add Deal"} eyebrow={lead ? (editingClient ? "CLIENT DETAILS" : "DEAL DETAILS") : undefined} onClose={onClose} size="wide">
       {/* The add-deal layout: the deal on the left, the person and the organization on the right. */}
       <form className="lead-form deal-form" onSubmit={submit}>
         <div className="deal-form-col">
@@ -299,17 +302,17 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
           {/* A client's Deal source and Status are not edited (request of November 19, 2026): "Move back to pipeline" on its page changes the status. */}
           {editingClient ? (
             <>
-              <Field label="Deal source"><input value={lead?.leadType ?? ""} disabled /></Field>
+              <Field label="Deal Source"><input value={lead?.leadType ?? ""} disabled /></Field>
               <Field label="Status"><input value={lead?.statusLabel ?? "Client"} disabled /></Field>
             </>
           ) : addingClient ? (
             <>
-              <Field label="Deal source" required>{select("leadTypeId", values.lead_type, "")}</Field>
+              <Field label="Deal Source" required>{select("leadTypeId", values.lead_type, "")}</Field>
               <Field label="Status"><input value="Client" disabled /></Field>
             </>
           ) : (
           <>
-          <Field label="Deal source" required>{select("leadTypeId", values.lead_type, "")}</Field>
+          <Field label="Deal Source" required>{select("leadTypeId", values.lead_type, "")}</Field>
           <Field label="Status" required>
             <select value={form.statusId} onChange={(event) => {
               const statusId = event.target.value;
@@ -323,21 +326,21 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
           </>
           )}
           {reasonKey && !clientMode && (
-            <Field label="Status reason" required wide hint="Shown with the status everywhere as \u201cStatus \u2013 Reason\u201d.">
+            <Field label="Status Reason" required wide hint="Shown with the status everywhere as \u201cStatus \u2013 Reason\u201d.">
               <select value={form.statusReasonId} onChange={set("statusReasonId")} required>
                 <option value="">Choose a reason</option>
                 {values[reasonKey].map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
               </select>
             </Field>
           )}
-          <Field label="First contact date" required hint={historical ? (can("review_queued") ? "Historical date: saved directly because you can approve queued deals." : "Earlier than yesterday: the deal will be queued for Admin approval.") : undefined}>
+          <Field label="First Contact Date" required hint={historical ? `Earlier than ${formatDate(queueCutoff(reference.today, queueDays, reference.holidays))}: the deal waits in Queued for approval until a colleague approves it.` : undefined}>
             <input type="date" value={form.firstContactDate} onChange={set("firstContactDate")} required />
           </Field>
-          <Field label="Follow-up date"><input type="date" value={form.followUpDate} onChange={set("followUpDate")} /></Field>
+          <Field label="Follow-Up Date"><input type="date" value={form.followUpDate} onChange={set("followUpDate")} /></Field>
           <Field label={`Value (${dealCurrency})`} hint="Optional."><input inputMode="decimal" value={form.dealValue} onChange={set("dealValue")} maxLength={16} placeholder="e.g. 25,000" /></Field>
           {clientMode
             ? <Field label="Closed Date" hint="The day it became a client; change it if it closed on another day."><input type="date" value={form.expectedCloseDate} onChange={set("expectedCloseDate")} /></Field>
-            : <Field label="Expected close date" hint="Optional."><input type="date" value={form.expectedCloseDate} onChange={set("expectedCloseDate")} /></Field>}
+            : <Field label="Expected Close Date" hint="Optional."><input type="date" value={form.expectedCloseDate} onChange={set("expectedCloseDate")} /></Field>}
           {addingClient && can("upload_files") && (
             <Field label="Contract" wide hint="Optional: the signed contract (PDF, Word or image, 15 MB max). It is listed under the client's Contracts.">
               <input type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp" onChange={(event) => setContractFile(event.target.files?.[0] ?? null)} />
@@ -346,8 +349,8 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
           {!lead && can("reassign_leads") && (
             <Field label="Owner" wide hint={opportunityId ? "Who will follow up this company; the deal is created in their name." : "The creator becomes the owner unless you choose someone else."}><select value={form.ownerId} onChange={set("ownerId")}>{owners.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
           )}
-          <Field label="Deal category">{select("leadCategoryId", values.lead_category)}</Field>
-          <Field label="Contract signed date"><input type="date" value={form.contractSignedDate} onChange={set("contractSignedDate")} /></Field>
+          <Field label="Deal Category">{select("leadCategoryId", values.lead_category)}</Field>
+          <Field label="Contract Signed Date"><input type="date" value={form.contractSignedDate} onChange={set("contractSignedDate")} /></Field>
           <Field label="Position(s)" wide><textarea value={form.positions} onChange={set("positions")} rows={2} maxLength={5000} placeholder="Open or target positions" /></Field>
           <Field label="Comments" wide><textarea value={form.comments} onChange={set("comments")} rows={3} maxLength={5000} placeholder="General comments" /></Field>
         </div>
@@ -363,15 +366,15 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
                 />
               : <input value={form.clientEmails} onChange={set("clientEmails")} placeholder="name@company.com" />}
           </Field>
-          <Field label="Contact number"><input type="tel" value={form.contactPhone} onChange={set("contactPhone")} maxLength={40} placeholder="+1 (555) 123-4567" /></Field>
-          <Field label="Extension or alternate number"><input type="tel" value={form.contactAltPhone} onChange={set("contactAltPhone")} maxLength={40} /></Field>
-          <Field label="Contact remark" wide><input value={form.contactRemark} onChange={set("contactRemark")} maxLength={500} placeholder="Best time to call, preferences..." /></Field>
+          <Field label="Contact Number"><input type="tel" value={form.contactPhone} onChange={set("contactPhone")} maxLength={40} placeholder="+1 (555) 123-4567" /></Field>
+          <Field label="Extension or Alternate Number"><input type="tel" value={form.contactAltPhone} onChange={set("contactAltPhone")} maxLength={40} /></Field>
+          <Field label="Contact Remark" wide><input value={form.contactRemark} onChange={set("contactRemark")} maxLength={500} placeholder="Best time to call, preferences..." /></Field>
           <h3 className="deal-form-heading">COMPANY</h3>
-          <Field label="Client industry"><input value={form.industry} onChange={set("industry")} maxLength={120} placeholder="e.g. Healthcare" /></Field>
-          <Field label="Company size">{select("companySizeId", values.company_size)}</Field>
+          <Field label="Client Industry"><input value={form.industry} onChange={set("industry")} maxLength={120} placeholder="e.g. Healthcare" /></Field>
+          <Field label="Company Size">{select("companySizeId", values.company_size)}</Field>
           <Field label="City" wide>{select("cityId", values.city)}</Field>
           <Field label="Address" wide><input value={form.address} onChange={set("address")} maxLength={500} placeholder="Street and location" /></Field>
-          <Field label="Company website" wide><input type="url" value={form.companyUrl} onChange={set("companyUrl")} pattern="https?://.+" title="Enter a URL beginning with http:// or https://" placeholder="https://company.com" /></Field>
+          <Field label="Company Website" wide><input type="url" value={form.companyUrl} onChange={set("companyUrl")} pattern="https?://.+" title="Enter a URL beginning with http:// or https://" placeholder="https://company.com" /></Field>
         </div>
         {!lead && <div className="form-note"><ShieldCheck size={14} /> Notes, documents, and candidate profiles are added on the deal page after saving.</div>}
         {duplicate && (
@@ -381,7 +384,7 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
               <p>{duplicate.message}</p>
               <div className="duplicate-actions">
                 <button type="button" className="button button-outline button-small" onClick={() => { openLead(duplicate.leadId); onClose(); }}>Open {duplicate.clientName}</button>
-                {duplicate.canOverride && <button type="button" className="button button-outline button-small" onClick={() => void save(true)} disabled={saving}>Save anyway</button>}
+                {duplicate.canOverride && <button type="button" className="button button-outline button-small" onClick={() => void save(true)} disabled={saving}>Save Anyway</button>}
               </div>
             </div>
           </div>
@@ -396,7 +399,7 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
                 {confirm.contact && <li>{confirm.organization ? "Then, inside it, the new contact" : "New contact"}: <strong>{confirm.contact}</strong>{!confirm.organization && matchedOrganization ? ` at ${matchedOrganization.organization.name}` : ""}</li>}
               </ul>
               <div className="duplicate-actions">
-                <button type="button" className="button button-primary button-small" disabled={saving} onClick={() => void save(allowSimilarChosen.current, true)}>Create and add deal</button>
+                <button type="button" className="button button-primary button-small" disabled={saving} onClick={() => void save(allowSimilarChosen.current, true)}>Create and Add Deal</button>
                 <button type="button" className="button button-outline button-small" onClick={() => setConfirm(null)}>Back</button>
               </div>
             </div>
@@ -405,7 +408,7 @@ export default function LeadFormDialog({ lead, prefill, opportunityId, contact, 
         <div className="field-wide"><ErrorText message={error} /></div>
         <div className="modal-actions">
           <button type="button" className="button button-outline" onClick={onClose}>Cancel</button>
-          <button type="submit" className="button button-primary" disabled={saving}>{lead ? <Save size={15} /> : <Plus size={15} />} {saving ? "Saving..." : lead ? "Save changes" : addingClient ? "Save client" : "Save deal"}</button>
+          <button type="submit" className="button button-primary" disabled={saving}>{lead ? <Save size={15} /> : <Plus size={15} />} {saving ? "Saving..." : lead ? "Save Changes" : addingClient ? "Save Client" : "Save Deal"}</button>
         </div>
       </form>
       {addingOrg !== null && (

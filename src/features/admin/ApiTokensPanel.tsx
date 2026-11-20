@@ -37,7 +37,7 @@ export default function ApiTokensPanel() {
     <>
       <div className="page-heading">
         <div><div className="eyebrow">ADMINISTRATION <span className="eyebrow-dot">·</span> {tokens ? `${tokens.length} ACTIVE` : "LOADING"}</div><h1>API Access</h1><p>Personal access tokens for scripts and for administering the app from another machine.</p></div>
-        <button className="button button-primary" onClick={() => setDialog({ kind: "create" })}><Plus size={17} /> Create token</button>
+        <button className="button button-primary" onClick={() => setDialog({ kind: "create" })}><Plus size={17} /> Create Token</button>
       </div>
       <ErrorText message={error} />
       {!tokens && !error && <Loading text="Loading tokens..." />}
@@ -73,7 +73,7 @@ export default function ApiTokensPanel() {
           <p className="dialog-description">Scripts using this token ({dialog.token.prefix}…) stop working at once. This cannot be undone; create a new token if it is needed again.</p>
           <div className="modal-actions">
             <button type="button" className="button button-outline" onClick={() => setDialog(null)}>Cancel</button>
-            <button type="button" className="button button-danger" disabled={busy} onClick={() => void revoke(dialog.token)}>{busy ? "Revoking..." : "Revoke token"}</button>
+            <button type="button" className="button button-danger" disabled={busy} onClick={() => void revoke(dialog.token)}>{busy ? "Revoking..." : "Revoke Token"}</button>
           </div>
         </Dialog>
       )}
@@ -110,7 +110,7 @@ function CreateTokenDialog({ origin, onClose }: { origin: string; onClose: () =>
   if (created) {
     const usage = `# .env.remote.local in a checkout of the project (git-ignored)\nLTP_URL=${origin}\nLTP_TOKEN=${created.token}\n\nnpm run remote -- whoami\nnpm run remote -- import "docs/Sales Leads 2026.xlsx"        # preview; add --apply to import\n\n# or any HTTP client\ncurl -H "Authorization: Bearer ${created.token}" ${origin}/api/users`;
     return (
-      <Dialog title={`Token "${created.apiToken.name}" created`} eyebrow="API ACCESS" onClose={onClose}>
+      <Dialog title={`Token "${created.apiToken.name}" Created`} eyebrow="API ACCESS" onClose={onClose}>
         <p className="dialog-description">Copy the token now: it is not shown again. It acts as you{created.apiToken.expiresAt ? ` until ${formatDateTime(created.apiToken.expiresAt)}` : " and does not expire"}, or until it is revoked.</p>
         <div className="token-code"><code aria-label="API token">{created.token}</code><button type="button" className="button button-outline button-small" onClick={() => void copy()}><Copy size={13} /> Copy</button></div>
         <pre className="token-usage">{usage}</pre>
@@ -120,11 +120,11 @@ function CreateTokenDialog({ origin, onClose }: { origin: string; onClose: () =>
   }
 
   return (
-    <Dialog title="Create API token" eyebrow="API ACCESS" onClose={onClose} size="narrow">
+    <Dialog title="Create API Token" eyebrow="API ACCESS" onClose={onClose} size="narrow">
       <form className="stack-form" onSubmit={submit}>
         <p className="dialog-description">The token acts as you, with your privileges. Give it a name you will recognise in the list, for example the machine or script it is for.</p>
-        <Field label="Token name" required><input value={name} maxLength={maxApiTokenNameLength} placeholder="Manish's laptop" onChange={(event) => setName(event.target.value)} required autoFocus /></Field>
-        <Field label="Expires after">
+        <Field label="Token Name" required><input value={name} maxLength={maxApiTokenNameLength} placeholder="Manish's laptop" onChange={(event) => setName(event.target.value)} required autoFocus /></Field>
+        <Field label="Expires After">
           <select value={expiry} onChange={(event) => setExpiry(event.target.value)}>
             {apiTokenExpiryChoices.map((days) => <option key={days} value={days}>{days} days</option>)}
             <option value="never">Never (revoke it by hand)</option>
@@ -133,7 +133,7 @@ function CreateTokenDialog({ origin, onClose }: { origin: string; onClose: () =>
         <ErrorText message={error} />
         <div className="modal-actions">
           <button type="button" className="button button-outline" onClick={onClose}>Cancel</button>
-          <button type="submit" className="button button-primary" disabled={busy}><KeyRound size={15} /> {busy ? "Creating..." : "Create token"}</button>
+          <button type="submit" className="button button-primary" disabled={busy}><KeyRound size={15} /> {busy ? "Creating..." : "Create Token"}</button>
         </div>
       </form>
     </Dialog>

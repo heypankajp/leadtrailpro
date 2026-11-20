@@ -75,7 +75,7 @@ export default function SalesTripsPage() {
               </select>
             </label>}
             <DateRangePicker from={filters.from} to={filters.to} today={today} onChange={(from, to) => update({ from, to })} />
-            {filtered && <button className="text-button" onClick={() => { setFilters(noFilters); setPage(1); }}>Clear filters</button>}
+            {filtered && <button className="text-button" onClick={() => { setFilters(noFilters); setPage(1); }}>Clear Filters</button>}
           </div>
 
           <ErrorText message={error} />

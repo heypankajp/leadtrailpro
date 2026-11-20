@@ -32,7 +32,7 @@ export default function StagePicker({ value, onChange, hint }: { value: string; 
 
   return (
     <div className="field-wide stage-picker-field">
-      <span className="field-label" id="stage-picker-label">Pipeline stage</span>
+      <span className="field-label" id="stage-picker-label">Pipeline Stage</span>
       {pipelines.length > 1 && (
         <select className="stage-picker-pipeline" aria-label="Pipeline" value={pipelineId ?? ""} onChange={(event) => pickPipeline(Number(event.target.value))}>
           {pipelines.map((pipeline) => <option key={pipeline.id} value={pipeline.id}>{pipeline.name}</option>)}

@@ -17,7 +17,7 @@ export async function GET(request: Request) {
     const origin = (originParam || undefined) as OpportunityOrigin | undefined;
     const page = Math.max(1, Number(params.get("page") ?? "1") || 1);
     const pageSize = Math.min(100, Math.max(1, Number(params.get("pageSize") ?? "50") || 50));
-    return NextResponse.json(await listOpportunities({ status: status as OpportunityStatus, page, pageSize, search: asString(params.get("search"), 120), origin, mineOf: params.get("scope") === "mine" ? user.id : null }));
+    return NextResponse.json(await listOpportunities({ status: status as OpportunityStatus, page, pageSize, search: asString(params.get("search"), 120), origin, mineOf: params.get("scope") === "mine" ? user.id : null, archived: params.get("archived") === "1" }));
   } catch (error) {
     return handleRouteError(error, "List leads");
   }

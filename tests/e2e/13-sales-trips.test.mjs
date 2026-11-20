@@ -39,23 +39,23 @@ describe("Sales Trips (PD-39..41)", () => {
     await page.waitLeadRow(name);
     await page.click(By.css(`input[aria-label=${JSON.stringify(`Select ${name}`)}]`), { global: true });
     await page.clickButton("Move to To Do", { global: true });
-    await page.dialogTitle("Move deal to a To Do list");
-    await page.setValue(await page.wait(By.css('section[role="dialog"] select[aria-label="To Do list"]')), "To be visited");
-    await page.clickButton("Move deals");
+    await page.dialogTitle("Move Deal to a To Do List");
+    await page.setValue(await page.wait(By.css('section[role="dialog"] select[aria-label="To Do List"]')), "To be visited");
+    await page.clickButton("Move Deals");
     await page.toast("1 deal moved to To Do: To be visited");
 
     await openToBeVisited();
     await page.waitLeadRow(name);
     await page.click(By.css(`input[aria-label=${JSON.stringify(`Select ${name}`)}]`), { global: true });
-    await page.clickButton("Add to sales trip", { global: true });
+    await page.clickButton("Add to Sales Trip", { global: true });
     // With trips already planned the dialog offers them first; a new trip is one click away.
-    await driver.wait(async () => (await driver.findElements(By.xpath('//section[@role="dialog"]//h2[normalize-space()="New sales trip"] | //button[contains(normalize-space(.), "Plan a new sales trip instead")]'))).length > 0, 15000, "the add-to-trip dialog opens");
+    await driver.wait(async () => (await driver.findElements(By.xpath('//section[@role="dialog"]//h2[normalize-space()="New Sales Trip"] | //button[contains(normalize-space(.), "Plan a new sales trip instead")]'))).length > 0, 15000, "the add-to-trip dialog opens");
     const instead = await driver.findElements(By.xpath('//button[contains(normalize-space(.), "Plan a new sales trip instead")]'));
     if (instead.length) await instead[0].click();
-    await page.dialogTitle("New sales trip");
+    await page.dialogTitle("New Sales Trip");
     await page.fill("Title", title);
-    await page.fill("Date", tripDate);
-    await page.clickButton("Plan sales trip");
+    await page.fill("Trip Date", tripDate);
+    await page.clickButton("Plan Sales Trip");
     await page.toast(`1 deal added to the new sales trip ${title}`);
     // The trip's page opens with the deal on it.
     await page.heading(title);
@@ -84,13 +84,15 @@ describe("Sales Trips (PD-39..41)", () => {
   uiTest("deleting the trip asks what happens to its deals, and Move back to To Do returns the deal to To be visited", async () => {
     await page.click(tripLink(title), { global: true });
     await page.heading(title);
-    await page.clickButton("Delete", { global: true });
+    // Print, Download PDF, Edit and Delete are in the trip's Actions menu since November 20, 2026.
+    await page.click(By.css('.trip-actions button[aria-label="Trip actions"]'), { global: true });
+    await page.click(By.xpath('//div[@role="menu"]//button[normalize-space()="Delete"]'), { global: true });
     await page.dialogTitle(`Delete ${title}?`);
     const chosen = await page.wait(By.xpath('//label[contains(@class,"trip-delete-option")][.//strong[normalize-space()="Move back to To Do"]]//input'));
     assert.equal(await chosen.isSelected(), true, "Move back to To Do is the default");
     await page.wait(By.xpath('//label[contains(@class,"trip-delete-option")]//strong[normalize-space()="Keep in the Pipeline only"]'));
     await page.wait(By.xpath('//label[contains(@class,"trip-delete-option")]//strong[normalize-space()="Archive the deals"]'));
-    await page.clickButton("Delete trip");
+    await page.clickButton("Delete Trip");
     await page.toast(`Sales trip ${title} deleted`);
     await page.heading("Sales Trips");
 

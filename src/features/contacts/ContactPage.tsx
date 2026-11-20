@@ -125,10 +125,10 @@ function ContactComposer({ permissions, save }: { permissions: ContactPermission
       {type && (
         <form className="lead-form activity-form" onSubmit={submit}>
           {type !== "note" && <Field label="Summary" wide><input value={summary} onChange={(event) => setSummary(event.target.value)} maxLength={500} placeholder={type === "call" ? "Introduced our services" : type === "email" ? "Sent the company profile" : "Met at their office"} autoFocus /></Field>}
-          <Field label={type === "note" ? "Note" : "Notes (optional)"} wide required={type === "note"}><RichTextArea value={body} onChange={setBody} rows={4} maxLength={10000} placeholder="What was discussed, what comes next..." autoFocus={type === "note"} required={type === "note"} /></Field>
+          <Field label={type === "note" ? "Note" : "Notes (Optional)"} wide required={type === "note"}><RichTextArea value={body} onChange={setBody} rows={4} maxLength={10000} placeholder="What was discussed, what comes next..." autoFocus={type === "note"} required={type === "note"} /></Field>
           <Field label="When"><input type="datetime-local" value={occurredAt} max={toLocalInput(new Date().toISOString())} onChange={(event) => setOccurredAt(event.target.value)} required /></Field>
           <div className="field-wide"><ErrorText message={error} /></div>
-          <div className="modal-actions"><button type="button" className="button button-outline" onClick={() => setType(null)}>Cancel</button><button type="submit" className="button button-primary" disabled={busy}>{busy ? "Saving..." : type === "note" ? "Save note" : `Save ${type}`}</button></div>
+          <div className="modal-actions"><button type="button" className="button button-outline" onClick={() => setType(null)}>Cancel</button><button type="submit" className="button button-primary" disabled={busy}>{busy ? "Saving..." : type === "note" ? "Save Note" : `Save ${type}`}</button></div>
         </form>
       )}
     </section>
@@ -164,7 +164,7 @@ function MergeDialog({ kind, id, name, onClose, onMerged }: { kind: Kind; id: nu
     } catch (caught) { setError(errorMessage(caught)); setBusy(false); }
   };
   return (
-    <Dialog title={`Merge a duplicate into ${name}`} eyebrow={kind === "organization" ? "COMPANY" : "CONTACT"} onClose={onClose}>
+    <Dialog title={`Merge a Duplicate Into ${name}`} eyebrow={kind === "organization" ? "COMPANY" : "CONTACT"} onClose={onClose}>
       <div className="stack-form">
         <p className="dialog-description">Find the other record of the same {kind === "organization" ? "company" : "contact"}. Its deals{kind === "organization" ? ", contacts" : ""} and notes move to {name}, empty details are filled in from it, and it is removed. This cannot be undone.</p>
         <Field label={`The duplicate ${kind === "organization" ? "company" : "contact"}`}><input value={q} onChange={(event) => { setQ(event.target.value); setPicked(null); }} placeholder="Type its name..." autoFocus /></Field>

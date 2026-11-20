@@ -23,14 +23,14 @@ describe("Deals", () => {
   after(async () => { await driver?.quit(); });
 
   uiTest("adds a deal from the action center", async () => {
-    await page.clickButton("Add a deal", { global: true });
-    await page.dialogTitle("Add deal");
+    await page.clickButton("Add a Deal", { global: true });
+    await page.dialogTitle("Add Deal");
     await page.fill("Company", lead.name);
     await page.fill("Contact", lead.executive);
-    await page.fill("Contact number", lead.phone);
+    await page.fill("Contact Number", lead.phone);
     await page.fill("Email(s)", lead.email);
     await page.fill("City", "Toronto");
-    await page.fill("Client industry", "Robotics");
+    await page.fill("Client Industry", "Robotics");
     await page.fill("Address", "100 King St W, Toronto");
     await page.saveDeal();
     await page.toast(`${lead.name} added to the pipeline`);
@@ -42,22 +42,22 @@ describe("Deals", () => {
 
   uiTest("the deal's Summary has no BD action, client response, stage or To Do list control (November 19, 2026)", async () => {
     await page.wait(By.css(".stage-bar"));
-    assert.equal((await driver.findElements(By.css('select[aria-label="BD action"], select[aria-label="Client response"], select[aria-label="Stage"], select[aria-label="To Do list"]'))).length, 0);
+    assert.equal((await driver.findElements(By.css('select[aria-label="BD Action"], select[aria-label="Client Response"], select[aria-label="Stage"], select[aria-label="To Do List"]'))).length, 0);
   });
 
   uiTest("logs a call and adds a note on the timeline", async () => {
     await page.tab("Timeline");
     await page.clickButton("Log call");
     await page.fill("Summary", "Intro call with Priya");
-    await page.fill("Notes (optional)", "Discussed the Q1 hiring plan.");
+    await page.fill("Notes (Optional)", "Discussed the Q1 hiring plan.");
     await page.clickButton("Save call");
     await page.toast("Activity recorded");
     // PIPE-09: a logged call offers the next step; skipped here, the note below carries its own follow-up suggestion.
-    await page.dialogTitle(`What's next for ${lead.name}?`);
+    await page.dialogTitle(`What's Next for ${lead.name}?`);
     await page.clickButton("Skip");
     await page.wait(By.xpath('//article[contains(@class,"timeline-entry")]//strong[normalize-space()="Intro call with Priya"]'));
     await page.clickButton("Add note");
-    const note = await page.fill("Interaction note", "Client wants profiles for two welders. ");
+    const note = await page.fill("Interaction Note", "Client wants profiles for two welders. ");
     // NOTE-03: the toolbar wraps the selection in the rich-text markup; NOTE-04: dictation is offered where the browser supports it.
     await page.click(By.css('form.activity-form button[aria-label="Bold"]'));
     assert.match(await note.getAttribute("value"), /\*\*text\*\*$/, "the Bold button inserts the markup");
@@ -70,7 +70,7 @@ describe("Deals", () => {
 
   uiTest("a note with a follow-up instruction offers to create the task", async () => {
     await page.clickButton("Add note");
-    await page.fill("Interaction note", "Great conversation. Follow up next Monday at 10am about the welders.");
+    await page.fill("Interaction Note", "Great conversation. Follow up next Monday at 10am about the welders.");
     const suggestion = await page.wait(By.css(".follow-up-suggestion"));
     assert.match(await suggestion.getText(), /Create a follow-up task from this note: understood \u201cnext Monday\u201d as .* 10:00 AM/);
     assert.equal(await (await page.wait(By.css('input[aria-label="Follow-up task title"]'))).getAttribute("value"), `Follow up with ${lead.executive}`);
@@ -104,7 +104,7 @@ describe("Deals", () => {
     const editBox = await page.wait(By.css(".message-replies textarea"));
     await editBox.clear();
     await editBox.sendKeys("Noted, will do _tomorrow_.");
-    await page.clickButton("Save changes");
+    await page.clickButton("Save Changes");
     await page.toast("Message updated");
     await page.wait(By.xpath('//div[contains(@class,"message-replies")]//article[.//em[normalize-space()="tomorrow"]][.//small[contains(normalize-space(.), "edited")]]'));
     await page.click(By.xpath('//div[contains(@class,"message-replies")]//article//button[normalize-space()="Remove"]'));
@@ -116,7 +116,7 @@ describe("Deals", () => {
 
   uiTest("the Emails tab explains that Gmail is not configured and offers the hand log", async () => {
     await page.clickButton("Emails");
-    await page.wait(By.xpath('//div[contains(@class,"composer-emails")]//button[normalize-space()="Log an email by hand"]'));
+    await page.wait(By.xpath('//div[contains(@class,"composer-emails")]//button[normalize-space()="Log an Email by Hand"]'));
     const note = await page.wait(By.css(".lead-emails .note-warning"));
     assert.match(await note.getText(), /Gmail is not configured/);
   });
@@ -145,7 +145,7 @@ describe("Deals", () => {
     await page.tab("Documents");
     const fileInput = await page.wait(By.css('input[type="file"]'), { visible: false });
     await fileInput.sendKeys(uploadPath);
-    await page.clickButton("Add document");
+    await page.clickButton("Add Document");
     await page.toast("Document attached");
     await page.wait(By.xpath(`//div[contains(@class,"attachment-row")]//strong[normalize-space()=${xq(path.basename(uploadPath))}]`));
   });
@@ -154,7 +154,7 @@ describe("Deals", () => {
     await page.clickButton("Edit");
     await page.dialogTitle(`Edit ${lead.name}`);
     await page.fill("Contact", "Priya Patel-Singh");
-    await page.clickButton("Save changes");
+    await page.clickButton("Save Changes");
     await page.toast("Deal updated");
     await page.waitText(By.css(".client-executive-name"), "Priya Patel-Singh");
     const status = await page.wait(By.css('select[aria-label="Update deal status"]'));
@@ -165,27 +165,27 @@ describe("Deals", () => {
   uiTest("a closed status asks for its reason and shows it with the status", async () => {
     await page.setValue(await page.wait(By.css('select[aria-label="Update deal status"]')), "Disqualified");
     await page.dialogTitle(`Mark ${lead.name} as Disqualified`);
-    await page.fill("Status reason", "Bad Timing / Not Right Now");
-    await page.clickButton("Set status");
-    await page.wait(By.css('select[aria-label="Status reason"]'));
-    assert.equal(await page.selectedText(await page.wait(By.css('select[aria-label="Status reason"]'))), "Bad Timing / Not Right Now");
+    await page.fill("Status Reason", "Bad Timing / Not Right Now");
+    await page.clickButton("Set Status");
+    await page.wait(By.css('select[aria-label="Status Reason"]'));
+    assert.equal(await page.selectedText(await page.wait(By.css('select[aria-label="Status Reason"]'))), "Bad Timing / Not Right Now");
     assert.equal(await page.selectedText(await page.wait(By.css('select[aria-label="Update deal status"]'))), "Disqualified");
     await page.tab("Timeline");
     await page.wait(By.xpath('//article[contains(@class,"timeline-entry")]//strong[normalize-space()="Status changed from Warm to Disqualified – Bad Timing / Not Right Now"]'));
     // Back to Warm for the list checks that follow; the reason select disappears once the status is open again.
     await page.setValue(await page.wait(By.css('select[aria-label="Update deal status"]')), "Warm");
-    await page.driver.wait(async () => (await page.driver.findElements(By.css('select[aria-label="Status reason"]'))).length === 0, 15000, "Reason select still shown");
+    await page.driver.wait(async () => (await page.driver.findElements(By.css('select[aria-label="Status Reason"]'))).length === 0, 15000, "Reason select still shown");
     assert.equal(await page.selectedText(await page.wait(By.css('select[aria-label="Update deal status"]'))), "Warm");
   });
 
   uiTest("finds the deal under Warm deals and by global search", async () => {
     await page.closeDialog();
     await page.goto("#/warm"); // the old address still opens the list of that status
-    await page.heading("Warm deals");
+    await page.heading("Warm Deals");
     await page.waitLeadRow(lead.name);
     const search = await page.wait(By.css('input[aria-label="Search all deals"]'));
     await search.sendKeys(lead.name, Key.ENTER);
-    await page.heading("All deals");
+    await page.heading("All Deals");
     await page.waitLeadRow(lead.name);
     await page.waitText(By.css(".list-subhead span"), "1 record");
   });
@@ -195,9 +195,9 @@ describe("Deals", () => {
     await page.dialogTitle(lead.name);
     await page.clickButton("Archive");
     await page.dialogTitle(`Archive ${lead.name}`);
-    await page.fill("Archival reason", "Other");
-    await page.fill("Archival notes (optional)", "Duplicate record");
-    await page.clickButton("Archive deal");
+    await page.fill("Archival Reason", "Other");
+    await page.fill("Archival Notes (Optional)", "Duplicate record");
+    await page.clickButton("Archive Deal");
     await page.toast("Deal archived");
     await page.eyebrow("ARCHIVED DEAL");
     await page.closeDialog();
@@ -206,7 +206,7 @@ describe("Deals", () => {
     // PD-34: the Archive shows the reason and the notes.
     assert.match(await row.getText(), /Other[\s\S]*Duplicate record/);
     await row.findElement(By.xpath('.//button[normalize-space()="Restore"]')).click();
-    await page.dialogTitle("Restore deal");
+    await page.dialogTitle("Restore Deal");
     await page.clickButton("Restore");
     await page.toast("Deal restored to the pipeline");
     await page.deals("all");
@@ -225,7 +225,7 @@ describe("Deals", () => {
     await page.eyebrow("CONTACT");
     await page.closeDialog();
     await page.click(By.xpath('.//div[@aria-label="Contacts list"]/button[normalize-space()="Companies"]'), { global: true });
-    await (await page.wait(By.css('input[aria-label="Search companies"]'))).sendKeys(lead.name);
+    await (await page.wait(By.css('input[aria-label="Search Companies"]'))).sendKeys(lead.name);
     const organization = `//table[contains(@class,"contacts-table")]//tr[.//strong[normalize-space()=${xq(lead.name)}]]`;
     assert.match(await (await page.wait(By.xpath(organization))).getText(), /1 deal · open/);
     await page.click(By.xpath(`${organization}//button[contains(@class,"client-cell")]`), { global: true });

@@ -64,7 +64,7 @@ export default function UsersPanel() {
     <>
       <div className="page-heading">
         <div><div className="eyebrow">ADMINISTRATION <span className="eyebrow-dot">·</span> {users ? `${users.filter((user) => user.active).length} ACTIVE` : "LOADING"}</div><h1>User Management</h1><p>Accounts, roles, stages, security options, and termination hand-offs.</p></div>
-        <button className="button button-primary" onClick={() => setDialog({ kind: "create" })}><Plus size={17} /> Add user</button>
+        <button className="button button-primary" onClick={() => setDialog({ kind: "create" })}><Plus size={17} /> Add User</button>
       </div>
       <ErrorText message={error} />
       {!users && !error && <Loading text="Loading users..." />}
@@ -106,7 +106,7 @@ export default function UsersPanel() {
       {dialog?.kind === "password" && <PasswordDialog user={dialog.user} onClose={() => setDialog(null)} onSaved={() => after(`Password set for ${dialog.user.name}. Their other sessions were signed out.`)} />}
       {dialog?.kind === "terminate" && <TerminateDialog user={dialog.user} onClose={() => setDialog(null)} onDone={(message) => after(message)} />}
       {dialog?.kind === "history" && (
-        <Dialog title={`Login history · ${dialog.user.name}`} eyebrow="SECURITY" onClose={() => setDialog(null)}>
+        <Dialog title={`Login History · ${dialog.user.name}`} eyebrow="SECURITY" onClose={() => setDialog(null)}>
           {!dialog.entries ? <Loading /> : dialog.entries.length === 0 ? <p className="dialog-description">No sign-ins recorded yet.</p> : (
             <div className="table-scroll"><table className="lead-table"><thead><tr><th>WHEN</th><th>RESULT</th><th>ADDRESS</th><th>BROWSER</th></tr></thead><tbody>
               {dialog.entries.map((entry) => <tr key={entry.id}><td>{formatDateTime(entry.createdAt)}</td><td><span className={`badge ${entry.succeeded ? "badge-on" : "badge-off"}`}>{entry.succeeded ? "Signed in" : "Failed"}</span></td><td>{entry.ipAddress}</td><td><span className="muted-cell agent-cell" title={entry.userAgent}>{entry.userAgent.slice(0, 60) || "—"}</span></td></tr>)}
@@ -131,13 +131,13 @@ function PasswordDialog({ user, onClose, onSaved }: { user: UserAccount; onClose
     try { await setUserPassword(user.id, password); onSaved(); } catch (caught) { setError(errorMessage(caught)); setBusy(false); }
   };
   return (
-    <Dialog title={`Set password · ${user.name}`} eyebrow="SECURITY" onClose={onClose} size="narrow">
+    <Dialog title={`Set Password · ${user.name}`} eyebrow="SECURITY" onClose={onClose} size="narrow">
       <form className="stack-form" onSubmit={submit}>
         <p className="dialog-description">Use this until email delivery is configured. Share the password with the person directly and ask them to change it after signing in.</p>
-        <Field label="New password" required hint="At least 12 characters."><input type="password" autoComplete="new-password" minLength={12} maxLength={200} value={password} onChange={(event) => setPassword(event.target.value)} required autoFocus /></Field>
-        <Field label="Confirm password" required><input type="password" autoComplete="new-password" minLength={12} maxLength={200} value={confirm} onChange={(event) => setConfirm(event.target.value)} required /></Field>
+        <Field label="New Password" required hint="At least 12 characters."><input type="password" autoComplete="new-password" minLength={12} maxLength={200} value={password} onChange={(event) => setPassword(event.target.value)} required autoFocus /></Field>
+        <Field label="Confirm Password" required><input type="password" autoComplete="new-password" minLength={12} maxLength={200} value={confirm} onChange={(event) => setConfirm(event.target.value)} required /></Field>
         <ErrorText message={error} />
-        <div className="modal-actions"><button type="button" className="button button-outline" onClick={onClose}>Cancel</button><button type="submit" className="button button-primary" disabled={busy}>{busy ? "Saving..." : "Set password"}</button></div>
+        <div className="modal-actions"><button type="button" className="button button-outline" onClick={onClose}>Cancel</button><button type="submit" className="button button-primary" disabled={busy}>{busy ? "Saving..." : "Set Password"}</button></div>
       </form>
     </Dialog>
   );
@@ -167,12 +167,12 @@ function TerminateDialog({ user, onClose, onDone }: { user: UserAccount; onClose
     <Dialog title={`Terminate ${user.name}`} eyebrow="ACCOUNT TERMINATION" onClose={onClose} size="narrow">
       <form className="stack-form" onSubmit={submit}>
         <p className="dialog-description">The account loses sign-in access immediately and stays in audit history. Every deal and open task they own moves to the person you choose.</p>
-        <Field label="Reassign deals and tasks to" required>
+        <Field label="Reassign Deals and Tasks to" required>
           <select value={successor} onChange={(event) => setSuccessor(event.target.value)}>{successors.map((person) => <option key={person.id} value={person.id}>{person.name}{person.id === me.id ? " (me)" : ""}</option>)}</select>
         </Field>
-        <Field label="Reason (optional)"><textarea rows={3} value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} /></Field>
+        <Field label="Reason (Optional)"><textarea rows={3} value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} /></Field>
         <ErrorText message={error} />
-        <div className="modal-actions"><button type="button" className="button button-outline" onClick={onClose}>Cancel</button><button type="submit" className="button button-danger" disabled={busy}>{busy ? "Terminating..." : "Terminate and reassign"}</button></div>
+        <div className="modal-actions"><button type="button" className="button button-outline" onClick={onClose}>Cancel</button><button type="submit" className="button button-danger" disabled={busy}>{busy ? "Terminating..." : "Terminate and Reassign"}</button></div>
       </form>
     </Dialog>
   );

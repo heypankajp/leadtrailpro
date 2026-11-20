@@ -1307,6 +1307,40 @@ const migrations = [
         WHERE l.expected_close_date IS NULL AND l.status_id IN (SELECT id FROM list_values WHERE list_key = 'status' AND code = 'client')`);
     },
   },
+  {
+    version: 42,
+    name: "Archived leads (request of November 20, 2026): a lead archived by hand or, when not relevant for the days in List of Values (90 to start), by the scheduler",
+    async run(client) {
+      await client.query("ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP(0) NULL");
+      await client.query("ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS archived_by INTEGER NULL REFERENCES users(id) ON DELETE SET NULL");
+      // "manual" (Archive on Leads or Lead Generation) or "auto" (not relevant for longer than the days set).
+      await client.query("ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS archive_kind VARCHAR(10) NULL");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_opportunities_archived ON opportunities (archived_at)");
+      await client.query("INSERT INTO list_values (list_key, code, value, sort_order) VALUES ('lead_archive_days', 'days', '90', 1) ON CONFLICT DO NOTHING");
+    },
+  },
+  {
+    version: 43,
+    name: "Favourite deals (request of November 20, 2026): each person marks deals with a heart and sees only their own",
+    async run(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS deal_favorites (
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          lead_id INTEGER NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+          created_at TIMESTAMP(0) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (user_id, lead_id)
+        )
+      `);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_deal_favorites_lead ON deal_favorites (lead_id)");
+    },
+  },
+  {
+    version: 44,
+    name: "The approval queue's working days (request of November 20, 2026): a deal whose first contact is older than this many working days waits for a colleague's approval",
+    async run(client) {
+      await client.query("INSERT INTO list_values (list_key, code, value, sort_order) VALUES ('queue_working_days', 'days', '1', 1) ON CONFLICT DO NOTHING");
+    },
+  },
 ];
 
 if (!host || !user || !password || !Number.isInteger(port) || port < 1 || port > 65535 || !/^[a-z_][a-z0-9_]*$/.test(databaseName)) {

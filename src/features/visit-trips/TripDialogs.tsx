@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { MapPinned, Search } from "lucide-react";
 import { errorMessage } from "@/lib/api";
 import { formatDate } from "@/lib/format";
@@ -8,7 +8,7 @@ import { useAsyncData } from "@/lib/useAsyncData";
 import { fetchLeads } from "@/features/leads/client";
 import type { LeadSummary } from "@/features/leads/model";
 import { useApp } from "@/features/shell/AppContext";
-import { Dialog, ErrorText, Field, Loading } from "@/features/shell/components";
+import { Dialog, ErrorText, Field, Loading, StatusPill } from "@/features/shell/components";
 import { addVisitTripDeals, createVisitTrip, deleteVisitTrip, fetchVisitTrips, updateVisitTrip } from "./client";
 import { companiesSummary, type TripDealAction, type VisitTrip } from "./model";
 
@@ -47,11 +47,11 @@ export function TripFormDialog({ trip, leadIds = [], onClose, onSaved }: {
     }
   };
   return (
-    <Dialog title={trip ? `Edit ${trip.title}` : "New sales trip"} eyebrow="SALES TRIP" onClose={onClose} size="narrow">
+    <Dialog title={trip ? `Edit ${trip.title}` : "New Sales Trip"} eyebrow="SALES TRIP" onClose={onClose} size="narrow">
       <form className="stack-form" onSubmit={submit}>
         {!trip && leadIds.length > 0 && <p className="dialog-description">The trip starts with the {leadIds.length === 1 ? "deal" : `${leadIds.length} deals`} you selected, which {leadIds.length === 1 ? "leaves" : "leave"} the To be visited list. You can add more from the trip&apos;s page.</p>}
         <Field label="Title" required><input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={160} placeholder="e.g. Brampton & Mississauga visits" required autoFocus /></Field>
-        <Field label="Date" required><input type="date" value={tripDate} onChange={(event) => setTripDate(event.target.value)} required /></Field>
+        <Field label="Trip Date" required><input type="date" value={tripDate} onChange={(event) => setTripDate(event.target.value)} required /></Field>
         {can("reassign_leads") && (
           <Field label="Salesperson" hint="Who goes on the trip.">
             <select value={ownerId} onChange={(event) => setOwnerId(event.target.value)}>
@@ -62,7 +62,7 @@ export function TripFormDialog({ trip, leadIds = [], onClose, onSaved }: {
         <ErrorText message={error} />
         <div className="modal-actions">
           <button type="button" className="button button-outline" onClick={onClose}>Cancel</button>
-          <button type="submit" className="button button-primary" disabled={busy}>{busy ? "Saving..." : trip ? "Save changes" : "Plan sales trip"}</button>
+          <button type="submit" className="button button-primary" disabled={busy}>{busy ? "Saving..." : trip ? "Save Changes" : "Plan Sales Trip"}</button>
         </div>
       </form>
     </Dialog>
@@ -108,11 +108,11 @@ export function AddToTripDialog({ leadIds, onClose, onDone }: { leadIds: number[
     }
   };
   return (
-    <Dialog title={`Add ${count} to a sales trip`} eyebrow="SALES TRIP" onClose={onClose} size="narrow">
+    <Dialog title={`Add ${count} to a Sales Trip`} eyebrow="SALES TRIP" onClose={onClose} size="narrow">
       {!data && !loadError ? <Loading text="Loading the planned trips..." /> : (
         <form className="stack-form" onSubmit={submit}>
           <ErrorText message={loadError} />
-          <Field label="Sales trip" required hint="Trips planned from today on. The deals leave the To be visited list.">
+          <Field label="Sales Trip" required hint="Trips planned from today on. The deals leave the To be visited list.">
             <select value={tripId} onChange={(event) => setTripId(event.target.value)} required autoFocus>
               <option value="">Choose a trip</option>
               {upcoming.map((trip) => <option key={trip.id} value={trip.id}>{formatDate(trip.tripDate)} · {trip.title} · {trip.ownerName} ({trip.dealCount})</option>)}
@@ -122,7 +122,7 @@ export function AddToTripDialog({ leadIds, onClose, onDone }: { leadIds: number[
           <ErrorText message={error} />
           <div className="modal-actions">
             <button type="button" className="button button-outline" onClick={onClose}>Cancel</button>
-            <button type="submit" className="button button-primary" disabled={busy}>{busy ? "Adding..." : "Add to trip"}</button>
+            <button type="submit" className="button button-primary" disabled={busy}>{busy ? "Adding..." : "Add to Trip"}</button>
           </div>
         </form>
       )}
@@ -130,25 +130,36 @@ export function AddToTripDialog({ leadIds, onClose, onDone }: { leadIds: number[
   );
 }
 
-/** From a trip's page: pick deals on the "To be visited" list (any To Do list when it does not exist) to add to the trip. */
+/**
+ * From a trip's page: pick deals to add to the trip (request of November 20, 2026). Two lists: **To be Visited** (the
+ * default: the deals on the "To be visited" list, any To Do list when it does not exist) and **Other Deals** (the active deals
+ * not marked To be visited, searched on the server as you type). Ticks are kept when switching between them.
+ */
 export function AddDealsDialog({ trip, onTrip, onClose, onDone }: { trip: VisitTrip; onTrip: number[]; onClose: () => void; onDone: (message: string) => void }) {
   const { reference } = useApp();
   const toBeVisited = reference.listValues.todo_list.find((item) => item.code === "to_be_visited") ?? null;
+  const [scope, setScope] = useState<"visit" | "all">("visit");
+  const [q, setQ] = useState("");
+  const [term, setTerm] = useState("");
+  useEffect(() => { const timer = window.setTimeout(() => setTerm(q.trim()), 300); return () => window.clearTimeout(timer); }, [q]);
   const fetcher = useCallback(
-    () => fetchLeads({ state: "active", pageSize: 200, sort: "client_name", direction: "asc", ...(toBeVisited ? { todoListId: toBeVisited.id } : { todo: true }) }),
-    [toBeVisited],
+    () => scope === "visit"
+      ? fetchLeads({ state: "active", pageSize: 200, sort: "client_name", direction: "asc", ...(toBeVisited ? { todoListId: toBeVisited.id } : { todo: true }) })
+      : fetchLeads({ state: "active", pageSize: 50, sort: "client_name", direction: "asc", ...(term ? { q: term } : {}) }),
+    [scope, term, toBeVisited],
   );
   const { data, error: loadError } = useAsyncData(fetcher);
-  const [q, setQ] = useState("");
   const [picked, setPicked] = useState<number[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const choices = useMemo(() => {
-    const term = q.trim().toLowerCase();
+    const words = q.trim().toLowerCase();
     return (data?.leads ?? [])
       .filter((lead) => !onTrip.includes(lead.id))
-      .filter((lead) => !term || [lead.clientName, lead.city ?? "", lead.ownerName, lead.address].some((text) => text.toLowerCase().includes(term)));
-  }, [data, onTrip, q]);
+      // Other Deals leave out the deals marked To be visited: those are on the first list.
+      .filter((lead) => scope === "visit" || !(toBeVisited ? lead.todoListId === toBeVisited.id : lead.todoListId !== null))
+      .filter((lead) => scope === "all" || !words || [lead.clientName, lead.city ?? "", lead.ownerName, lead.address].some((text) => text.toLowerCase().includes(words)));
+  }, [data, onTrip, q, scope, toBeVisited]);
   const toggle = (lead: LeadSummary) => setPicked((current) => (current.includes(lead.id) ? current.filter((item) => item !== lead.id) : [...current, lead.id]));
   const submit = async () => {
     setBusy(true);
@@ -161,29 +172,46 @@ export function AddDealsDialog({ trip, onTrip, onClose, onDone }: { trip: VisitT
       setBusy(false);
     }
   };
+  const listName = toBeVisited ? toBeVisited.value : "To Do";
+  const empty = scope === "visit"
+    ? (q ? "No deal on the list matches the search." : `Every deal marked ${listName} is already on this trip, or none is marked.`)
+    : (term ? "No other deal matches the search." : `No other deal: every active deal is marked ${listName} or already on this trip.`);
   return (
-    <Dialog title={`Add deals to ${trip.title}`} eyebrow={toBeVisited ? toBeVisited.value.toUpperCase() : "TO DO"} onClose={onClose}>
-      <div className="stack-form">
-        <p className="dialog-description">The deals on the {toBeVisited ? `“${toBeVisited.value}”` : "To Do"} list that are not on this trip yet.</p>
-        <div className="search-field"><Search size={15} /><input aria-label="Search the deals" placeholder="Search company, city, owner..." value={q} onChange={(event) => setQ(event.target.value)} autoFocus /></div>
+    <Dialog title={`Add Deals to ${trip.title}`} eyebrow="SALES TRIP" onClose={onClose}>
+      <div className="trip-add">
+        <div className="trip-add-bar">
+          <div className="scope-toggle" role="group" aria-label="Which deals">
+            <button type="button" className={scope === "visit" ? "is-active" : ""} aria-pressed={scope === "visit"} onClick={() => setScope("visit")}>{toBeVisited ? "To Be Visited" : listName}</button>
+            <button type="button" className={scope === "all" ? "is-active" : ""} aria-pressed={scope === "all"} onClick={() => setScope("all")}>Other Deals</button>
+          </div>
+          {picked.length > 0 && <span className="trip-add-count">{picked.length} selected</span>}
+        </div>
+        <label className="trip-add-search">
+          <Search size={15} />
+          <input aria-label="Search the deals" placeholder={scope === "visit" ? "Search company, city, owner..." : "Search the other deals: company, contact, city..."} value={q} onChange={(event) => setQ(event.target.value)} autoFocus />
+        </label>
+        <p className="field-hint">{scope === "visit" ? `The deals marked ${listName} that are not on this trip yet.` : `The active deals not marked ${listName} and not on this trip yet; the first 50 by name, or the ones matching the search.`}</p>
         <ErrorText message={loadError} />
         {!data && !loadError ? <Loading text="Loading the deals..." /> : (
           <ul className="trip-pick-list">
             {choices.map((lead) => (
               <li key={lead.id}>
-                <label>
+                <label className={picked.includes(lead.id) ? "is-picked" : ""}>
                   <input type="checkbox" checked={picked.includes(lead.id)} onChange={() => toggle(lead)} />
-                  <span><strong>{lead.clientName}</strong><small>{[lead.city, lead.address, lead.ownerName].filter(Boolean).join(" · ")}</small></span>
+                  <span className="trip-pick-text"><strong>{lead.clientName}</strong><small>{[lead.city, lead.address, lead.ownerName].filter(Boolean).join(" · ")}</small></span>
+                  <span className="trip-pick-tags">
+                    <StatusPill status={lead.statusLabel} code={lead.statusCode} />
+                  </span>
                 </label>
               </li>
             ))}
-            {!choices.length && <li className="trip-pick-empty">{q ? "No deal matches the search." : "Every deal on the list is already on this trip, or the list is empty."}</li>}
+            {!choices.length && <li className="trip-pick-empty">{empty}</li>}
           </ul>
         )}
         <ErrorText message={error} />
         <div className="modal-actions">
           <button type="button" className="button button-outline" onClick={onClose}>Cancel</button>
-          <button type="button" className="button button-primary" disabled={busy || !picked.length} onClick={() => void submit()}>{busy ? "Adding..." : `Add ${picked.length || ""} ${picked.length === 1 ? "deal" : "deals"}`.replace("  ", " ")}</button>
+          <button type="button" className="button button-primary" disabled={busy || !picked.length} onClick={() => void submit()}>{busy ? "Adding..." : picked.length ? `Add ${picked.length} ${picked.length === 1 ? "deal" : "deals"}` : "Add Deals"}</button>
         </div>
       </div>
     </Dialog>
@@ -243,13 +271,13 @@ export function DeleteTripDialog({ trip, onClose, onDeleted }: { trip: VisitTrip
         )}
         {count > 0 && deals === "archive" && (
           <>
-            <Field label="Archival reason" required>
+            <Field label="Archival Reason" required>
               <select value={reasonId} onChange={(event) => setReasonId(event.target.value)} required>
                 <option value="">Choose a reason</option>
                 {reasons.map((item) => <option key={item.id} value={item.id}>{item.value}</option>)}
               </select>
             </Field>
-            <Field label="Archival notes (optional)">
+            <Field label="Archival Notes (Optional)">
               <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={2} maxLength={500} placeholder="Shown with each archived deal" />
             </Field>
           </>
@@ -257,7 +285,7 @@ export function DeleteTripDialog({ trip, onClose, onDeleted }: { trip: VisitTrip
         <ErrorText message={error} />
         <div className="modal-actions">
           <button type="button" className="button button-outline" onClick={onClose}>Cancel</button>
-          <button type="submit" className="button button-danger" disabled={busy}>{busy ? "Deleting..." : count && deals === "archive" ? "Delete trip and archive" : "Delete trip"}</button>
+          <button type="submit" className="button button-danger" disabled={busy}>{busy ? "Deleting..." : count && deals === "archive" ? "Delete Trip and Archive" : "Delete Trip"}</button>
         </div>
       </form>
     </Dialog>
