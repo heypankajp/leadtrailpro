@@ -27,10 +27,13 @@ const likePattern = (term: string) => `%${term.replace(/[\\%_]/g, (char) => `\\$
 export async function listPipeline(filters: PipelineFilters, viewer: UserAccount): Promise<PipelineBoard> {
   const db = getDatabasePool();
   const byStatus = filters.groupBy === "status";
+  // A client is the end of the pipeline (request of November 20, 2026): the board by status has no Client column, unless the
+  // ready-made filter asks for won deals.
+  const showClients = filters.quick === "won";
   // PD-09: the board of one pipeline; without a choice, the default one, which also shows deals not yet placed.
   const [settings, stages, defaultStages, statusRows] = await Promise.all([
     getSettings(db), listStages(db, filters.pipelineId ?? "default"), listStages(db, "default"),
-    byStatus ? db.query<StageValue>(`SELECT id, code, value, sort_order AS "sortOrder", is_active AS active FROM list_values WHERE list_key = 'status' ORDER BY sort_order, value`) : Promise.resolve(null),
+    byStatus ? db.query<StageValue>(`SELECT id, code, value, sort_order AS "sortOrder", is_active AS active FROM list_values WHERE list_key = 'status'${showClients ? '' : " AND code <> 'client'"} ORDER BY sort_order, value`) : Promise.resolve(null),
   ]);
   const isDefault = !filters.pipelineId || defaultStages.some((stage) => stage.pipelineId !== null && stage.pipelineId === filters.pipelineId);
   const entry = stages.find((stage) => stage.code === entryStageCode) ?? stages.find((stage) => stage.active) ?? stages[0];
@@ -50,6 +53,7 @@ export async function listPipeline(filters: PipelineFilters, viewer: UserAccount
   else if (filters.scope === "mine") { clauses.push("l.owner_id = ?"); params.push(viewer.id); }
   else if (filters.ownerId) { clauses.push("l.owner_id = ?"); params.push(filters.ownerId); }
   if (filters.leadTypeId) { clauses.push("l.lead_type_id = ?"); params.push(filters.leadTypeId); }
+  if (byStatus && !showClients) clauses.push("st.code <> 'client'");
   if (filters.statusId && !byStatus) { clauses.push("l.status_id = ?"); params.push(filters.statusId); }
   if (filters.stageId && byStatus) { clauses.push("COALESCE(l.stage_id, ?) = ?"); params.push(entry.id, filters.stageId); }
   const dates: [string | null, string][] = [
