@@ -7,14 +7,7 @@ import { useAsyncData } from "@/lib/useAsyncData";
 import { useApp } from "@/features/shell/AppContext";
 import { Avatar, ErrorText, Loading, Pagination } from "@/features/shell/components";
 import { fetchContactsTimeline } from "./client";
-import { timelineCell, timelineMonthLabel, type ContactsTimeline as Timeline, type TimelineCounts } from "./model";
-
-/** All of a person's contacts over the twelve months, by type. */
-const yearCounts = (months: Record<string, TimelineCounts>): TimelineCounts => {
-  const sum: TimelineCounts = {};
-  for (const counts of Object.values(months)) for (const [type, count] of Object.entries(counts) as [keyof TimelineCounts, number][]) sum[type] = (sum[type] ?? 0) + count;
-  return sum;
-};
+import { timelineMonthLabel, type ContactsTimeline as Timeline } from "./model";
 
 /**
  * Contacts → Timeline (SPEC §10.17): one row per person, one column per month of
@@ -59,29 +52,23 @@ export default function ContactsTimeline() {
               <thead>
                 <tr>
                   <th>PERSON</th>
-                  <th>{month && month !== "old" ? `CONTACTS IN ${monthName(month).toUpperCase()}` : "CONTACTS IN THE LAST 12 MONTHS"}</th>
+                  {/* The Contacts column left the page (request of November 20, 2026): the months on the right filter the people. */}
                   <th>LAST CONTACT</th>
                 </tr>
               </thead>
               <tbody>
-                {data.rows.map((row) => {
-                  const cell = timelineCell(month && month !== "old" ? row.months[month] : yearCounts(row.months));
-                  return (
-                    <tr key={row.id}>
-                      <td>
-                        <button className="client-cell" onClick={() => openContact("person", row.id)}>
-                          <Avatar name={row.name} seed={row.id} />
-                          <span><strong>{row.name}</strong><small>{row.organization ?? "No company"}</small></span>
-                        </button>
-                      </td>
-                      <td>{cell.total > 0
-                        ? <span className="tl-summary"><span className={`tl-dot ${cell.total >= 5 ? "tl-many" : cell.total >= 2 ? "tl-some" : ""}`}>{cell.total}</span>{cell.text}</span>
-                        : <span className="muted-cell">None</span>}</td>
-                      <td><span className="muted-cell">{relativeTime(row.lastContactAt, "No contact in 12 months")}</span></td>
-                    </tr>
-                  );
-                })}
-                {!data.rows.length && <tr><td colSpan={3} className="empty-state">{month === "old" ? `Everyone${debouncedQ ? " matching this search" : ""} was contacted in the last 12 months.` : month ? `Nobody${debouncedQ ? " matching this search" : ""} was contacted in ${monthName(month)}.` : debouncedQ ? "No contacts match this search." : "No contacts yet."}</td></tr>}
+                {data.rows.map((row) => (
+                  <tr key={row.id}>
+                    <td>
+                      <button className="client-cell" onClick={() => openContact("person", row.id)}>
+                        <Avatar name={row.name} seed={row.id} />
+                        <span><strong>{row.name}</strong><small>{row.organization ?? "No company"}</small></span>
+                      </button>
+                    </td>
+                    <td><span className="muted-cell">{relativeTime(row.lastContactAt, "No contact in 12 months")}</span></td>
+                  </tr>
+                ))}
+                {!data.rows.length && <tr><td colSpan={2} className="empty-state">{month === "old" ? `Everyone${debouncedQ ? " matching this search" : ""} was contacted in the last 12 months.` : month ? `Nobody${debouncedQ ? " matching this search" : ""} was contacted in ${monthName(month)}.` : debouncedQ ? "No contacts match this search." : "No contacts yet."}</td></tr>}
               </tbody>
             </table>
           </div>

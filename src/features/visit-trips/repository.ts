@@ -12,10 +12,10 @@ const tripSelect = `
   SELECT 'visit' AS kind, '' AS address, t.id, t.title, TO_CHAR(t.trip_date, 'YYYY-MM-DD') AS "tripDate", t.owner_id AS "ownerId", CONCAT(o.first_name, ' ', o.last_name) AS "ownerName",
     t.created_by AS "createdById", CONCAT(c.first_name, ' ', c.last_name) AS "createdByName", t.created_at AS "createdAt", t.updated_at AS "updatedAt",
     (SELECT COUNT(*) FROM visit_trip_deals d JOIN leads l ON l.id = d.lead_id WHERE d.trip_id = t.id AND l.record_state = 'active')
-      + (SELECT COUNT(*) FROM visit_trip_leads vl JOIN opportunities vo ON vo.id = vl.opportunity_id WHERE vl.trip_id = t.id AND vo.status IN ('new', 'not_relevant') AND o.deleted_at IS NULL AND vo.deleted_at IS NULL) AS "dealCount",
+      + (SELECT COUNT(*) FROM visit_trip_leads vl JOIN opportunities vo ON vo.id = vl.opportunity_id WHERE vl.trip_id = t.id AND vo.status IN ('new', 'not_relevant') AND vo.deleted_at IS NULL) AS "dealCount",
     ARRAY(SELECT name FROM (
       SELECT l.client_name AS name, d.sort_order, d.added_at FROM visit_trip_deals d JOIN leads l ON l.id = d.lead_id WHERE d.trip_id = t.id AND l.record_state = 'active'
-      UNION ALL SELECT vo.company_name, vl.sort_order, vl.added_at FROM visit_trip_leads vl JOIN opportunities vo ON vo.id = vl.opportunity_id WHERE vl.trip_id = t.id AND vo.status IN ('new', 'not_relevant') AND o.deleted_at IS NULL AND vo.deleted_at IS NULL
+      UNION ALL SELECT vo.company_name, vl.sort_order, vl.added_at FROM visit_trip_leads vl JOIN opportunities vo ON vo.id = vl.opportunity_id WHERE vl.trip_id = t.id AND vo.status IN ('new', 'not_relevant') AND vo.deleted_at IS NULL
     ) stops ORDER BY sort_order, added_at) AS companies
   FROM visit_trips t
   JOIN users o ON o.id = t.owner_id
@@ -86,10 +86,10 @@ export async function listVisitTrips(filters: VisitTripFilters, viewer: UserAcco
   const union = `
     SELECT 'visit' AS kind, t.id, t.title, t.trip_date, t.owner_id, t.created_by, t.created_at, t.updated_at, '' AS address,
       (SELECT COUNT(*) FROM visit_trip_deals d JOIN leads l ON l.id = d.lead_id WHERE d.trip_id = t.id AND l.record_state = 'active')
-        + (SELECT COUNT(*) FROM visit_trip_leads vl JOIN opportunities vo ON vo.id = vl.opportunity_id WHERE vl.trip_id = t.id AND vo.status IN ('new', 'not_relevant') AND o.deleted_at IS NULL AND vo.deleted_at IS NULL) AS deal_count,
+        + (SELECT COUNT(*) FROM visit_trip_leads vl JOIN opportunities vo ON vo.id = vl.opportunity_id WHERE vl.trip_id = t.id AND vo.status IN ('new', 'not_relevant') AND vo.deleted_at IS NULL) AS deal_count,
       ARRAY(SELECT name FROM (
         SELECT l.client_name AS name, d.sort_order, d.added_at FROM visit_trip_deals d JOIN leads l ON l.id = d.lead_id WHERE d.trip_id = t.id AND l.record_state = 'active'
-        UNION ALL SELECT vo.company_name, vl.sort_order, vl.added_at FROM visit_trip_leads vl JOIN opportunities vo ON vo.id = vl.opportunity_id WHERE vl.trip_id = t.id AND vo.status IN ('new', 'not_relevant') AND o.deleted_at IS NULL AND vo.deleted_at IS NULL
+        UNION ALL SELECT vo.company_name, vl.sort_order, vl.added_at FROM visit_trip_leads vl JOIN opportunities vo ON vo.id = vl.opportunity_id WHERE vl.trip_id = t.id AND vo.status IN ('new', 'not_relevant') AND vo.deleted_at IS NULL
       ) stops ORDER BY sort_order, added_at) AS companies
     FROM visit_trips t WHERE ${where(visitClauses)}
     UNION ALL
